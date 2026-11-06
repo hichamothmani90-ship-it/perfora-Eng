@@ -3,6 +3,12 @@
 Version du 6 nov. 2026. Document de travail : les lignes « Décision » attendent ton arbitrage ; le reste est
 une proposition. Les prix et conditions des fournisseurs sont à revérifier au moment de souscrire.
 
+## 0. Décisions prises
+
+- 6 nov. 2026 : **Cloudflare Pages** pour l'appli et le site ; **zone DNS de perfora.ma chez Cloudflare** (domaine
+  toujours enregistré chez Nindohost). Ancien hébergement inconnu : sans effet une fois les DNS chez Cloudflare.
+  Mise en œuvre : [`MISE_EN_LIGNE_PERFORA_MA.md`](MISE_EN_LIGNE_PERFORA_MA.md). Site de présentation v1 : dossier `site/`.
+
 ## 1. Recommandations en bref
 
 1. **perfora.ma** = site de présentation ; **app.perfora.ma** = l'application. Domaine et DNS restent chez Nindohost.

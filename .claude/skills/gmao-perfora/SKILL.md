@@ -60,7 +60,10 @@ Chaque indicateur affiche périmètre, période, convention, couverture et effec
 
 - **PWA statique, sans build, sans dépendance** : `index.html`, `css/app.css`, `js/store.js` (stockage,
   journal), `js/calculs.js` (règles et indicateurs, fonctions pures), `js/qr.js` (QR hors ligne),
-  `js/app.js` (écrans), `js/vues/*.js` (écrans par domaine), `sw.js`.
+  `js/app.js` (écrans), `js/vues/*.js` (écrans par domaine), `sw.js`. Site de présentation : `site/` (perfora.ma).
+  Publication Cloudflare Pages : `sh scripts/build_pages.sh app|site` → `dist/` (seuls les fichiers utiles) ;
+  en-têtes de sécurité `deploy/app/_headers` et `site/_headers` : **aucun script en ligne** (pas de `onclick=` ni de
+  `<script>` dans le HTML), sinon la politique de sécurité le bloque.
 - **Toute règle métier ou tout calcul d'indicateur va dans `js/calculs.js`** (testable sous Node),
   jamais directement dans une vue. Chaque nouvelle règle = un test dans `tests/`.
   Scripts classiques (pas de modules) pour rester ouvrable partout. Hébergée sur GitHub Pages

@@ -41,7 +41,10 @@ const Store = (() => {
     db.onversionchange = () => {
       db.close();
       const v = document.querySelector('#view');
-      if (v) v.innerHTML = '<div class="warn" style="margin-top:16px"><b>Une version plus récente de l’appli est ouverte dans un autre onglet.</b><br><button class="btn primary" onclick="location.reload()">Recharger cette page</button></div>';
+      if (v) {
+        v.innerHTML = '<div class="warn" style="margin-top:16px"><b>Une version plus récente de l’appli est ouverte dans un autre onglet.</b><br><button class="btn primary" type="button">Recharger cette page</button></div>';
+        v.querySelector('button').addEventListener('click', () => location.reload()); // pas de script en ligne (politique de sécurité stricte)
+      }
     };
     for (const t of TYPES) {
       const all = await req(db.transaction(t).objectStore(t).getAll());
