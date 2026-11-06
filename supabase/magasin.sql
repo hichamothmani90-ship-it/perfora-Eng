@@ -57,6 +57,10 @@ begin
     cible := case when t = 'journal' then p->>'entite' else t end;
     motif := null; s := null;
     select id, entreprise_id, site_id, data into ex from fiches where id = f->>'id';
+    -- Renvoi identique d'un mouvement déjà reçu (réponse perdue, envoi complet) : accepté sans rien changer.
+    if t = 'mouvements' and ex.id is not null and ex.entreprise_id = ent and ex.data @> p then
+      n := n + 1; continue;
+    end if;
 
     if t not in ('localisations','equipements','personnes','demandes','ots','programmes','articles','mouvements','journal','photos','besoins') then
       motif := 'type inconnu';

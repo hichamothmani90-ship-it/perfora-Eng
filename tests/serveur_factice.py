@@ -19,7 +19,7 @@ from urllib.parse import urlparse, parse_qs
 PORT = next((int(a) for a in sys.argv[1:] if a.isdigit()), 8099)
 CLE = "cle-factice"
 APPEND_ONLY = {"journal", "mouvements", "photos"}
-TYPES = {"localisations", "equipements", "personnes", "demandes", "ots", "programmes", "articles", "mouvements", "journal", "photos"}
+TYPES = {"localisations", "equipements", "personnes", "demandes", "ots", "programmes", "articles", "mouvements", "journal", "photos", "besoins"}
 COMMUNS = {"personnes", "articles"}
 
 PACKS = {
@@ -36,11 +36,12 @@ SITES = {  # id -> site
     "s-cas": {"id": "s-cas", "entreprise": "DEMO", "code": "CAS", "nom": "Site Casablanca"},
     "s-rab": {"id": "s-rab", "entreprise": "AUTRE", "code": "RAB", "nom": "Site Rabat"},
 }
-COMPTES = {"test@gmao.test": "test-gmao", "tech2@gmao.test": "test-gmao", "autre@gmao.test": "test-gmao"}
+COMPTES = {"test@gmao.test": "test-gmao", "tech2@gmao.test": "test-gmao", "autre@gmao.test": "test-gmao", "mag@gmao.test": "test-gmao"}
 PROFILS = {
     "test@gmao.test": {"role": "responsable", "nom": "Responsable test", "actif": True, "entreprise": "DEMO", "sites": ["s-tng", "s-cas"], "defaut": "s-tng"},
     "tech2@gmao.test": {"role": "technicien", "nom": "Technicien test", "actif": True, "entreprise": "DEMO", "sites": ["s-cas"], "defaut": "s-cas"},
     "autre@gmao.test": {"role": "responsable", "nom": "Responsable Autre", "actif": True, "entreprise": "AUTRE", "sites": ["s-rab"], "defaut": "s-rab"},
+    "mag@gmao.test": {"role": "magasinier", "nom": "Magasinier test", "actif": True, "entreprise": "DEMO", "sites": ["s-cas"], "defaut": "s-cas"},
 }
 
 verrou = threading.Lock()
@@ -60,13 +61,13 @@ def peut_ecrire(r, t):
         return r in ("technicien", "prestataire")
     if t == "articles":
         return r == "magasinier"
-    if t == "mouvements":
+    if t in ("mouvements", "besoins"):
         return r in ("magasinier", "technicien", "prestataire")
     return False
 
 
 def module_de(t):
-    return "magasin" if t in ("articles", "mouvements") else "preventif" if t == "programmes" else "base"
+    return "magasin" if t in ("articles", "mouvements", "besoins") else "preventif" if t == "programmes" else "base"
 
 
 def role_de(email):
@@ -255,12 +256,16 @@ class H(BaseHTTPRequestHandler):
         ent, dr, mes = p["entreprise"], droits(p["entreprise"]), mes_sites(email)
         defaut = p["defaut"] if p["defaut"] in mes else (mes[0] if len(mes) == 1 else None)
         acceptes, refus, refuses = 0, [], set()
+        terrain = r in ("technicien", "prestataire")
         with verrou:
             for f in self.corps().get("lot", []):
                 t, pa = f.get("type"), f.get("patch") or {}
                 cible = pa.get("entite") if t == "journal" else t
                 ex = fiches.get(f["id"])
                 motif, s = None, None
+                if t == "mouvements" and ex and ex["entreprise"] == ent and all(ex["data"].get(k) == v for k, v in pa.items()):
+                    acceptes += 1  # renvoi identique (réponse perdue, envoi complet) : rien à changer
+                    continue
                 if t not in TYPES:
                     motif = "type inconnu"
                 elif not dr["ecriture"]:
@@ -273,12 +278,21 @@ class H(BaseHTTPRequestHandler):
                     motif = f"module « {module_de(cible)} » non inclus dans l'abonnement"
                 elif not peut_ecrire(r, cible):
                     motif = f"droits insuffisants ({r})"
-                elif t == "mouvements" and r in ("technicien", "prestataire") and not pa.get("otId"):
+                # volet B (miroir de supabase/magasin.sql)
+                elif t == "besoins" and terrain and ("qteReservee" in pa or "delai" in pa or (pa.get("statut") or "demande") not in ("demande", "annule")):
+                    motif = "réservation et disponibilité : réservées au magasin"
+                elif t == "besoins" and terrain and not ex and not pa.get("otId"):
+                    motif = "un besoin de pièce se rattache à une intervention"
+                elif t == "mouvements" and not ex and terrain and not ((pa.get("type") == "remise" and pa.get("urgent")) or pa.get("type") in ("retour", "sortie")):
+                    motif = "mouvement de stock réservé au magasin (terrain : retrait urgent ou retour)"
+                elif t == "mouvements" and not ex and terrain and not pa.get("otId") and not pa.get("besoinId"):
                     motif = "mouvement de stock hors intervention : réservé au magasin"
+                elif t == "mouvements" and ex and (terrain or any(k not in ("verifieLe", "verifiePar", "aVerifier", "modifieLe", "modifiePar") for k in pa)):
+                    motif = "un mouvement de stock ne se modifie pas (seule sa vérification par le magasin)"
                 elif t == "ots" and r != "responsable" and ex and ex["data"].get("statut") == "cloturee":
                     motif = "intervention clôturée : modification réservée au responsable"
                 if not motif and t not in COMMUNS:
-                    parent = pa.get("entiteId") if t == "journal" else pa.get("parentId") if t == "photos" else None
+                    parent = pa.get("entiteId") if t == "journal" else pa.get("parentId") if t == "photos" else (pa.get("besoinId") or pa.get("otId")) if t in ("besoins", "mouvements") else None
                     hp = fiches.get(parent) if parent else None
                     s = (pa.get("siteId") if pa.get("siteId") in SITES else None) or (ex and ex["site"]) or (hp and hp["entreprise"] == ent and hp["site"]) or defaut
                     if not s:
@@ -292,7 +306,7 @@ class H(BaseHTTPRequestHandler):
                     refuses.add(f["id"])
                     continue
                 acceptes += 1
-                if ex and t in APPEND_ONLY:
+                if ex and t in APPEND_ONLY and t != "mouvements":
                     continue
                 seq[0] += 1
                 data = {**(ex["data"] if ex else {}), **pa, **({"siteId": s} if s else {})}

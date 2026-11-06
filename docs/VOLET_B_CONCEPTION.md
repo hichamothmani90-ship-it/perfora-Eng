@@ -1,6 +1,6 @@
 # Volet B — Magasin relié au terrain : proposition de conception
 
-Statut : choix 1 à 5 **validés** le 6 nov. 2026. **B1 fait** : `calculs.js` (stockPhysique, qteReservee, stockDisponible, etatBesoin, rapprochementBesoin, retraitsAVerifier) + `tests/magasin.test.js` (8 tests, dont les 3 scénarios §37). **B2 fait** : `supabase/magasin.sql` exécuté sur Supabase (type `besoins`, module magasin, droits terrain / magasin, mouvements non modifiables sauf vérification, site hérité) + `supabase/tests_magasin.sql` (15 tests conformes). B3 à B5 à venir — en B5, rejouer aussi `tests_etancheite.sql` (push_fiches réécrite).
+Statut : choix 1 à 5 **validés** le 6 nov. 2026. **B1 fait** : `calculs.js` (stockPhysique, qteReservee, stockDisponible, etatBesoin, rapprochementBesoin, retraitsAVerifier) + `tests/magasin.test.js` (8 tests, dont les 3 scénarios §37). **B2 fait** : `supabase/magasin.sql` exécuté sur Supabase (type `besoins`, module magasin, droits terrain / magasin, mouvements non modifiables sauf vérification, site hérité) + `supabase/tests_magasin.sql` (15 tests conformes). **B3 fait** (v19 locale) : section « Pièces » de l'intervention, levée automatique de l'attente, stockage `besoins` (DB v4), faux serveur aligné. B4 et B5 à venir — en B5 : exécuter `magasin.sql` mis à jour (renvoi identique d'un mouvement = accepté sans effet), rejouer `tests_magasin.sql` (16 tests) et `tests_etancheite.sql` (push_fiches réécrite).
 Références V3 : §6 (demande de matériel, attente, une demande ne consomme pas le stock), §15 (demander,
 remettre, utiliser, retourner ; retrait urgent), §16 (réceptionner, isoler, inventorier), §35 (besoin,
 réservation, mouvement, rapprochement de remise), §37 (scénarios « deux pièces remises, une utilisée et une
@@ -58,6 +58,17 @@ Rapprochement d'une remise : `remis = utilisé + retourné + encore détenu` (é
 | B3 | Intervention : demander, retrait urgent, utiliser, rendre ; levée d'attente | Navigateur, 2 appareils |
 | B4 | Magasin : À servir, À vérifier, Stock par site ; accueil magasinier | Navigateur, rôle magasinier |
 | B5 | Faux serveur, recette, docs, publication | — |
+
+## 5 bis. Décisions prises en B3
+
+- Une pièce du magasin ne se déclare plus « utilisée » directement : elle passe par **Demander** (le magasin
+  remet) ou **Retrait urgent** (le technicien prend, le magasin vérifie). « + Pièce hors stock » reste libre.
+- **Retrait urgent** depuis la section : crée le besoin (urgent) et la remise en un geste ; option « déjà montée ».
+- **Levée de l'attente** : faite par tout appareil qui peut modifier l'intervention (pas le magasinier), avec des
+  valeurs identiques partout (fin = date de la dernière remise ; statut « Prête » si plus rien n'est attendu) :
+  attente levée ≠ reprise réelle, le technicien appuie sur « Démarrer ».
+- Annuler un besoin attendu clôt l'attente liée. Disponible affiché = stock **du site de l'intervention**.
+- Renvoi identique d'un mouvement (réponse réseau perdue) : accepté sans effet par le serveur.
 
 ## 6. Choix proposés (à confirmer)
 

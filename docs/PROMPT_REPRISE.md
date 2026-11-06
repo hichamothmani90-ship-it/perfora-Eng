@@ -28,22 +28,24 @@ multi-entreprise) et concepteur d'interfaces terrain mobile-first. Langue : fran
      (décision du 6 nov. 2026 : traçabilité légère, pas de chronomètre).
    Si tu as besoin d'un passage précis, demande à lire le fichier.
 
-3. ÉTAT (fin du 6 nov. 2026, appli v18) — détail : docs/FEUILLE_DE_ROUTE.md et docs/RECETTE_VOLET_A.md
+3. ÉTAT (fin du 6 nov. 2026, appli v18 publiée, v19 locale = volet B jusqu'à B3) — détail : docs/FEUILLE_DE_ROUTE.md et docs/RECETTE_VOLET_A.md
    - Appli PWA statique, hors ligne, sans dépendance, sur GitHub Pages :
      https://hichamothmani90-ship-it.github.io/perfora-Eng/ (dépôt hichamothmani90-ship-it/perfora-Eng,
      branche main ; chaque push publie en ~5 min ; si le déploiement Pages échoue, pousser un commit vide).
      Copie de travail : Bureau\Claude Perfora\gmao-terrain (clone git complet, skill inclus).
    - Fait : lot 0 (tests, QR, photos), lot 1 (synchro Supabase, invitations, rôles), volet A complet
      (multi-entreprise, multi-site, packs et quotas, invitation depuis l'appli, console plateforme,
-     démo réinitialisable, recette + durcissement). Prochain : volet B (magasin ↔ terrain) ou mise
-     en production (liste : docs/RECETTE_VOLET_A.md §4).
+     démo réinitialisable, recette + durcissement). Volet B en cours (docs/VOLET_B_CONCEPTION.md) :
+     B1, B2, B3 faits ; prochain B4 (écrans Magasin) puis B5 (Supabase, recette, publication v19+).
+     B3 et suivants sont sur la branche git `volet-b` (non publiée) : `git switch volet-b` ; fusion dans main en B5.
    - Supabase « gmao-terrain » (réf. oihaqzkqhvyjybijsonc, Frankfurt). Scripts dans l'ordre :
      schema.sql → roles.sql → multitenant.sql → quotas.sql → plateforme.sql → durcissement.sql → magasin.sql ;
      Edge Function supabase/functions/inviter. Entreprises : DEMO « Perfora Démo » (Site Tanger, pack Pro ;
      othmanihicham99@gmail.com responsable + administrateur plateforme ; hothmani36@outlook.fr magasinier)
      et VITRINE « Vitrine Perfora » (démo réinitialisable ; hicham.othmani90@gmail.com responsable).
-   - Tests : node --test "tests/*.test.js" (25) ; supabase/tests_*.sql (35, à rejouer dans le SQL Editor).
-     Faux serveur : python tests/serveur_factice.py 8096 ; appli : python serveur.py 8081 ;
+   - Tests : node --test tests/*.test.js (35) ; supabase/tests_*.sql (à rejouer dans le SQL Editor).
+     Faux serveur : python tests/serveur_factice.py 8095 (comptes test@ responsable, tech2@ technicien,
+     mag@ magasinier, autre@ autre entreprise ; mot de passe test-gmao) ; appli : python serveur.py 8081 ;
      deux appareils = http://localhost:8081 et http://127.0.0.1:8081 (les ports 8080 / 8099 peuvent
      être tenus par d'anciens processus).
 

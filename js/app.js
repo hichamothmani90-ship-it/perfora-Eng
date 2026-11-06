@@ -5,7 +5,7 @@
 (() => {
   const { data } = Store;
   /** Version affichée dans Réglages : à incrémenter avec VERSION dans sw.js. */
-  const APP_VERSION = 'v18';
+  const APP_VERSION = 'v19';
   const $ = s => document.querySelector(s);
   // Multi-site : les listes de fiches de site ne montrent que le site actif (« tous » possible).
   // Les fiches sans site (anciennes ou pas encore synchronisées) restent visibles.
@@ -36,7 +36,8 @@
       : t === 'equipements' ? g('localisations', o.localisationId)
       : t === 'localisations' ? g('localisations', o.parentId)
       : t === 'photos' ? g(o.parentType, o.parentId)
-      : t === 'mouvements' ? g('ots', o.otId)
+      : t === 'mouvements' ? g('besoins', o.besoinId) || g('ots', o.otId)
+      : t === 'besoins' ? g('ots', o.otId)
       : null;
     return parent || siteCreation();
   });
@@ -69,7 +70,8 @@
     regle: { fixe: 'Échéance fixe', apres_realisation: 'Après réalisation' },
     typeSuite: { reserve: 'Réserve', suite: 'Action de suite', provisoire: 'Solution provisoire' },
     mvt: { entree: 'Réception', sortie: 'Sortie', retour: 'Retour', ajustement: 'Ajustement inventaire' },
-    entite: { demandes: 'Demande', ots: 'Intervention', equipements: 'Équipement', localisations: 'Lieu', personnes: 'Personne', programmes: 'Programme', articles: 'Article', mouvements: 'Mouvement' },
+    entite: { demandes: 'Demande', ots: 'Intervention', equipements: 'Équipement', localisations: 'Lieu', personnes: 'Personne', programmes: 'Programme', articles: 'Article', mouvements: 'Mouvement', besoins: 'Besoin de pièce' },
+    etatBesoin: { demande: 'Demandée', reserve: 'Réservée', partiellement_remis: 'Remise en partie', remis: 'Remise', indisponible: 'Indisponible', annule: 'Annulée' },
   };
   const opts = d => Object.entries(d);
   const PRIO_ORDER = ['urgence_securite', 'critique_service', 'rapide', 'a_qualifier', 'planifiable'];
@@ -224,11 +226,12 @@
   const DROITS = {
     responsable: ['eq-new', 'eq-edit', 'loc-new', 'prog-new', 'prog-edit', 'pers-new', 'pers-edit', 'ot-rouvrir', 'sync-tout', 'equipe'],
     terrain: ['ot-new', 'dem-ot', 'prog-ot', 'dem-pec', 'dem-classer', 'ot-demarrer', 'ot-planifier', 'ot-annuler', 'ot-suspendre', 'ot-reprendre', 'ot-terminer', 'ot-cloturer',
-      'ot-ajout-int', 'ot-retirer', 'ot-ajout-piece', 'ot-annuler-piece', 'ot-ajout-suite', 'ot-lever'],
+      'ot-ajout-int', 'ot-retirer', 'ot-ajout-piece', 'ot-annuler-piece', 'ot-ajout-suite', 'ot-lever',
+      'bes-new', 'bes-urgent', 'bes-utilise', 'bes-rendre', 'bes-annuler'],
     magasin: ['art-new', 'mvt'],
     saisie: ['dem-edit', 'dem-annuler', 'photo-ajout', 'signaler'],
   };
-  const ACT_MODULE = { 'art-new': 'magasin', mvt: 'magasin', 'prog-new': 'preventif', 'prog-edit': 'preventif', 'prog-ot': 'preventif' };
+  const ACT_MODULE = { 'art-new': 'magasin', mvt: 'magasin', 'bes-new': 'magasin', 'bes-urgent': 'magasin', 'bes-utilise': 'magasin', 'bes-rendre': 'magasin', 'bes-annuler': 'magasin', 'prog-new': 'preventif', 'prog-edit': 'preventif', 'prog-ot': 'preventif' };
   function autorise(act) {
     const r = role();
     if (ACT_MODULE[act] && !aModule(ACT_MODULE[act])) return false;
@@ -442,8 +445,7 @@
         <label class="f">Famille du défaut <span class="opt">(facultatif)</span></label><select data-bind="${b}familleDefaut"><option value="">—</option>${opts(L.famille).map(([k, l]) => `<option value="${k}" ${o.familleDefaut === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
         <label class="f">Cause <span class="opt">(laisser vide si inconnue)</span></label><textarea data-bind="${b}cause">${esc(o.cause)}</textarea></div>
 
-      <h2>Pièces utilisées</h2><div class="card"><ul class="lines">${(o.pieces || []).map(p => `<li class="${p.annulee ? 'off' : ''}"><span class="grow">${esc(p.qte)} × ${esc(p.articleId ? data.articles.get(p.articleId)?.designation : p.libelle)}${p.articleId ? '' : ' <span class="muted small">(hors stock)</span>'}</span>${!p.annulee ? `<button class="btn sm ghost" data-act="ot-annuler-piece" data-id="${o.id}" data-sub="${p.id}">Retour</button>` : ''}</li>`).join('') || '<li class="muted">Aucune pièce.</li>'}</ul>
-        <button class="btn sm" data-act="ot-ajout-piece" data-id="${o.id}">+ Pièce</button></div>
+      ${blocPieces(o)}
 
       <h2>Réserves et suites</h2><div class="card"><ul class="lines">${(o.reserves || []).map(s => `<li class="${s.statut !== 'ouverte' ? 'off' : ''}"><span class="grow">${s.bloquante ? badge('Bloquante', 'red') + ' ' : ''}${esc(L.typeSuite[s.type] || '')} : ${esc(s.texte)}<span class="muted small">${s.responsableId ? ' · ' + esc(persNom(s.responsableId)) : ''}${s.echeance ? ' · avant ' + fmt(s.echeance) : ''}</span></span>${s.statut === 'ouverte' ? `<button class="btn sm" data-act="ot-lever" data-id="${o.id}" data-sub="${s.id}">Lever</button>` : `<span class="small">levée ${fmt(s.leveeLe)}</span>`}</li>`).join('') || '<li class="muted">Aucune.</li>'}</ul>
         <button class="btn sm" data-act="ot-ajout-suite" data-id="${o.id}">+ Réserve / suite</button></div>
@@ -456,6 +458,36 @@
       ${(o.attentes || []).length ? `<h2>Attentes</h2><div class="card"><ul class="lines">${o.attentes.map(a => `<li><span class="grow">${esc(L.attente[a.motif])}${a.detail ? ' — ' + esc(a.detail) : ''}</span><span class="small muted">${fmt(a.depuis)} → ${a.fin ? fmt(a.fin) : 'en cours'}</span></li>`).join('')}</ul></div>` : ''}
       ${historique(o.id)}`;
   };
+
+  // ---------- pièces de l'intervention (volet B : besoin ≠ réservation ≠ remise ≠ utilisation ≠ retour) ----------
+  const besoinsDe = o => [...data.besoins.values()].filter(b => b.otId === o.id).sort((a, b) => (a.creeLe || '').localeCompare(b.creeLe || ''));
+  const desigBesoin = b => b.articleId ? (data.articles.get(b.articleId)?.designation || 'Article') : (b.description || 'Pièce');
+  const CLS_BESOIN = { demande: 'blue', reserve: 'blue', partiellement_remis: 'amber', remis: 'green', indisponible: 'red' };
+  // Stock par site : celui de l'intervention, pas le site affiché sur l'appareil.
+  const dispo = (id, siteId) => Calculs.stockDisponible([...data.besoins.values()], [...data.mouvements.values()], id, siteId);
+  const optsArticles = siteId => list('articles').filter(a => a.actif !== false).map(a => [a.id, `${a.designation} · disponible ${dispo(a.id, siteId)} ${a.unite || ''}`]);
+  function blocPieces(o) {
+    const mvts = [...data.mouvements.values()];
+    const lignes = besoinsDe(o).map(b => {
+      const e = Calculs.etatBesoin(b, mvts), r = Calculs.rapprochementBesoin(b, mvts, o.pieces), actif = !['annule', 'indisponible'].includes(e);
+      const k = `data-id="${o.id}" data-sub="${b.id}"`;
+      const btn = [
+        actif && b.articleId && e !== 'remis' ? `<button class="btn sm" data-act="bes-urgent" ${k}>Retrait urgent</button>` : '',
+        r.detenu > 0 ? `<button class="btn sm primary" data-act="bes-utilise" ${k}>J’ai utilisé</button><button class="btn sm" data-act="bes-rendre" ${k}>Je rends</button>` : '',
+        ['demande', 'reserve'].includes(e) ? `<button class="btn sm ghost" data-act="bes-annuler" ${k}>Annuler</button>` : ''].join('');
+      const suivi = [r.remis && `remis ${r.remis}`, r.utilise && `utilisé ${r.utilise}`, r.retourne && `rendu ${r.retourne}`, r.detenu > 0 && `<b>en main ${r.detenu}</b>`,
+        r.ecart && '<b>écart à expliquer</b>', b.delai && `délai annoncé ${esc(fmtY(b.delai))}`].filter(Boolean).join(' · ');
+      return `<li class="${actif ? '' : 'off'}" style="display:block"><div>${esc(b.qte)} × ${esc(desigBesoin(b))}${b.articleId ? '' : ' <span class="muted small">(hors catalogue)</span>'} ${b.urgent ? badge('Urgent', 'red') : ''} ${badge(L.etatBesoin[e], CLS_BESOIN[e] || '')}</div>
+        <div class="small muted">Demandée ${esc(fmtY(b.demandeLe || b.creeLe))} par ${esc(b.demandeur || b.creePar)}${suivi ? ' · ' + suivi : ''}</div>
+        ${btn ? `<div class="actions" style="margin:8px 0 0">${btn}</div>` : ''}</li>`;
+    });
+    const utilisees = (o.pieces || []).map(p => `<li class="${p.annulee ? 'off' : ''}"><span class="grow">${esc(p.qte)} × ${esc(p.articleId ? data.articles.get(p.articleId)?.designation : p.libelle)}${p.articleId || p.besoinId ? '' : ' <span class="muted small">(hors stock)</span>'}</span>${!p.annulee ? `<button class="btn sm ghost" data-act="ot-annuler-piece" data-id="${o.id}" data-sub="${p.id}">${p.articleId && !p.besoinId ? 'Retour' : 'Annuler'}</button>` : ''}</li>`);
+    return `<h2>Pièces</h2><div class="card">
+      ${lignes.length ? `<ul class="lines">${lignes.join('')}</ul>` : '<p class="muted small" style="margin:0 0 8px">Aucune pièce demandée. Une demande ne retire rien du stock : le magasin réserve puis remet.</p>'}
+      <div class="actions" style="margin-bottom:0"><button class="btn sm" data-act="bes-new" data-id="${o.id}">Demander une pièce</button><button class="btn sm" data-act="bes-urgent" data-id="${o.id}">Retrait urgent</button></div></div>
+      <h2>Pièces utilisées</h2><div class="card"><ul class="lines">${utilisees.join('') || '<li class="muted">Aucune pièce déclarée utilisée.</li>'}</ul>
+        <button class="btn sm" data-act="ot-ajout-piece" data-id="${o.id}">+ Pièce hors stock</button></div>`;
+  }
 
   function historique(id) {
     const j = journalDe(id);
@@ -1053,6 +1085,8 @@
     const o = data.ots.get(el.dataset.id);
     const err = Calculs.verifierCloture(o);
     if (err.length) { await alertBox('Avant de clôturer', err.map(e => '• ' + e)); return; }
+    const enMain = Calculs.piecesDetenues(besoinsDe(o), [...data.mouvements.values()], o.pieces);
+    if (enMain.length && !(await askConfirm('Pièces encore en main', `${enMain.map(r => r.detenu + ' × ' + desigBesoin(r.besoin)).join(' ; ')} : remises mais ni déclarées utilisées ni rendues. Clôturer quand même ? L’écart restera visible au magasin.`, 'Clôturer quand même'))) return;
     const me = Store.currentUserName(), now = Store.now();
     await Store.save('ots', { ...o, statut: 'cloturee', clotureLe: now, cloturePar: me, attentes: fermerAttentes(o) }, { action: 'cloture' });
     if (o.programmeId) {
@@ -1085,26 +1119,127 @@
   };
   A['ot-ajout-piece'] = async el => {
     const o = data.ots.get(el.dataset.id);
-    const v = await askForm({ title: 'Pièce utilisée', ok: 'Ajouter', values: { qte: 1 }, fields: [
-      { name: 'articleId', label: 'Article du magasin', type: 'select', empty: '— Pièce hors stock —', options: list('articles').filter(a => a.actif !== false).map(a => [a.id, `${a.designation} · stock ${stock(a.id)} ${a.unite}`]) },
-      { name: 'libelle', label: 'Désignation (si hors stock)', type: 'text' },
+    const v = await askForm({ title: 'Pièce hors stock utilisée', ok: 'Ajouter', values: { qte: 1 }, fields: [
+      { type: 'info', text: 'Pour une pièce du magasin : « Demander une pièce » ou « Retrait urgent ».' },
+      { name: 'libelle', label: 'Désignation', type: 'text', required: true },
       { name: 'qte', label: 'Quantité', type: 'number', required: true }] });
-    if (!v || !(v.qte > 0) || (!v.articleId && !v.libelle)) return;
-    const piece = { id: Store.uid(), articleId: v.articleId, libelle: v.libelle, qte: v.qte, mouvementId: null, annulee: false };
-    if (v.articleId) {
-      const m = { id: Store.uid(), articleId: v.articleId, type: 'sortie', qte: -v.qte, otId: o.id, le: Store.now(), motif: null };
-      await Store.save('mouvements', m);
-      piece.mouvementId = m.id;
-    }
-    await edit('ots', o.id, { pieces: [...(o.pieces || []), piece] }, { action: 'piece' });
+    if (!v || !(v.qte > 0) || !v.libelle) return;
+    await edit('ots', o.id, { pieces: [...(o.pieces || []), { id: Store.uid(), articleId: null, libelle: v.libelle, qte: v.qte, mouvementId: null, annulee: false }] }, { action: 'piece' });
   };
   A['ot-annuler-piece'] = async el => {
     const o = data.ots.get(el.dataset.id);
     const p = o.pieces.find(x => x.id === el.dataset.sub);
-    if (!(await askConfirm('Retour de pièce', `Retourner ${p.qte} × ${p.articleId ? data.articles.get(p.articleId)?.designation : p.libelle} ? Un mouvement de retour est créé (l’historique est conservé).`))) return;
-    if (p.articleId) await Store.save('mouvements', { id: Store.uid(), articleId: p.articleId, type: 'retour', qte: Number(p.qte), otId: o.id, le: Store.now(), motif: 'Retour depuis ' + o.ref });
+    const nom = p.articleId ? data.articles.get(p.articleId)?.designation : p.libelle;
+    const retour = p.articleId && !p.besoinId; // pièce ancienne sortie directement : on la remet en stock
+    if (!(await askConfirm(retour ? 'Retour de pièce' : 'Annuler la déclaration', retour ? `Retourner ${p.qte} × ${nom} ? Un mouvement de retour est créé (l’historique est conservé).`
+      : `Annuler « ${p.qte} × ${nom} utilisée » ? ${p.besoinId ? 'La pièce redevient « en main » : vous pourrez la rendre au magasin.' : ''}`))) return;
+    if (retour) await Store.save('mouvements', { id: Store.uid(), articleId: p.articleId, type: 'retour', qte: Number(p.qte), otId: o.id, le: Store.now(), motif: 'Retour depuis ' + o.ref });
     await edit('ots', o.id, { pieces: o.pieces.map(x => x.id === p.id ? { ...x, annulee: true } : x) }, { action: 'retour_piece' });
   };
+  A['bes-new'] = async el => {
+    const o = data.ots.get(el.dataset.id);
+    const enAttente = o.statut === 'suspendue';
+    const v = await askForm({ title: 'Demander une pièce', ok: 'Demander', values: { qte: 1 }, fields: [
+      { name: 'articleId', label: 'Article du magasin', type: 'select', empty: '— Hors catalogue —', options: optsArticles(o.siteId) },
+      { name: 'description', label: 'Description (si hors catalogue)', type: 'text', placeholder: 'ex. roulement 6204 ou équivalent' },
+      { name: 'qte', label: 'Quantité', type: 'number', required: true },
+      { name: 'urgent', label: 'Urgent', type: 'checkbox' },
+      { name: 'note', label: 'Précision pour le magasin', type: 'text' },
+      ...(enAttente ? [] : [{ name: 'attente', label: 'Mettre l’intervention en attente de cette pièce', type: 'checkbox' }])] });
+    if (!v || !(v.qte > 0)) return;
+    if (!v.articleId && !v.description) { toast('Choisissez un article ou décrivez la pièce'); return; }
+    const art = v.articleId ? data.articles.get(v.articleId) : null;
+    // Pas de qteReservee ni de délai : la réservation appartient au magasin.
+    const b = { id: Store.uid(), ref: await Store.nextRef('BES'), otId: o.id, equipementId: o.equipementId, articleId: v.articleId, description: art ? null : v.description,
+      qte: v.qte, unite: art?.unite || null, urgent: !!v.urgent, note: v.note, statut: 'demande', demandeur: Store.currentUserName(), demandeLe: Store.now() };
+    await Store.save('besoins', b, { action: 'demande_piece' });
+    if (v.attente) await edit('ots', o.id, { statut: 'suspendue', attentes: [...(o.attentes || []), { id: Store.uid(), motif: 'piece', besoinId: b.id, detail: desigBesoin(b), depuis: Store.now(), fin: null, responsableId: null }] }, { action: 'mise_en_attente', render: false });
+    toast('Demande transmise au magasin' + (v.attente ? ' · intervention en attente' : ''));
+    render();
+  };
+  /** Retrait urgent : le technicien prend la pièce lui-même. Vaut remise, marqué « à vérifier » par le magasin. */
+  A['bes-urgent'] = async el => {
+    const o = data.ots.get(el.dataset.id);
+    let b = el.dataset.sub ? data.besoins.get(el.dataset.sub) : null;
+    const mvts = [...data.mouvements.values()];
+    const reste = b ? Math.max(1, Number(b.qte) - Calculs.qteRemise(mvts, b.id)) : 1;
+    const v = await askForm({ title: 'Retrait urgent', ok: 'J’ai pris la pièce', values: { qte: reste }, fields: [
+      { type: 'info', cls: 'warn', text: 'Vous prenez la pièce vous-même : le stock est débité et le magasin vérifiera ce retrait.' },
+      ...(b ? [{ type: 'info', text: `${desigBesoin(b)} · disponible ${dispo(b.articleId, o.siteId)}` }] : [{ name: 'articleId', label: 'Article', type: 'select', required: true, empty: '— Choisir —', options: optsArticles(o.siteId) }]),
+      { name: 'qte', label: 'Quantité prise', type: 'number', required: true },
+      { name: 'monte', label: 'Pièce déjà montée (utilisée)', type: 'checkbox' }] });
+    if (!v || !(v.qte > 0)) return;
+    if (!b) {
+      if (!v.articleId) return;
+      const art = data.articles.get(v.articleId);
+      b = { id: Store.uid(), ref: await Store.nextRef('BES'), otId: o.id, equipementId: o.equipementId, articleId: v.articleId, description: null,
+        qte: v.qte, unite: art?.unite || null, urgent: true, note: 'Retrait urgent', statut: 'demande', demandeur: Store.currentUserName(), demandeLe: Store.now() };
+      await Store.save('besoins', b, { action: 'demande_piece' });
+    }
+    await Store.save('mouvements', { id: Store.uid(), articleId: b.articleId, type: 'remise', qte: -v.qte, urgent: true, aVerifier: true, besoinId: b.id, otId: o.id, le: Store.now(), motif: 'Retrait urgent ' + o.ref }, { action: 'retrait_urgent' });
+    if (v.monte) await edit('ots', o.id, { pieces: [...(data.ots.get(o.id).pieces || []), { id: Store.uid(), besoinId: b.id, articleId: b.articleId, libelle: null, qte: v.qte, mouvementId: null, annulee: false }] }, { action: 'utilisation_piece', render: false });
+    toast('Retrait enregistré · à vérifier par le magasin');
+    await leverAttentesPieces();
+    render();
+  };
+  A['bes-utilise'] = async el => {
+    const o = data.ots.get(el.dataset.id), b = data.besoins.get(el.dataset.sub);
+    const r = Calculs.rapprochementBesoin(b, [...data.mouvements.values()], o.pieces);
+    const v = await askForm({ title: 'J’ai utilisé', ok: 'Déclarer', values: { qte: r.detenu }, fields: [
+      { type: 'info', text: `${desigBesoin(b)} · en main : ${r.detenu}` }, { name: 'qte', label: 'Quantité montée', type: 'number', required: true }] });
+    if (!v || !(v.qte > 0)) return;
+    if (v.qte > r.detenu) { toast(`Au plus ${r.detenu} : quantité remise et pas encore déclarée`); return; }
+    await edit('ots', o.id, { pieces: [...(o.pieces || []), { id: Store.uid(), besoinId: b.id, articleId: b.articleId, libelle: b.articleId ? null : b.description, qte: v.qte, mouvementId: null, annulee: false }] }, { action: 'utilisation_piece' });
+  };
+  A['bes-rendre'] = async el => {
+    const o = data.ots.get(el.dataset.id), b = data.besoins.get(el.dataset.sub);
+    const r = Calculs.rapprochementBesoin(b, [...data.mouvements.values()], o.pieces);
+    if (!b.articleId) { toast('Pièce hors catalogue : voir avec le magasin'); return; }
+    const v = await askForm({ title: 'Je rends au magasin', ok: 'Rendre', values: { qte: r.detenu }, fields: [
+      { type: 'info', text: `${desigBesoin(b)} · en main : ${r.detenu}` }, { name: 'qte', label: 'Quantité rendue', type: 'number', required: true }] });
+    if (!v || !(v.qte > 0)) return;
+    if (v.qte > r.detenu) { toast(`Au plus ${r.detenu}`); return; }
+    await Store.save('mouvements', { id: Store.uid(), articleId: b.articleId, type: 'retour', qte: v.qte, besoinId: b.id, otId: o.id, le: Store.now(), motif: 'Retour depuis ' + o.ref }, { action: 'retour_piece' });
+    toast('Retour enregistré : stock remis à jour');
+    render();
+  };
+  A['bes-annuler'] = async el => {
+    const o = data.ots.get(el.dataset.id), b = data.besoins.get(el.dataset.sub);
+    if (!(await askConfirm('Annuler la demande', `Annuler la demande « ${b.qte} × ${desigBesoin(b)} » ? Elle reste visible, barrée.`, 'Annuler la demande'))) return;
+    await Store.update('besoins', b.id, { statut: 'annule', annuleLe: Store.now(), annulePar: Store.currentUserName() }, { action: 'annulation' });
+    // L'attente liée à cette pièce n'a plus d'objet : elle est close (l'intervention redevient prête si plus rien n'est attendu).
+    if ((o.attentes || []).some(a => a.besoinId === b.id && !a.fin)) {
+      const attentes = o.attentes.map(a => a.besoinId === b.id && !a.fin ? { ...a, fin: Store.now() } : a);
+      await edit('ots', o.id, { attentes, statut: o.statut === 'suspendue' && !attentes.some(a => !a.fin) ? 'prete' : o.statut }, { action: 'attente_levee', render: false });
+    }
+    render();
+  };
+
+  /** Levée automatique des attentes « pièce » dont le besoin est entièrement remis (remise du magasin reçue
+      ou retrait urgent). Date de fin = date de la remise : toutes les copies écrivent la même valeur.
+      Seuls les comptes qui peuvent modifier l'intervention le font (pas le magasinier ni le pilote). */
+  let levee = false;
+  async function leverAttentesPieces() {
+    if (levee || !ecritureOK()) return 0;
+    levee = true;
+    const prets = [];
+    try {
+      const bes = [...data.besoins.values()], mv = [...data.mouvements.values()];
+      for (const o of [...data.ots.values()]) {
+        if (!otOuvert(o) || !peutModifierOT(o)) continue;
+        const lev = Calculs.attentesALever(o, bes, mv);
+        if (!lev.length) continue;
+        const parId = new Map(lev.map(a => [a.id, a]));
+        const attentes = o.attentes.map(a => parId.get(a.id) || a);
+        const statut = o.statut === 'suspendue' && !attentes.some(a => !a.fin) ? 'prete' : o.statut;
+        await Store.save('ots', { ...o, attentes, statut }, { action: 'attente_levee' });
+        prets.push(o.ref);
+      }
+    } finally { levee = false; }
+    if (prets.length) toast(`Pièce remise : ${prets.join(', ')} ${prets.length > 1 ? 'peuvent reprendre' : 'peut reprendre'}`);
+    return prets.length;
+  }
+
   A['ot-ajout-suite'] = async el => {
     const o = data.ots.get(el.dataset.id);
     const v = await askForm({ title: 'Réserve ou suite', ok: 'Ajouter', fields: [
@@ -1499,8 +1634,9 @@
     if (R?.name === 'reglages' && $('#bloc-sync') && !enSaisie()) $('#bloc-sync').outerHTML = blocSynchro().replace(/^[\s\S]*?(<div class="card" id="bloc-sync">)/, '$1');
   }
   const enSaisie = () => !!document.querySelector('dialog[open]') || !!document.activeElement?.matches?.('#view input, #view textarea, #view select');
-  function quandRecu(n) {
+  async function quandRecu(n) {
     toast(`☁ ${n} mise(s) à jour reçue(s)`);
+    await leverAttentesPieces();
     if (!enSaisie()) render();
   }
 
@@ -1508,6 +1644,7 @@
     net();
     const lien = !!Sync.lireLienEmail(location.hash); // retour d'un e-mail d'invitation : pas d'affichage de page avant
     if (!lien) render();
+    if (await leverAttentesPieces() && !lien) render();
     Sync.demarrer({ etat: voyantSynchro, reception: quandRecu, refus: liste => {
       if (!liste.length) return;
       alertBox('Modification refusée par le serveur', [...liste.slice(0, 5).map(r => `• ${L.entite[r.type] || r.type} ${refDe(r.type, r.id)} : ${r.motif}`), 'La version du serveur a été rétablie sur cet appareil.']);

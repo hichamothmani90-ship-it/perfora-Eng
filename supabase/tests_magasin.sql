@@ -38,6 +38,9 @@ begin
   n:=11; test:='magasinier verifie le retrait urgent (ok, quantite inchangee)';
   r:=push_fiches('[{"id":"m-u1","type":"mouvements","patch":{"verifieLe":"2026-11-06T18:00","verifiePar":"Mag"}}]');
   r:= r || jsonb_build_object('qte', (select data->'qte' from fiches where id = 'm-u1'), 'verifie', (select data->>'verifieLe' from fiches where id = 'm-u1')); return next;
+  n:=16; test:='renvoi identique du retour (ok, idempotent)'; perform set_config('request.jwt.claims', json_build_object('sub', tech, 'role', 'authenticated')::text, true);
+  r:=push_fiches('[{"id":"m-rt","type":"mouvements","patch":{"id":"m-rt","type":"retour","qte":1,"articleId":"m-art","besoinId":"m-b1"}}]'); return next;
+  perform set_config('request.jwt.claims', json_build_object('sub', mag, 'role', 'authenticated')::text, true);
   n:=12; test:='magasinier modifie une quantite (refus)'; r:=push_fiches('[{"id":"m-r2","type":"mouvements","patch":{"qte":-9}}]'); return next;
   n:=13; test:='stock physique final (5 - 1 urgent + 1 retour - 1 remise = 4)';
   r:=jsonb_build_object('stock', (select sum((data->>'qte')::numeric) from fiches where entreprise_id = ent and type = 'mouvements' and data->>'articleId' = 'm-art')); return next;

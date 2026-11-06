@@ -150,13 +150,14 @@ Implémenté (object stores) :
 | `ots` | ref, demandeIds[], programmeId, echeance, equipementId, nature, priorite, statut, creneau, intervenants[{personneId,role,depuis,fin}], activites[], travaux, resultat, cause, certitudeCause, familleDefaut, avecArret, arretDebut, arretFin, pieces[], reserves[], attentes[{motif,detail,depuis,fin,responsableId}], clotureLe/Par |
 | `programmes` | equipementId, libelle, modele, periodiciteJours, prochaineEcheance, regle (fixe / apres_realisation), instruction, actif |
 | `articles` | ref, designation, unite, stockMin, actif |
-| `mouvements` | articleId, type (entree, sortie, retour, ajustement), qte signée, otId, motif, le — immuables |
+| `mouvements` | articleId, type (entree, sortie, remise, retour, rebut, ajustement), qte signée, otId, besoinId, urgent / aVerifier / verifieLe / verifiePar, motif, le — immuables (sauf vérification) |
+| `besoins` | ref BES-, otId, equipementId, articleId **ou** description, qte, unite, urgent, note, statut (demande, reserve, indisponible, annule ; « remis » est déduit des remises), qteReservee et delai (magasin seulement), demandeur, demandeLe — depuis DB v4 |
 | `journal` | entite, entiteId, action, champ, avant, apres, motif, auteur, le — append-only |
 | `photos` | parentType (demandes / ots), parentId, dataUrl JPEG ≤ 1280 px, le — depuis DB v2 |
 | `sortie` | file d'envoi cloud : {type, rid, patch} triés par id chronologique — propre à l'appareil |
 | `meta` | `device` {code, personneId}, `compteurs`, `sauvegarde` {le}, `adresse` {url des QR}, `cloud` {url, cle, session, curseur, dernier, erreur} |
 
-Version actuelle du stockage : **DB_VER = 3**. Côté serveur : table unique `fiches` (id, type, data jsonb,
+Version actuelle du stockage : **DB_VER = 4**. Pièces d'une intervention : `o.pieces[]` = déclarations d'**utilisation** (`besoinId` si la pièce vient du magasin) ; une attente `motif: 'piece'` peut porter `besoinId` (levée automatique, `Calculs.attentesALever`). Côté serveur : table unique `fiches` (id, type, data jsonb,
 seq, recu_le, auteur), RLS « authenticated », aucune règle DELETE.
 
 Listes de choix : reprendre **exactement** les codes de la V3 (sections 32-33) déjà dans l'objet `L`
@@ -189,7 +190,8 @@ lots d'import, notifications.
 - État vide qui explique quoi faire ; un chiffre indisponible dit quelle donnée manque.
 - Retour visible après chaque action (`toast`) : « enregistré sur l'appareil ».
 - Performance : rendu par chaîne HTML + délégation d'événements (`data-act`, `data-bind`), pas de framework.
-  Si `app.js` dépasse ~1 500 lignes, découper par domaine (`js/vues/*.js`) en scripts classiques.
+  `app.js` dépasse 1 600 lignes : en B4, sortir les écrans Magasin dans `js/vues/magasin.js` (script classique)
+  en exposant les aides communes (esc, askForm, edit, list…) sur un objet `App`.
 
 ## 7. Conduite de projet
 
