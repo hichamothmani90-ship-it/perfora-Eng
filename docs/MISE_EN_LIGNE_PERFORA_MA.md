@@ -54,6 +54,12 @@ ne déclare pas perfora.ma ; l'ancien dépôt n'a plus d'effet une fois les DNS 
   - Supabase → Authentication → Emails → SMTP : smtp.resend.com, port 465, utilisateur `resend`, mot de passe = clé
     d'API Resend « Supabase Perfora » (droit d'envoi seulement, saisie par Hicham), expéditeur `no-reply@perfora.ma`,
     nom « Perfora ». Limite Supabase : 30 e-mails d'authentification par heure (réglable).
+  - **Testé le 6 nov. 2026** : « mot de passe oublié » depuis app.perfora.ma → e-mail « Delivered » chez Resend, reçu.
+    Les premiers essais ont échoué (Supabase : erreur 535 « Authentication credentials invalid ») parce que la clé
+    collée n'était pas la vraie : Resend n'affiche la clé complète qu'une fois, à la création (ensuite `re_xxxx...`
+    tronqué), et le copier-coller ne sort pas du panneau navigateur de Claude. Clé créée et collée depuis le navigateur
+    habituel de Hicham : OK. Clés inutilisées « Supabase Perfora » / « Supabase Perfora 2 » à supprimer dans Resend.
+  - À faire : modèles d'e-mails Supabase en français (invitation, mot de passe, lien de connexion), aux couleurs Perfora.
   - Restes facultatifs : redirection www → perfora.ma ; supprimer l'ancien `default._domainkey` (hérité de Nindohost) ;
     durcir DMARC (`p=quarantine`) après quelques semaines d'envois sans problème.
 

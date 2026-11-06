@@ -282,3 +282,6 @@ Pièges opérationnels déjà rencontrés :
 - E-mails : depuis le 6 nov. 2026, Supabase envoie par Resend (smtp.resend.com, no-reply@perfora.ma, domaine vérifié,
   région UE) ; contact@perfora.ma est routé par Cloudflare vers Gmail. Ne jamais recharger une page de réglages où
   l'utilisateur vient de coller un secret sans avoir enregistré (piège rencontré : saisie perdue).
+  Secrets (clés Resend, etc.) : c'est l'utilisateur qui les crée et les colle, **depuis son navigateur habituel** — le
+  copier-coller ne sort pas du panneau navigateur de Claude, et une clé Resend n'est visible en entier qu'à sa création.
+  Diagnostic d'envoi : Supabase → Logs → Auth (erreur 535 = clé refusée) puis Resend → Emails (statut Delivered).
