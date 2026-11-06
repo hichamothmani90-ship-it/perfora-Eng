@@ -37,7 +37,7 @@ class H(BaseHTTPRequestHandler):
     def cors(self):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Headers", "apikey, authorization, content-type")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
 
     def repondre(self, code, obj):
         b = json.dumps(obj).encode()
@@ -78,6 +78,8 @@ class H(BaseHTTPRequestHandler):
             if grant == "refresh_token" and b.get("refresh_token") in rafraichis:
                 return self.repondre(200, nouvelle_session(rafraichis.pop(b["refresh_token"])))
             return self.repondre(400, {"error_description": "Invalid refresh token"})
+        if u.path == "/auth/v1/user":   # PUT simulé en POST impossible : voir do_PUT
+            return self.repondre(405, {"message": "PUT attendu"})
         if u.path == "/rest/v1/rpc/push_fiches":
             if not self.utilisateur():
                 return self.repondre(401, {"message": "JWT expired"})
@@ -95,8 +97,23 @@ class H(BaseHTTPRequestHandler):
             return self.repondre(200, len(lot))
         self.repondre(404, {"message": "inconnu"})
 
+    def do_PUT(self):
+        if urlparse(self.path).path == "/auth/v1/user":
+            email = self.utilisateur()
+            if not email:
+                return self.repondre(401, {"message": "JWT expired"})
+            mdp = self.corps().get("password", "")
+            if len(mdp) < 6:
+                return self.repondre(422, {"msg": "Password should be at least 6 characters"})
+            COMPTES[email] = mdp
+            return self.repondre(200, {"id": "u-" + email, "email": email})
+        self.repondre(404, {"message": "inconnu"})
+
     def do_GET(self):
         u = urlparse(self.path)
+        if u.path == "/auth/v1/user":
+            email = self.utilisateur()
+            return self.repondre(200, {"id": "u-" + email, "email": email}) if email else self.repondre(401, {"message": "JWT expired"})
         if u.path == "/rest/v1/fiches":
             if not self.utilisateur():
                 return self.repondre(401, {"message": "JWT expired"})

@@ -1006,7 +1006,7 @@
   A['sync-config'] = async () => {
     const c = data.meta.get('cloud') || {};
     // Projet Supabase du site (adresse et clé publique : publiques par conception, protégées par les règles RLS).
-    const v = await askForm({ title: 'Connexion au serveur', ok: 'Se connecter', values: { url: c.url || 'https://oihaqzkqhvyjybijsonc.supabase.co', cle: c.cle || 'sb_publishable_Qpm_99-lOQOOJ5R__oyIcA_4nd7t3un', email: c.email }, fields: [
+    const v = await askForm({ title: 'Connexion au serveur', ok: 'Se connecter', values: { url: c.url || Sync.PROJET.url, cle: c.cle || Sync.PROJET.cle, email: c.email }, fields: [
       { type: 'info', text: 'Adresse et clé publique : Supabase → Project Settings → API. Le compte est créé par le responsable dans Supabase → Authentication → Users.' },
       { name: 'url', label: 'Adresse du projet (https://….supabase.co)', type: 'url', required: true },
       { name: 'cle', label: 'Clé publique (anon / publishable)', type: 'text', required: true },
@@ -1018,15 +1018,46 @@
       const premiere = await Sync.connecter(v);
       // Premier branchement : tout ce qui existe déjà sur l'appareil part au serveur (fusion, sans
       // suppression), sinon une fiche modifiée plus tard n'arriverait qu'en partie ailleurs.
-      if (premiere && list('equipements').length + list('demandes').length + list('ots').length) {
-        const n = await Store.toutEnvoyer();
-        toast(`${n} fiche(s) de cet appareil envoyées au serveur`);
-      }
+      await premierEnvoiSiBesoin(premiere);
       toast('Connecté · synchronisation en cours');
       await Sync.synchroniser();
       render();
     } catch (e) { toast('Échec : ' + e.message); }
   };
+  async function premierEnvoiSiBesoin(premiere) {
+    if (premiere && list('equipements').length + list('demandes').length + list('ots').length) {
+      const n = await Store.toutEnvoyer();
+      toast(`${n} fiche(s) de cet appareil envoyées au serveur`);
+    }
+  }
+  /** Retour d'un lien reçu par e-mail : invitation ou mot de passe oublié. */
+  async function traiterLienEmail() {
+    const l = Sync.lireLienEmail(location.hash);
+    if (!l) return false;
+    history.replaceState(null, '', location.pathname + '#/reglages');
+    if (l.erreur) { await alertBox('Lien de connexion', [l.erreur]); return true; }
+    try {
+      const { premiere, email } = await Sync.sessionDepuisLien(l);
+      if (['invite', 'recovery', 'signup'].includes(l.type)) {
+        for (;;) {
+          const v = await askForm({ title: 'Choisissez votre mot de passe', ok: 'Enregistrer', cancel: null, fields: [
+            { type: 'info', text: `Compte : ${email}. Ce mot de passe servira à vous connecter sur vos autres appareils.` },
+            { name: 'p1', label: 'Nouveau mot de passe (8 caractères minimum)', type: 'password', required: true },
+            { name: 'p2', label: 'Confirmer', type: 'password', required: true }] });
+          if (!v) continue;
+          if (v.p1 !== v.p2) { toast('Les deux saisies diffèrent'); continue; }
+          if (v.p1.length < 8) { toast('8 caractères minimum'); continue; }
+          try { await Sync.changerMotDePasse(v.p1); break; } catch (e) { toast(e.message); }
+        }
+      }
+      await premierEnvoiSiBesoin(premiere);
+      toast(`Connecté : ${email}`);
+      await Sync.synchroniser();
+    } catch (e) { await alertBox('Lien de connexion', [e.message]); }
+    render();
+    return true;
+  }
+
   A['sync-maintenant'] = async () => { await Sync.synchroniser(); render(); const s = Sync.etatCourant(); toast(s.erreur ? 'Erreur : ' + s.erreur : 'Synchronisation terminée'); };
   A['sync-tout'] = async () => {
     if (!(await askConfirm('Tout envoyer', 'Toutes les fiches de cet appareil seront envoyées au serveur (fusion, rien n’est supprimé). Utile au premier branchement ou après l’import d’une sauvegarde.', 'Envoyer'))) return;
@@ -1151,7 +1182,7 @@
     const q = e.target.value.trim().toLowerCase();
     document.querySelectorAll(f + ' > .card').forEach(c => { c.style.display = !q || c.textContent.toLowerCase().includes(q) ? '' : 'none'; });
   });
-  window.addEventListener('hashchange', () => { render(); window.scrollTo(0, 0); });
+  window.addEventListener('hashchange', async () => { if (await traiterLienEmail()) return; render(); window.scrollTo(0, 0); });
   const net = () => { const n = $('#net'); n.textContent = navigator.onLine ? '' : 'Hors ligne · enregistré sur l’appareil'; n.className = 'net' + (navigator.onLine ? ' hidden' : ' off'); };
   window.addEventListener('online', net); window.addEventListener('offline', net);
 
@@ -1176,7 +1207,13 @@
     if (!enSaisie()) render();
   }
 
-  Store.open().then(() => { net(); render(); Sync.demarrer({ etat: voyantSynchro, reception: quandRecu }); }).catch(err => {
+  Store.open().then(async () => {
+    net();
+    const lien = !!Sync.lireLienEmail(location.hash); // retour d'un e-mail d'invitation : pas d'affichage de page avant
+    if (!lien) render();
+    Sync.demarrer({ etat: voyantSynchro, reception: quandRecu });
+    if (lien) await traiterLienEmail();
+  }).catch(err => {
     $('#view').innerHTML = `<p class="warn">Stockage local indisponible : ${esc(err.message)}. Vérifiez que le navigateur n’est pas en navigation privée.</p>`;
   });
   if ('serviceWorker' in navigator && isSecureContext && location.protocol !== 'file:') {

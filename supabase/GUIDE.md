@@ -19,11 +19,19 @@ Durée : 15 minutes environ. Offre gratuite suffisante pour le prototype.
 **Authentication** → **Sign In / Providers** (ou *Settings*) → désactiver **Allow new users to sign up**.
 Seul le responsable crée les comptes.
 
-## 4. Créer les comptes
-**Authentication** → **Users** → **Add user** → **Create new user** :
-e-mail + mot de passe, cocher **Auto Confirm User**. Un compte par personne.
+## 4. Adresse de retour des e-mails (une seule fois)
+**Authentication** → **URL Configuration** → **Site URL** =
+`https://hichamothmani90-ship-it.github.io/perfora-Eng/` → Save. (Fait le 6 nov. 2026.)
 
-## 5. Récupérer l'adresse et la clé publique
+## 5. Créer les comptes — méthode recommandée : l'invitation
+**Authentication** → **Users** → **Add user** → **Send invitation** → e-mail de la personne.
+La personne clique le lien reçu : l'appli s'ouvre, lui demande de **choisir son mot de passe**,
+puis la connecte et synchronise. Elle utilise ensuite e-mail + mot de passe sur ses autres appareils.
+
+Mot de passe oublié : fiche de l'utilisateur → **Send password recovery** (même parcours).
+Alternative sans e-mail : **Create new user** avec un mot de passe et **Auto Confirm User**.
+
+## 6. Récupérer l'adresse et la clé publique (déjà préremplies dans l'appli)
 **Project Settings** → **API** (ou **Data API** / **API Keys**) :
 - **Project URL** : `https://xxxxxxxx.supabase.co`
 - **clé publique** : `anon` / `publishable` (commence souvent par `eyJ…` ou `sb_publishable_…`).
@@ -31,7 +39,7 @@ e-mail + mot de passe, cocher **Auto Confirm User**. Un compte par personne.
 La clé publique peut figurer dans l'appli : sans compte connecté, elle ne donne accès à rien
 (règles RLS du `schema.sql`). **Ne jamais utiliser la clé `service_role` / `secret` dans l'appli.**
 
-## 6. Connecter chaque appareil
+## 7. Connecter chaque appareil
 Dans l'appli : **Réglages → Synchronisation cloud → Connecter ce compte**, saisir l'adresse,
 la clé publique, l'e-mail et le mot de passe de la personne.
 - Au premier branchement, les données déjà présentes sur l'appareil sont envoyées automatiquement.

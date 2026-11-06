@@ -9,6 +9,8 @@ const Sync = (() => {
   let surEtat = () => {}, surReception = () => {};
 
   const DELAI_MAX = 20000; // réseau faible : on abandonne et on réessaiera plus tard
+  /** Projet Supabase du site : adresse et clé publique, publiques par conception (accès protégé par RLS). */
+  const PROJET = { url: 'https://oihaqzkqhvyjybijsonc.supabase.co', cle: 'sb_publishable_Qpm_99-lOQOOJ5R__oyIcA_4nd7t3un' };
   const cfg = () => data.meta.get('cloud');
   async function requete(url, opts) {
     const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), DELAI_MAX);
@@ -43,6 +45,39 @@ const Sync = (() => {
     notifier();
     return premiere;
   }
+  // ---------- liens reçus par e-mail (invitation, mot de passe oublié) ----------
+  /** Lit un retour de lien Supabase dans l'adresse (#access_token=…&type=invite). null sinon. */
+  function lireLienEmail(hash) {
+    const h = (hash || '').replace(/^#\/?/, '');
+    if (!/(^|&)(access_token|error)=/.test(h)) return null;
+    const p = new URLSearchParams(h);
+    if (p.get('error')) {
+      const code = p.get('error_code') || '';
+      return { erreur: /expired/.test(code) ? 'Lien expiré : demandez un nouvel e-mail au responsable.' : (p.get('error_description') || 'Lien invalide').replace(/\+/g, ' ') };
+    }
+    return { type: p.get('type'), access_token: p.get('access_token'), refresh_token: p.get('refresh_token'), expires_in: Number(p.get('expires_in')) || 3600 };
+  }
+  /** Ouvre la session à partir du lien (sans mot de passe) et récupère l'identité du compte. */
+  async function sessionDepuisLien(l) {
+    const c = cfg()?.url ? cfg() : PROJET;
+    const r = await requete(`${c.url}/auth/v1/user`, { headers: { apikey: c.cle, Authorization: 'Bearer ' + l.access_token } });
+    if (!r.ok) throw new Error('Lien invalide ou déjà utilisé');
+    const u = await r.json();
+    const premiere = !cfg()?.url;
+    await majCfg({ url: c.url, cle: c.cle, ...session({ ...l, user: u }), curseur: cfg()?.curseur || 0, erreur: null });
+    notifier();
+    return { premiere, email: u.email };
+  }
+  async function changerMotDePasse(mdp) {
+    const c = cfg();
+    const r = await requete(`${c.url}/auth/v1/user`, { method: 'PUT', headers: { apikey: c.cle, Authorization: 'Bearer ' + await jeton(), 'Content-Type': 'application/json' }, body: JSON.stringify({ password: mdp }) });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      const m = j.msg || j.message || j.error_description || '';
+      throw new Error(/weak|at least|characters/i.test(m) ? 'Mot de passe trop faible (8 caractères minimum conseillés)' : /same/i.test(m) ? 'Choisissez un mot de passe différent de l’ancien' : m || `Refusé (${r.status})`);
+    }
+  }
+
   async function deconnecter() { await majCfg({ access: null, refresh: null, expire: 0 }); notifier(); }
 
   async function jeton() {
@@ -135,5 +170,5 @@ const Sync = (() => {
   }
   function notifier() { try { surEtat(etatCourant()); } catch { /* affichage */ } }
 
-  return { connecter, deconnecter, synchroniser, planifier, demarrer, etatCourant };
+  return { PROJET, connecter, deconnecter, synchroniser, planifier, demarrer, etatCourant, lireLienEmail, sessionDepuisLien, changerMotDePasse };
 })();
