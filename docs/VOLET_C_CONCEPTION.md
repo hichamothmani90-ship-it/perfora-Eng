@@ -7,6 +7,14 @@ Conventions de mouvements retenues : `entree` = utilisable reçu ; `isolement` (
 (+N, isolementId) ; `disposition` (qte 0, quantite N, decision). Aucun prix sur les mouvements.
 Fiche `valorisations` : { mouvementId, prixUnitaire, devise (MAD par défaut), prixUnitaireMAD si autre devise,
 statut connu / provisoire }. Une pièce libérée prend le prix de sa réception (valorisation de l'isolement).
+**C2 fait** : `supabase/achats.sql` exécuté sur Supabase (types seuils / achats / valorisations, rôle « achats »,
+fonction `voit_couts()`, lecture restreinte des fiches achats / valorisations **et des lignes de journal qui les
+concernent**, règles de validation) + `supabase/tests_achats.sql` (21 tests conformes, dont « technicien : 0 prix
+lisible »). Non-régression : tests_magasin 16/16, tests_etancheite 12/12.
+Règles ajoutées : un seuil validé ne se modifie pas (nouvelle version proposée) ; le magasinier rédige et soumet
+une demande d'achat, ne la valide pas, et après validation ne peut que la clore une fois commandée ; le rôle achats
+ne crée pas de demande et ne renseigne que la commande (statuts transmise / commandee) d'une demande validée ;
+un prix se rattache à une entrée de stock (site hérité) et sa correction est réservée au responsable.
 Références V3 : §14 (seuils proposés et validés), §15-16 (stock explicable, réception partielle, pièces isolées),
 §17 (besoins achats : circuit et états), §18 (CUMP, prix manquant, coûts distincts), §24 (rôle Achats facultatif,
 prix masqués aux techniciens), §33 (compatibilités et seuils), §37 (scénarios de vérification).

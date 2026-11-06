@@ -103,6 +103,9 @@ Chaque indicateur affiche périmètre, période, convention, couverture et effec
   (`module_de`), rôle (`peut_ecrire`), règles métier, puis site (envoyé › existant › hérité du parent pour
   journal / photos › site par défaut du compte) non autorisé ou changé par un non-responsable ; il recopie
   `siteId` dans `data`. `mon_profil()` renvoie entreprise, sites, siteDefaut, abonnement, adminPlateforme.
+  **Montants** (volet C) : uniquement dans les fiches `achats` et `valorisations`, lisibles seulement si `voit_couts()`
+  (responsable, magasinier, achats, pilote) ; la même restriction couvre les lignes de journal de ces types. Ne jamais
+  poser de prix sur un article, un mouvement ou une intervention (lisibles par les techniciens).
   Toute nouvelle table de données doit porter entreprise_id (+ site_id) et une politique RLS équivalente ;
   rejouer `supabase/tests_etancheite.sql` après chaque changement de règle.
 - **Appli multi-site** (A2) : `list(t)` filtre les types de `Store.SITE_TYPES` sur le site actif
@@ -251,8 +254,11 @@ seule mémoire fiable : tout ce qui compte doit y être écrit avant de continue
    `docs/FEUILLE_DE_ROUTE.md`, puis `git log --oneline -10` et `git status` avant toute action.
 
 Pièges opérationnels déjà rencontrés :
-- SQL Editor Supabase : insérer le script via `monaco.editor.getEditors()[0].setValue(...)` (pas de `\`,
-  de backtick ni de `${` dans le script) ; confirmer « Run query » sur l'alerte « destructive » ; un
+- SQL Editor Supabase : **pousser d'abord le script sur GitHub**, puis dans l'onglet Supabase
+  `fetch('https://raw.githubusercontent.com/hichamothmani90-ship-it/perfora-Eng/<branche>/supabase/x.sql')` →
+  `monaco.editor.getEditors()[0].setValue(t)` ; comparer l'empreinte SHA-1 avec le fichier local (ce qui s'exécute est
+  exactement ce qui est commité). Le serveur local, `file://` et le presse-papiers ne passent pas (CSP, onglets). À défaut,
+  insérer le texte via `setValue(...)` (pas de `\`, de backtick ni de `${`) ; confirmer « Run query » sur l'alerte « destructive » ; un
   `begin … rollback` n'est pas conservé → tester avec une fonction plpgsql temporaire qui nettoie, puis la
   supprimer ; la grille de résultats est virtualisée → agréger en une ligne (`jsonb_object_agg`).
 - Fenêtres de saisie de l'appli dans un onglet masqué : fermeture retardée par le navigateur → tester par

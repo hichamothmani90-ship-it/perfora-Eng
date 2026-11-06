@@ -37,10 +37,10 @@ multi-entreprise) et concepteur d'interfaces terrain mobile-first. Langue : fran
      (multi-entreprise, multi-site, packs et quotas, invitation depuis l'appli, console plateforme,
      démo réinitialisable, recette + durcissement). Volet B terminé (docs/VOLET_B_CONCEPTION.md) : magasin relié au
      terrain, écrans Magasin dans js/vues/magasin.js. Volet C en cours sur la branche `volet-c`
-     (docs/VOLET_C_CONCEPTION.md, choix validés) : C1 fait, prochain C2 (serveur). Ou mise
+     (docs/VOLET_C_CONCEPTION.md, choix validés) : C1 et C2 faits, prochain C3 (seuils et « À réapprovisionner »). Ou mise
      en production (docs/RECETTE_VOLET_A.md §4). Démo VITRINE à réinitialiser une fois (nouvelles données magasin).
    - Supabase « gmao-terrain » (réf. oihaqzkqhvyjybijsonc, Frankfurt). Scripts dans l'ordre :
-     schema.sql → roles.sql → multitenant.sql → quotas.sql → plateforme.sql → durcissement.sql → magasin.sql ; tests : tests_etancheite, tests_quotas, tests_plateforme, tests_magasin, tests_demo ;
+     schema.sql → roles.sql → multitenant.sql → quotas.sql → plateforme.sql → durcissement.sql → magasin.sql → achats.sql ; tests : tests_etancheite, tests_quotas, tests_plateforme, tests_magasin, tests_demo, tests_achats ;
      Edge Function supabase/functions/inviter. Entreprises : DEMO « Perfora Démo » (Site Tanger, pack Pro ;
      othmanihicham99@gmail.com responsable + administrateur plateforme ; hothmani36@outlook.fr magasinier)
      et VITRINE « Vitrine Perfora » (démo réinitialisable ; hicham.othmani90@gmail.com responsable).
