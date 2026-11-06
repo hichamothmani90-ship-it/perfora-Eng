@@ -6,7 +6,7 @@
 --  entreprise ; 6 import : importe true, fiches_lot 3, lot 1 ; 7 erreur « déjà importé » ; 8 référentiel : equipements 1 ;
 --  9 compteur d'équipement en pack Pro : ok ; 10 compteur de ressource en pack Pro : refus module energie ; 11 relevé d'un
 --  compteur d'équipement par le technicien : ok ; 12 changement d'usage : refus (en pack Pro, motif module energie) ; 13 technicien lit l'équipement importé : 1 ;
---  14 annulation après activité : erreur ; 15 nouveau lot puis annulation immédiate : supprimees 1 ; 16 étapes : import coché ;
+--  14 annulation après activité : erreur ; 15 nouveau lot puis annulation immédiate : supprimees 1, reste 0, annule true ; 16 étapes : import coché ;
 --  17 nettoyage sans MTEST.
 create or replace function public.gmao_test_mes() returns table(n int, test text, r jsonb) language plpgsql as $$
 declare ent uuid; site uuid; site_autre uuid; adm uuid;
@@ -70,7 +70,8 @@ begin
   begin r := pf_annuler_lot(ent, 'lot-test-1'); exception when others then r := jsonb_build_object('erreur', sqlerrm); end; return next;
   n:=15; test:='nouveau lot puis annulation immediate (ok)';
   perform pf_importer(ent, 'lot-test-2', 'complement.xlsx', jsonb_build_array(jsonb_build_object('id', 'm-e4', 'type', 'equipements', 'data', jsonb_build_object('code', 'PRS-01', 'designation', 'Presse', 'siteId', site, 'localisationId', 'm-l1'))), false);
-  r := pf_annuler_lot(ent, 'lot-test-2') || jsonb_build_object('reste', (select count(*) from fiches where id = 'm-e4'), 'annule', (select annule_le is not null from pf_lots_import where id = 'lot-test-2')); return next;
+  r := pf_annuler_lot(ent, 'lot-test-2');   -- instruction séparée : la vérification doit voir l'état après suppression
+  r := r || jsonb_build_object('reste', (select count(*) from fiches where id = 'm-e4'), 'annule', (select annule_le is not null from pf_lots_import where id = 'lot-test-2')); return next;
   n:=16; test:='etapes de mise en service'; perform pf_mes_etape(ent, 'import', true); perform pf_mes_etape(ent, 'kit_envoye', true); perform pf_mes_etape(ent, 'kit_envoye', false);
   r := jsonb_build_object('etapes', (select jsonb_object_keys_agg from (select jsonb_agg(k) as jsonb_object_keys_agg from jsonb_object_keys(pf_mes_lire(ent)->'etapes') k) z), 'lots', jsonb_array_length(pf_mes_lire(ent)->'lots')); return next;
 
