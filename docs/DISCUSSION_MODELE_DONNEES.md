@@ -83,7 +83,7 @@ Mise en œuvre : étape « C bis » après le volet D (inventaire avant si un pr
 ## 5. Démarrage d'un client (6 nov. 2026)
 
 Kit Excel standard (`kit/Kit_demarrage_Perfora.xlsx`, généré par `scripts/kit_demarrage.py`) rempli par le client ou
-avec lui ; import par l'administrateur de la plateforme depuis une page « Mise en service » de la console (vérification
-à blanc avec rapport ligne par ligne, import en lot annulable, stock de départ en inventaire initial). En attendant la
-page : import par script depuis le poste de l'administrateur. Plus tard : import en libre-service (module imports, pack
-Entreprise).
+avec lui ; import par l'administrateur de la plateforme depuis la page « Mise en service » de la console — **faite
+(v25, 6 nov. 2026)**, procédure : [`MISE_EN_SERVICE_CLIENT.md`](MISE_EN_SERVICE_CLIENT.md). D2 bis (module d'un
+compteur selon son usage) et type `fournisseurs` faits en même temps. Plus tard : import en libre-service (module
+imports, pack Entreprise).

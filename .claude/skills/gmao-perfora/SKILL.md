@@ -165,12 +165,13 @@ Implémenté (object stores) :
 | `releves` | compteurId, le, valeur, estime, debut (mode période), remplaceId (correction), nature « rupture » (indexFinal, indexInitial, coefficient, motif), decision (confirme / invalide) + motifDecision / decideLe / decidePar (responsable) — jamais modifiés |
 | `factures_energie` | du, au, quantite, unite, montantHT, devise, compteurIds[], fournisseur, reference — **lecture restreinte** (pièce jointe = photos parentType factures_energie, restreinte aussi) |
 | `parametres` | une fiche `parametres-<entreprise>` : clotureParResponsable — écrite par le responsable, lue par tous |
+| `fournisseurs` | nom, contact, telephone, email, delaiJours — commun à l'entreprise, module magasin (depuis DB v7) |
 | `journal` | entite, entiteId, action, champ, avant, apres, motif, auteur, le — append-only |
 | `photos` | parentType (demandes / ots), parentId, dataUrl JPEG ≤ 1280 px, le — depuis DB v2 |
 | `sortie` | file d'envoi cloud : {type, rid, patch} triés par id chronologique — propre à l'appareil |
 | `meta` | `device` {code, personneId}, `compteurs`, `sauvegarde` {le}, `adresse` {url des QR}, `cloud` {url, cle, session, curseur, dernier, erreur} |
 
-Version actuelle du stockage : **DB_VER = 6** (v5 : seuils, achats, valorisations ; v6 : compteurs, releves, factures_energie, parametres). Pièces d'une intervention : `o.pieces[]` = déclarations d'**utilisation** (`besoinId` si la pièce vient du magasin) ; une attente `motif: 'piece'` peut porter `besoinId` (levée automatique, `Calculs.attentesALever`). Côté serveur : table unique `fiches` (id, type, data jsonb,
+Version actuelle du stockage : **DB_VER = 7** (v5 : seuils, achats, valorisations ; v6 : compteurs, releves, factures_energie, parametres ; v7 : fournisseurs). Compteur : `usage` ressource | equipement (+ equipementId) — le serveur rattache un compteur d'équipement au module préventif (D2 bis). Fiches reprises : `lotImport` (docs/MISE_EN_SERVICE_CLIENT.md). Pièces d'une intervention : `o.pieces[]` = déclarations d'**utilisation** (`besoinId` si la pièce vient du magasin) ; une attente `motif: 'piece'` peut porter `besoinId` (levée automatique, `Calculs.attentesALever`). Côté serveur : table unique `fiches` (id, type, data jsonb,
 seq, recu_le, auteur), RLS « authenticated », aucune règle DELETE.
 
 Listes de choix : reprendre **exactement** les codes de la V3 (sections 32-33) déjà dans l'objet `L`

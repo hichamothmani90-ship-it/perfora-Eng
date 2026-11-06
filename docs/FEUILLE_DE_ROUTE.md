@@ -96,7 +96,8 @@ Objectif : plusieurs clients isolés sur la même plateforme, chacun avec ses si
 - **Conception** : [`VOLET_D_CONCEPTION.md`](VOLET_D_CONCEPTION.md) (choix validés le 6 nov. 2026, étapes D1 à D5 ; D1 fait).
 - **Avant D3** : simplification du parcours demande → intervention, faite (v23) : [`PARCOURS_DEMANDE_INTERVENTION.md`](PARCOURS_DEMANDE_INTERVENTION.md).
 - **D2 fait (v24)** : serveur énergie + réglage « clôture validée par le responsable ».
-- **Classification du parc** (à relire) : [`CLASSIFICATION_PARC.md`](CLASSIFICATION_PARC.md).
+- **Classification du parc** (validée ; écrans à faire) : [`CLASSIFICATION_PARC.md`](CLASSIFICATION_PARC.md).
+- **Mise en service des clients** (v25, fait) : kit Excel + page de la console : [`MISE_EN_SERVICE_CLIENT.md`](MISE_EN_SERVICE_CLIENT.md).
 - **Avant D3** : discussion du modèle de données (magasin, achats, compteurs de ressources et d'équipements) : [`DISCUSSION_MODELE_DONNEES.md`](DISCUSSION_MODELE_DONNEES.md).
 
 ### Volet E — Pilotage avancé et rapports  · ~2 semaines  (V3 §10-11, §26, §29)
