@@ -144,7 +144,7 @@ returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   e entreprises; site uuid; k text; maint text := public.pf_j(0, to_char(now() at time zone 'Africa/Casablanca', 'HH24:MI'));
   l_site text; l_at text; l_li text; l_ut text; presse text; emb text; conv text; comp text;
-  resp text; ta text; tb text; mag text; a1 text; a2 text; a3 text; d1 text; d3 text; o1 text; m1 text;
+  resp text; ta text; tb text; mag text; a1 text; a2 text; a3 text; a4 text; b3 text; b4 text; d1 text; d3 text; o1 text; o3 text; m1 text;
 begin
   perform public.exiger_admin();
   select * into e from entreprises where id = p_entreprise;
@@ -158,6 +158,7 @@ begin
   presse := k || '-eq1'; emb := k || '-eq2'; conv := k || '-eq3'; comp := k || '-eq4';
   resp := k || '-p1'; ta := k || '-p2'; tb := k || '-p3'; mag := k || '-p4';
   a1 := k || '-a1'; a2 := k || '-a2'; a3 := k || '-a3'; d1 := k || '-d1'; d3 := k || '-d3'; o1 := k || '-o1'; m1 := k || '-m1';
+  a4 := k || '-a4'; b3 := k || '-b3'; b4 := k || '-b4'; o3 := k || '-o3';
 
   insert into fiches (id, type, entreprise_id, site_id, data)
   select v.id, v.type, e.id, case when v.type in ('personnes','articles') then null else site end,
@@ -179,6 +180,12 @@ begin
     (a1, 'articles', jsonb_build_object('ref', 'J-VER-80', 'designation', 'Joint de vérin Ø80', 'unite', 'u', 'stockMin', 2, 'actif', true)),
     (a2, 'articles', jsonb_build_object('ref', 'HUI-HV46', 'designation', 'Huile hydraulique HV46', 'unite', 'L', 'stockMin', 20, 'actif', true)),
     (a3, 'articles', jsonb_build_object('ref', 'FIL-AIR', 'designation', 'Filtre à air compresseur', 'unite', 'u', 'stockMin', 1, 'actif', true)),
+    (a4, 'articles', jsonb_build_object('ref', 'ROUL-TD-50', 'designation', 'Rouleau tendeur convoyeur Ø50', 'unite', 'u', 'stockMin', 1, 'actif', true)),
+    (k || '-m0d', 'mouvements', jsonb_build_object('articleId', a4, 'type', 'entree', 'qte', 2, 'otId', null, 'le', public.pf_j(0, '09:15'), 'motif', 'Livraison fournisseur')),
+    -- volet B : le convoyeur attend un rouleau (demande urgente, en stock) ; 2 L d'huile pris en urgence, à vérifier
+    (b3, 'besoins', jsonb_build_object('ref', 'BES-DEMO-0001', 'otId', o3, 'equipementId', conv, 'articleId', a4, 'qte', 1, 'unite', 'u', 'urgent', true, 'statut', 'demande', 'note', 'Arrêt ligne 2', 'demandeur', 'Technicien B (automatisme)', 'demandeLe', public.pf_j(0, '08:30'), 'creeLe', public.pf_j(0, '08:30'))),
+    (b4, 'besoins', jsonb_build_object('ref', 'BES-DEMO-0002', 'otId', o3, 'equipementId', conv, 'articleId', a2, 'qte', 2, 'unite', 'L', 'urgent', true, 'statut', 'demande', 'note', 'Retrait urgent', 'demandeur', 'Technicien B (automatisme)', 'demandeLe', public.pf_j(0, '08:10'), 'creeLe', public.pf_j(0, '08:10'))),
+    (k || '-m4', 'mouvements', jsonb_build_object('articleId', a2, 'type', 'remise', 'qte', -2, 'urgent', true, 'aVerifier', true, 'besoinId', b4, 'otId', o3, 'le', public.pf_j(0, '08:10'), 'motif', 'Retrait urgent OT-DEMO-0003', 'creePar', 'Technicien B (automatisme)')),
     (k || '-m0a', 'mouvements', jsonb_build_object('articleId', a1, 'type', 'entree', 'qte', 3, 'otId', null, 'le', public.pf_j(-20, '09:00'), 'motif', 'Stock initial')),
     (k || '-m0b', 'mouvements', jsonb_build_object('articleId', a2, 'type', 'entree', 'qte', 60, 'otId', null, 'le', public.pf_j(-20, '09:00'), 'motif', 'Stock initial')),
     (k || '-m0c', 'mouvements', jsonb_build_object('articleId', a3, 'type', 'entree', 'qte', 1, 'otId', null, 'le', public.pf_j(-20, '09:00'), 'motif', 'Stock initial')),
@@ -193,11 +200,11 @@ begin
         'avecArret', 'oui', 'arretDebut', public.pf_j(-3, '08:00'), 'arretFin', public.pf_j(-3, '10:30'),
         'pieces', jsonb_build_array(jsonb_build_object('id', k || '-pc1', 'articleId', a1, 'qte', 1, 'mouvementId', m1, 'annulee', false)), 'reserves', '[]'::jsonb, 'attentes', '[]'::jsonb,
         'clotureLe', public.pf_j(-3, '11:20'), 'cloturePar', 'Responsable maintenance', 'creeLe', public.pf_j(-3, '08:05'))),
-    (k || '-o3', 'ots', jsonb_build_object('ref', 'OT-DEMO-0003', 'demandeIds', jsonb_build_array(d3), 'equipementId', conv, 'nature', 'corrective', 'priorite', 'critique_service', 'statut', 'suspendue',
+    (o3, 'ots', jsonb_build_object('ref', 'OT-DEMO-0003', 'demandeIds', jsonb_build_array(d3), 'equipementId', conv, 'nature', 'corrective', 'priorite', 'critique_service', 'statut', 'suspendue',
         'intervenants', jsonb_build_array(jsonb_build_object('id', k || '-i3', 'personneId', tb, 'role', 'intervenant', 'depuis', public.pf_j(0, '07:50'), 'fin', null)),
         'activites', jsonb_build_array('diagnostic'), 'travaux', 'Rouleau tendeur grippé.', 'familleDefaut', 'mecanique', 'avecArret', 'oui', 'arretDebut', public.pf_j(0, '07:40'),
-        'pieces', '[]'::jsonb, 'reserves', '[]'::jsonb,
-        'attentes', jsonb_build_array(jsonb_build_object('id', k || '-at3', 'motif', 'piece', 'detail', 'Rouleau tendeur commandé', 'depuis', public.pf_j(0, '08:30'), 'fin', null, 'responsableId', mag)),
+        'pieces', jsonb_build_array(jsonb_build_object('id', k || '-pc3', 'besoinId', b4, 'articleId', a2, 'qte', 2, 'mouvementId', null, 'annulee', false)), 'reserves', '[]'::jsonb,
+        'attentes', jsonb_build_array(jsonb_build_object('id', k || '-at3', 'motif', 'piece', 'besoinId', b3, 'detail', 'Rouleau tendeur convoyeur Ø50', 'depuis', public.pf_j(0, '08:30'), 'fin', null, 'responsableId', mag)),
         'creeLe', public.pf_j(0, '07:50'))),
     (k || '-pg1', 'programmes', jsonb_build_object('equipementId', comp, 'libelle', 'Vidange et filtre compresseur', 'modele', 'entretien', 'periodiciteJours', 90, 'prochaineEcheance', public.pf_j(-2), 'regle', 'fixe', 'instruction', 'Consigner selon procédure site, vidanger, remplacer le filtre à air, essai à vide puis en charge.', 'actif', true)),
     (k || '-pg2', 'programmes', jsonb_build_object('equipementId', presse, 'libelle', 'Contrôle niveau et fuites hydrauliques', 'modele', 'inspection', 'periodiciteJours', 30, 'prochaineEcheance', public.pf_j(5), 'regle', 'apres_realisation', 'instruction', 'Niveau bâche, état flexibles, traces de fuite.', 'actif', true))

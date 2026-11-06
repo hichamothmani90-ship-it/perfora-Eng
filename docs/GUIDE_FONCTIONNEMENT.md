@@ -28,7 +28,8 @@ des indicateurs fiables par équipement, avec une traçabilité complète pour l
 | **Intervention (OT)** | Le travail organisé pour y répondre | Remplacement du joint, résultat *résolu* |
 | **Arrêt de production** | Oui / Non / Inconnu, avec début et fin **facultatifs** | La durée n'apparaît que si les deux heures sont connues |
 | **Préventif** | Un programme répété (tous les 30 jours…) qui crée les interventions à faire | Vidange compresseur tous les 90 jours |
-| **Magasin** | Articles, stock, pièces sorties sur une intervention | 1 joint de vérin utilisé sur l'OT |
+| **Demande de pièce** | Ce que le technicien demande au magasin depuis l'intervention ; elle ne retire rien du stock | 1 rouleau tendeur, urgent |
+| **Magasin** | Réserve, remet, vérifie les retraits urgents ; stock par site (physique, réservé, disponible) | Remise du rouleau → l'intervention redevient « Prête » |
 | **Journal** | L'historique de toutes les saisies et corrections | « statut : en cours → clôturée, par Technicien A, 06/11 11:20 » |
 
 ## 4. Le parcours en 5 écrans
@@ -45,7 +46,7 @@ des indicateurs fiables par équipement, avec une traçabilité complète pour l
 |---|---|
 | **Responsable maintenance** | Configure (équipements, préventif, équipe), corrige une intervention clôturée, voit tout |
 | **Technicien / Prestataire** | Signale, prend en charge, intervient, clôture ses interventions |
-| **Magasinier** | Gère les articles et les mouvements de stock |
+| **Magasinier** | Sert les demandes de pièces (réserver, remettre, indisponible + délai), vérifie les retraits urgents, réceptionne et inventorie |
 | **Exploitation** | Signale des demandes |
 | **Pilote / Direction** | Consulte les indicateurs, ne modifie rien |
 
@@ -71,6 +72,7 @@ Matériel : un PC (vidéoprojecteur) + un téléphone, connectés au même compt
 | 5-7 | Sur le téléphone : résultat *Résolu*, cause *Probable* → **Clôturer** (essayer d'abord sans résultat : l'appli bloque) | « Les règles de qualité sont dans l'outil, pas dans un classeur. » |
 | 7-8 | Sur le PC : ouvrir l'historique de l'intervention, puis le **Journal** | « Preuve d'audit : qui, quoi, quand, ancienne et nouvelle valeur. » |
 | 8-9 | **Indicateurs** : pannes répétitives (le convoyeur), préventif à l'échéance, arrêts « 2 sur 3 renseignés » | « Des chiffres honnêtes : on montre ce qu'on sait, et ce qui manque. » |
+| + 3 min | **Magasin** (option) : sur l'intervention du convoyeur, la pièce « Rouleau tendeur » est demandée en urgence ; ouvrir **Magasin → À servir** → **Remettre**. Sur le téléphone du technicien : « Pièce remise : … peut reprendre ». Puis **À vérifier** : le retrait urgent d'huile → **Vérifié** | « Demande, réservation, remise, utilisation, retour : cinq faits distincts, un stock juste, sans ressaisie. » |
 | 9-10 | Montrer un compte **technicien** : pas de bouton de configuration ; une intervention clôturée est en lecture seule | « Chacun son rôle, contrôlé par le serveur. » |
 
 Conseils : préparer la planche de QR **depuis l'adresse en ligne** ; charger les données de démonstration
@@ -83,7 +85,7 @@ la veille ; avoir un deuxième téléphone en secours.
 - **Où sont les données ?** Sur un serveur en Europe (Frankfurt) ; chaque client sera isolé (multi-entreprise, à venir). Formalités CNDP à valider avant mise en production.
 - **Peut-on importer nos équipements ?** Prévu (import Excel contrôlé, volet F).
 - **Suivez-vous le temps des techniciens ?** Non, volontairement : on suit les machines, pas la productivité individuelle.
-- **Et le magasin, les achats, l'énergie ?** Magasin simple disponible ; lien terrain ↔ magasin, réapprovisionnement et énergie / eau sont les prochains volets.
+- **Et le magasin, les achats, l'énergie ?** Le magasin est relié au terrain (demande de pièce, réservation, remise, retrait urgent vérifié, retour, stock par site). Réapprovisionnement / achats et énergie / eau sont les prochains volets.
 
 ## 8 bis. Préparer et réinitialiser la démo commerciale
 
@@ -98,9 +100,9 @@ la veille ; avoir un deuxième téléphone en secours.
 
 | Disponible aujourd'hui | Prochains volets |
 |---|---|
-| Demandes, interventions, préventif, QR codes, photos | Magasin relié au terrain (réservation, remise, retour) |
-| Hors ligne + synchronisation, rôles et droits, multi-entreprise et multi-site, packs et quotas, invitations, console plateforme | Réapprovisionnement et achats |
-| Indicateurs par équipement, journal d'audit, export CSV | Énergie et eau |
-| Magasin simple (stock, sorties sur intervention) | Rapports mensuels, imports Excel |
+| Demandes, interventions, préventif, QR codes, photos | Réapprovisionnement et achats (seuils, propositions de commande) |
+| Hors ligne + synchronisation, rôles et droits, multi-entreprise et multi-site, packs et quotas, invitations, console plateforme | Énergie et eau |
+| Indicateurs par équipement, journal d'audit, export CSV | Rapports mensuels, imports Excel |
+| Magasin relié au terrain : demandes de pièces, réservation, remise, retrait urgent, retour, stock par site, accueil magasinier | Pilotage avancé |
 
 Feuille de route détaillée : [`FEUILLE_DE_ROUTE.md`](FEUILLE_DE_ROUTE.md).

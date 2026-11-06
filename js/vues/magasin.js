@@ -116,7 +116,9 @@
     if (!v || !(v.qte > 0)) return;
     if (v.qte > phys && !(await askConfirm('Stock insuffisant ?', `Stock enregistré : ${phys}. Remettre ${v.qte} rendra le stock négatif : faites ensuite un inventaire.`, 'Remettre quand même'))) return;
     await Store.save('mouvements', { id: Store.uid(), articleId: b.articleId, type: 'remise', qte: -v.qte, besoinId: b.id, otId: b.otId || null, siteId: b.siteId, le: Store.now(), motif: 'Remise magasin' + (v.a ? ' à ' + v.a : '') }, { action: 'remise' });
-    toast('Remise enregistrée'); render();
+    toast('Remise enregistrée');
+    await App.leverAttentesPieces(); // responsable ou usage local : l'attente se lève tout de suite
+    render();
   };
   A['mag-indispo'] = async el => {
     const b = data.besoins.get(el.dataset.id);
