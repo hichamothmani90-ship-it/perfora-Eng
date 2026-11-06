@@ -110,7 +110,11 @@ const Sync = (() => {
     const appel = tok => requete(c.url + chemin, { ...opts, headers: { apikey: c.cle, Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' } });
     let r = await appel(await jeton());
     if (r.status === 401) { await majCfg({ expire: 0 }); r = await appel(await jeton()); }
-    if (!r.ok) throw new Error(`Serveur ${r.status} : ${(await r.text()).slice(0, 160)}`);
+    if (!r.ok) {
+      const brut = await r.text();
+      let m = ''; try { const j = JSON.parse(brut); m = j.message || j.erreur || j.msg || ''; } catch { /* texte brut */ }
+      throw new Error(m || `Serveur ${r.status} : ${brut.slice(0, 160)}`);
+    }
     const t = await r.text();
     return t ? JSON.parse(t) : null;
   }
@@ -168,6 +172,14 @@ const Sync = (() => {
   }
   const profil = () => (cfg()?.refresh ? cfg()?.profil : null) || null;
   const equipe = () => api('/rest/v1/profils?select=user_id,email,nom,role,actif,personne_id&order=email.asc');
+  const utilisation = () => api('/rest/v1/rpc/utilisation', { method: 'POST', body: '{}' });
+  const affecterSites = (cible, liste) => api('/rest/v1/rpc/affecter_sites', { method: 'POST', body: JSON.stringify({ cible, liste }) });
+  /** Invitation via la fonction serveur « inviter » (seule détentrice de la clé secrète). */
+  async function inviter({ email, role, nom, sites, redirectTo }) {
+    const rep = await api('/functions/v1/inviter', { method: 'POST', body: JSON.stringify({ email, role, nom, sites, redirectTo }) });
+    if (rep?.erreur) throw new Error(rep.erreur);
+    return rep;
+  }
   async function definirProfil(cible, role, nom, actif) {
     await api('/rest/v1/rpc/definir_profil', { method: 'POST', body: JSON.stringify({ cible, nouveau_role: role, nouveau_nom: nom, est_actif: actif }) });
   }
@@ -230,5 +242,5 @@ const Sync = (() => {
   }
   function notifier() { try { surEtat(etatCourant()); } catch { /* affichage */ } }
 
-  return { PROJET, profil, chargerProfil, equipe, definirProfil, connecter, deconnecter, synchroniser, planifier, demarrer, etatCourant, lireLienEmail, sessionDepuisLien, changerMotDePasse, demanderLien };
+  return { PROJET, profil, chargerProfil, equipe, definirProfil, utilisation, affecterSites, inviter, connecter, deconnecter, synchroniser, planifier, demarrer, etatCourant, lireLienEmail, sessionDepuisLien, changerMotDePasse, demanderLien };
 })();

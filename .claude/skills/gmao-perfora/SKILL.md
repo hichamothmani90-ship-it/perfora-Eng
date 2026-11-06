@@ -114,6 +114,14 @@ Chaque indicateur affiche périmètre, période, convention, couverture et effec
   appareil déjà synchronisé = resynchronisation complète. Modules : `aModule()`, `ACT_MODULE` ; abonnement
   non écrivable : `ecritureOK()` (bandeau, actions retirées). Faux serveur : 3 comptes / 2 entreprises,
   `POST /test/abonnement` pour suspendre.
+- **Quotas et invitations** (A3, `supabase/quotas.sql`) : déclencheurs `quota_profils` (activation,
+  changement d'entreprise), `quota_profil_sites` (affectation), `quota_sites` — ils s'appliquent à toute
+  écriture, y compris depuis le tableau de bord. `utilisation()` et `affecter_sites()` pour le responsable.
+  Invitation : Edge Function `inviter` (`supabase/functions/inviter/index.ts`) = `preparer_invitation`
+  au nom de l'appelant (droits, sites, places) → `inviteUserByEmail` (clé secrète, côté serveur
+  uniquement) → `finaliser_invitation` (réservée au service_role ; quotas revérifiés) ; échec = compte
+  invité supprimé. Ne jamais mettre la clé secrète dans l'appli. Messages d'erreur serveur remontés tels
+  quels par `api()` (champ `message` / `erreur`).
 - **Sans cloud** : export/import JSON ; par fiche, la plus récente (`modifieLe`) gagne ;
   rien n'est supprimé par absence.
 - **Service worker** : cache d'abord, **une version = un cache complet installé d'un bloc** (jamais de

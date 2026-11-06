@@ -13,6 +13,7 @@
 | Lot 1 · étape 2 | Rôles contrôlés par le serveur (responsable, technicien, prestataire, magasinier, exploitation, pilote), équipe gérée dans l'appli | En ligne (v14) |
 | Volet A · A1 | Serveur multi-entreprise : entreprises, sites, packs, abonnements, lecture et écriture limitées à l'entreprise et aux sites autorisés, modules du pack, abonnement suspendu = lecture seule. Données actuelles = « Perfora Démo » / « Site Tanger » (pack Pro) | En place sur Supabase, testé (12 tests d'étanchéité) |
 | Volet A · A2 | Appli multi-site : site actif et sélecteur (« tous mes sites »), créations rattachées au site du parent ou au site actif, appareil vidé au changement d'entreprise (refusé si saisies en attente), resynchronisation complète au premier passage, menus selon les modules du pack, abonnement suspendu = consultation seule | v15, testé avec le faux serveur (2 entreprises, 2 sites, 2 appareils) |
+| Volet A · A3 | Quotas par déclencheurs (utilisateurs par entreprise et par site, sites), invitation depuis l'appli par la fonction serveur `inviter` (seule détentrice de la clé secrète), affectation des sites, compteur de places | v16 ; quotas testés sur Supabase (12 tests), fonction déployée, écran testé avec le faux serveur |
 
 Adresses : appli <https://hichamothmani90-ship-it.github.io/perfora-Eng/> · code <https://github.com/hichamothmani90-ship-it/perfora-Eng> ·
 Supabase projet `gmao-terrain` (réf. `oihaqzkqhvyjybijsonc`, Frankfurt).

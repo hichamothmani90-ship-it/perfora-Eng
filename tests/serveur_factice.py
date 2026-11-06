@@ -9,6 +9,7 @@ Comptes (mot de passe test-gmao), clé publique cle-factice :
   tech2@gmao.test  technicien,  entreprise DEMO, site Casablanca seulement
   autre@gmao.test  responsable, entreprise AUTRE (pack Essentiel), site Rabat
 Aide aux tests : GET /etat ; POST /test/abonnement {"entreprise":"AUTRE","statut":"suspendu"}
+Quotas (comme supabase/quotas.sql) : rpc/utilisation, rpc/affecter_sites, functions/v1/inviter.
 Lancer : python tests/serveur_factice.py [port]   (8099 par défaut). Données en mémoire."""
 import json, secrets, sys, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -21,7 +22,7 @@ TYPES = {"localisations", "equipements", "personnes", "demandes", "ots", "progra
 COMMUNS = {"personnes", "articles"}
 
 PACKS = {
-    "essentiel": {"nom": "Essentiel", "modules": ["base", "preventif"], "maxSites": 1, "maxUtilisateursSite": 5, "maxUtilisateursTotal": 5},
+    "essentiel": {"nom": "Essentiel", "modules": ["base", "preventif"], "maxSites": 1, "maxUtilisateursSite": 2, "maxUtilisateursTotal": 2},  # limites basses pour les tests
     "pro": {"nom": "Pro", "modules": ["base", "preventif", "magasin", "rapports"], "maxSites": 3, "maxUtilisateursSite": 15, "maxUtilisateursTotal": 45},
 }
 ENTREPRISES = {
@@ -83,6 +84,24 @@ def droits(code):
     pk = PACKS[e["pack"]]
     return {"pack": e["pack"], "packNom": pk["nom"], "statut": e["statut"], "fin": None, "ecriture": e["statut"] in ("essai", "actif"),
             "modules": pk["modules"], "maxSites": pk["maxSites"], "maxUtilisateursSite": pk["maxUtilisateursSite"], "maxUtilisateursTotal": pk["maxUtilisateursTotal"]}
+
+
+def actifs_entreprise(code, sauf=None):
+    return sum(1 for e, p in PROFILS.items() if p["entreprise"] == code and p["actif"] and e != sauf)
+
+
+def actifs_site(site, sauf=None):
+    return sum(1 for e, p in PROFILS.items() if site in p["sites"] and p["actif"] and e != sauf)
+
+
+def controle_quota(code, sites, sauf=None):
+    d = droits(code)
+    if d["maxUtilisateursTotal"] is not None and actifs_entreprise(code, sauf) + 1 > d["maxUtilisateursTotal"]:
+        return f"Quota atteint : {d['maxUtilisateursTotal']} utilisateur(s) actif(s) maximum (pack {d['packNom']}). Désactivez un compte ou changez de pack."
+    for s in sites:
+        if d["maxUtilisateursSite"] is not None and actifs_site(s, sauf) + 1 > d["maxUtilisateursSite"]:
+            return f"Quota atteint : {d['maxUtilisateursSite']} utilisateur(s) maximum sur « {SITES[s]['nom']} »"
+    return None
 
 
 def visible(f, email):
@@ -164,6 +183,51 @@ class H(BaseHTTPRequestHandler):
             return self.mon_profil(email)
         if u.path == "/rest/v1/rpc/definir_profil":
             return self.definir_profil(email)
+        moi = PROFILS[email]
+        if u.path in ("/rest/v1/rpc/utilisation", "/rest/v1/rpc/affecter_sites", "/functions/v1/inviter") and role_de(email) != "responsable":
+            return self.repondre(403, {"message": "Réservé au responsable"})
+        ent = moi["entreprise"]
+        sites_ent = [k for k, v in SITES.items() if v["entreprise"] == ent]
+        if u.path == "/rest/v1/rpc/utilisation":
+            d = droits(ent)
+            return self.repondre(200, {"actifs": actifs_entreprise(ent), "maxTotal": d["maxUtilisateursTotal"], "maxSite": d["maxUtilisateursSite"], "maxSites": d["maxSites"],
+                                       "sites": [{"id": k, "nom": SITES[k]["nom"], "actifs": actifs_site(k)} for k in sorted(sites_ent, key=lambda k: SITES[k]["nom"])],
+                                       "affectations": [{"userId": "u-" + e, "siteId": st} for e, p in PROFILS.items() if p["entreprise"] == ent for st in p["sites"]]})
+        if u.path == "/rest/v1/rpc/affecter_sites":
+            b = self.corps()
+            cible, liste = b["cible"].removeprefix("u-"), b.get("liste") or []
+            if cible not in PROFILS or PROFILS[cible]["entreprise"] != ent:
+                return self.repondre(403, {"message": "Compte hors de votre entreprise"})
+            if not liste:
+                return self.repondre(400, {"message": "Choisissez au moins un site"})
+            if any(x not in sites_ent for x in liste):
+                return self.repondre(400, {"message": "Site inconnu ou inactif"})
+            d = droits(ent)
+            for x in liste:
+                if x not in PROFILS[cible]["sites"] and PROFILS[cible]["actif"] and d["maxUtilisateursSite"] is not None and actifs_site(x, cible) + 1 > d["maxUtilisateursSite"]:
+                    return self.repondre(400, {"message": f"Quota atteint : {d['maxUtilisateursSite']} utilisateur(s) maximum sur « {SITES[x]['nom']} »"})
+            PROFILS[cible]["sites"] = list(liste)
+            if PROFILS[cible]["defaut"] not in liste:
+                PROFILS[cible]["defaut"] = liste[0]
+            return self.repondre(200, None)
+        if u.path == "/functions/v1/inviter":
+            b = self.corps()
+            em, role, liste = (b.get("email") or "").strip().lower(), b.get("role"), b.get("sites") or []
+            if "@" not in em or "." not in em.split("@")[-1]:
+                return self.repondre(400, {"erreur": "Adresse e-mail invalide"})
+            if not liste or any(x not in sites_ent for x in liste):
+                return self.repondre(400, {"erreur": "Choisissez au moins un site de votre entreprise"})
+            if em in PROFILS:
+                return self.repondre(400, {"erreur": "Ce compte fait déjà partie de l'équipe" if PROFILS[em]["entreprise"] == ent else "Ce compte est rattaché à une autre entreprise"})
+            if not droits(ent)["ecriture"]:
+                return self.repondre(400, {"erreur": "Abonnement suspendu ou expiré"})
+            q = controle_quota(ent, liste)
+            if q:
+                return self.repondre(400, {"erreur": q})
+            PROFILS[em] = {"role": role, "nom": b.get("nom") or em.split("@")[0], "actif": True, "entreprise": ent, "sites": list(liste), "defaut": liste[0]}
+            COMPTES[em] = "test-gmao"
+            ENVOIS.append({"email": em, "redirect_to": b.get("redirectTo"), "type": "invite"})
+            return self.repondre(200, {"ok": True, "userId": "u-" + em, "emailEnvoye": True})
         self.repondre(404, {"message": "inconnu"})
 
     def push(self, email):
@@ -242,6 +306,10 @@ class H(BaseHTTPRequestHandler):
         cible = b["cible"].removeprefix("u-")
         if cible not in PROFILS or PROFILS[cible]["entreprise"] != PROFILS[email]["entreprise"]:
             return self.repondre(403, {"message": "Compte hors de votre entreprise"})
+        if b.get("est_actif", True) and not PROFILS[cible]["actif"]:
+            q = controle_quota(PROFILS[cible]["entreprise"], PROFILS[cible]["sites"], sauf=cible)
+            if q:
+                return self.repondre(400, {"message": q})
         PROFILS[cible].update({"role": b.get("nouveau_role") or PROFILS[cible]["role"], "nom": b.get("nouveau_nom") or PROFILS[cible]["nom"], "actif": b.get("est_actif", True)})
         pid = "p-" + cible.split("@")[0]
         with verrou:

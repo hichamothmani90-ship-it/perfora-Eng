@@ -41,6 +41,12 @@ supprimer la fonction de test). Tant que l'étape A3 n'est pas livrée, un compt
 entreprise par SQL : `update profils set entreprise_id = …, site_defaut = … where email = …;` +
 `insert into profil_sites …`.
 
+## 2 quater. Quotas et invitations (volet A3)
+Coller [`quotas.sql`](quotas.sql) → **Run** (fait le 6 nov. 2026) ; tests : [`tests_quotas.sql`](tests_quotas.sql).
+Fonction serveur : **Edge Functions → Deploy a new function → Via Editor**, nom `inviter`, coller
+[`functions/inviter/index.ts`](functions/inviter/index.ts), « Verify JWT » activé (fait le 6 nov. 2026).
+Les membres s'invitent ensuite depuis l'appli : **Réglages → Équipe et droits → + Inviter un membre**.
+
 ## 3. Fermer les inscriptions publiques
 **Authentication** → **Sign In / Providers** (ou *Settings*) → désactiver **Allow new users to sign up**.
 Seul le responsable crée les comptes.

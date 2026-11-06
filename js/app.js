@@ -165,6 +165,7 @@
       case 'textarea': return lab + `<textarea id="${id}" name="${f.name}" ${req} placeholder="${esc(f.placeholder || '')}">${esc(v)}</textarea>`;
       case 'select': return lab + `<select id="${id}" name="${f.name}" ${req}>${f.empty !== undefined ? `<option value="">${esc(f.empty)}</option>` : ''}${f.options.map(([k, l]) => `<option value="${esc(k)}" ${k === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
       case 'chips': return lab + chipGroup(f.name, f.options, v, { required: f.required });
+      case 'chipsMulti': return lab + chipGroup(f.name, f.options, v || [], { multi: true });
       case 'checkbox': return `<label class="check"><input type="checkbox" name="${f.name}" ${v ? 'checked' : ''}> ${esc(f.label)}</label>`;
       default: return lab + `<input id="${id}" type="${f.type || 'text'}" name="${f.name}" value="${esc(v)}" ${req} ${f.type === 'number' ? 'step="any" inputmode="decimal"' : ''} placeholder="${esc(f.placeholder || '')}">`;
     }
@@ -186,7 +187,8 @@
         for (const f of fields) {
           if (f.type === 'info') continue;
           const el = form.elements[f.name];
-          if (f.type === 'checkbox') v[f.name] = el.checked;
+          if (f.type === 'chipsMulti') v[f.name] = [...form.querySelectorAll(`input[name="${f.name}"]:checked`)].map(i => i.value);
+          else if (f.type === 'checkbox') v[f.name] = el.checked;
           else if (f.type === 'number') v[f.name] = el.value === '' ? null : Number(el.value);
           else v[f.name] = (el.value || '').trim() || null;
         }
@@ -693,12 +695,44 @@
     const box = $('#equipe');
     if (!box) return;
     try {
-      const liste = await Sync.equipe();
+      const [liste, u] = await Promise.all([Sync.equipe(), Sync.utilisation()]);
       const moi = Sync.profil()?.userId;
-      box.innerHTML = `<ul class="lines">${liste.map(p => `<li style="flex-wrap:wrap"><span class="grow"><b>${esc(p.nom || p.email)}</b>${p.actif ? '' : ' ' + badge('désactivé', 'red')}<br><span class="small muted">${esc(p.email)}</span></span>
+      const sitesDe = id => (u.affectations || []).filter(a => a.userId === id).map(a => (u.sites.find(s => s.id === a.siteId) || {}).nom).filter(Boolean);
+      const places = (n, max) => max == null ? `${n}` : `${n} / ${max}`;
+      const plein = (n, max) => max != null && n >= max;
+      box.innerHTML = `<div class="tiles" style="margin-bottom:10px">
+          <div class="tile ${plein(u.actifs, u.maxTotal) ? 'amber' : 'blue'}"><b>${places(u.actifs, u.maxTotal)}</b><span>Utilisateurs actifs</span></div>
+          ${u.sites.map(s => `<div class="tile ${plein(s.actifs, u.maxSite) ? 'amber' : ''}"><b>${places(s.actifs, u.maxSite)}</b><span>${esc(s.nom)}</span></div>`).join('')}</div>
+        <div class="actions" style="margin-top:0"><button class="btn primary" type="button" id="inviter" ${plein(u.actifs, u.maxTotal) ? 'disabled title="Plus de place dans le pack"' : ''}>+ Inviter un membre</button></div>
+        ${plein(u.actifs, u.maxTotal) ? '<p class="warn small">Toutes les places du pack sont prises : désactivez un compte ou changez de pack.</p>' : ''}
+        <ul class="lines">${liste.map(p => `<li style="flex-wrap:wrap"><span class="grow"><b>${esc(p.nom || p.email)}</b>${p.actif ? '' : ' ' + badge('désactivé', 'red')}<br><span class="small muted">${esc(p.email)}</span><br><span class="small">📍 ${esc(sitesDe(p.user_id).join(', ') || 'aucun site')}</span></span>
           <select data-profil="${p.user_id}" ${p.user_id === moi ? 'disabled title="Votre propre rôle"' : ''} style="width:auto;min-height:38px">${['responsable', 'technicien', 'prestataire', 'magasinier', 'exploitation', 'pilote'].map(r => `<option value="${r}" ${p.role === r ? 'selected' : ''}>${L.role[r]}</option>`).join('')}</select>
-          ${p.user_id === moi ? '' : `<button class="btn sm ghost" data-equipe="${p.user_id}" data-nom="${esc(p.nom || '')}" data-role="${p.role}" data-actif="${p.actif}">Modifier</button>`}</li>`).join('')}</ul>
-        <p class="small muted">Nouveau membre : Supabase → Authentication → Users → <b>Add user → Send invitation</b>. Il arrive ici en <b>Technicien</b> ; ajustez son rôle. Le serveur applique ces droits sur tous les appareils.</p>`;
+          ${p.user_id === moi ? '' : `<button class="btn sm ghost" data-sites="${p.user_id}">Sites</button><button class="btn sm ghost" data-equipe="${p.user_id}" data-nom="${esc(p.nom || '')}" data-role="${p.role}" data-actif="${p.actif}">Modifier</button>`}</li>`).join('')}</ul>
+        <p class="small muted">Les limites du pack sont vérifiées par le serveur à chaque invitation, activation ou affectation de site. Désactiver un compte libère sa place.</p>`;
+      const optsSites = Object.fromEntries(u.sites.map(s => [s.id, `${s.nom} (${places(s.actifs, u.maxSite)})`]));
+      $('#inviter')?.addEventListener('click', async () => {
+        const v = await askForm({ title: 'Inviter un membre', ok: 'Envoyer l’invitation', values: { role: 'technicien', sites: siteActif() && siteActif() !== 'tous' ? [siteActif()] : [] }, fields: [
+          { name: 'email', label: 'E-mail', type: 'email', required: true },
+          { name: 'nom', label: 'Nom affiché', type: 'text' },
+          { name: 'role', label: 'Rôle', type: 'chips', options: L.role, required: true },
+          { name: 'sites', label: 'Sites', type: 'chipsMulti', options: optsSites },
+          { type: 'info', text: 'La personne reçoit un e-mail, choisit son mot de passe et arrive directement dans l’appli, sur ses sites.' }] });
+        if (!v) return;
+        if (!v.sites.length) { toast('Choisissez au moins un site'); return; }
+        try {
+          toast('Envoi de l’invitation…');
+          const rep = await Sync.inviter({ ...v, redirectTo: adressePublique() });
+          await alertBox('Invitation', [rep.emailEnvoye ? `E-mail envoyé à ${v.email}.` : `${v.email} avait déjà un compte : il est maintenant rattaché à l’équipe (connexion avec son mot de passe, ou « mot de passe oublié »).`]);
+        } catch (e) { await alertBox('Invitation refusée', [e.message]); }
+        AFTER.reglages();
+      });
+      box.querySelectorAll('[data-sites]').forEach(b => b.onclick = async () => {
+        const actuels = (u.affectations || []).filter(a => a.userId === b.dataset.sites).map(a => a.siteId);
+        const v = await askForm({ title: 'Sites du membre', values: { sites: actuels }, fields: [{ name: 'sites', label: 'Sites autorisés', type: 'chipsMulti', options: optsSites }] });
+        if (!v) return;
+        try { await Sync.affecterSites(b.dataset.sites, v.sites); toast('Sites mis à jour'); } catch (e) { await alertBox('Affectation refusée', [e.message]); }
+        AFTER.reglages();
+      });
       box.querySelectorAll('[data-profil]').forEach(sel => sel.onchange = async () => {
         const p = liste.find(x => x.user_id === sel.dataset.profil);
         try { await Sync.definirProfil(p.user_id, sel.value, p.nom, p.actif); toast('Rôle mis à jour'); Sync.planifier(200); } catch (e) { toast('Échec : ' + e.message); }
@@ -709,7 +743,7 @@
           { name: 'nom', label: 'Nom affiché', type: 'text', required: true },
           { name: 'actif', label: 'Compte actif (décocher pour retirer l’accès)', type: 'checkbox' }] });
         if (!v) return;
-        try { await Sync.definirProfil(b.dataset.equipe, b.dataset.role, v.nom, v.actif); toast('Membre mis à jour'); Sync.planifier(200); } catch (e) { toast('Échec : ' + e.message); }
+        try { await Sync.definirProfil(b.dataset.equipe, b.dataset.role, v.nom, v.actif); toast('Membre mis à jour'); Sync.planifier(200); } catch (e) { await alertBox('Modification refusée', [e.message]); }
         AFTER.reglages();
       });
     } catch (e) { box.innerHTML = `<p class="warn" style="margin:0">Équipe indisponible : ${esc(e.message)}</p>`; }
