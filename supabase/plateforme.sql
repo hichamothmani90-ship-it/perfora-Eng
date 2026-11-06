@@ -139,6 +139,7 @@ returns text language sql stable as $$
   select to_char((now() at time zone 'Africa/Casablanca')::date + j, 'YYYY-MM-DD') || coalesce('T' || hm, '')
 $$;
 
+-- Version d'origine (volets A-B) : remplacée par supabase/demo.sql (volet C), à exécuter après achats.sql.
 create or replace function public.pf_reinitialiser_demo(p_entreprise uuid)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare

@@ -1,9 +1,11 @@
 -- Test de la démo commerciale (pf_reinitialiser_demo, avec les données du volet B). Supabase → SQL Editor.
 -- Crée une entreprise de démonstration temporaire TDEMO, la réinitialise au nom de l'administrateur
 -- plateforme, contrôle le contenu, puis supprime tout. Résultat attendu (6 nov. 2026) :
--- 32 fiches (ots 2, besoins 2, articles 4, demandes 4, personnes 4, mouvements 6, programmes 2,
--- equipements 4, localisations 4) · attente_liee_au_besoin 1 · piece_huile 2 · retrait_a_verifier 1 ·
--- stock_rouleau 2 · besoins_sur_site true · nettoyage « DEMO, VITRINE » (aucune entreprise de test restante).
+-- 39 fiches (ots 2, besoins 2, articles 4, demandes 4, personnes 4, mouvements 6, programmes 2,
+-- equipements 4, localisations 4, valorisations 4, seuils 2, achats 1) · attente_liee_au_besoin 1 · piece_huile 2 ·
+-- retrait_a_verifier 1 · stock_rouleau 2 · besoins_sur_site true · volet_c : seuil_valide 1, seuil_propose 1,
+-- achat_commande 1, valorisations_liees 4, couts_sur_site true · nettoyage « DEMO, VITRINE ».
+-- (version de la fonction : supabase/demo.sql)
 create or replace function public.gmao_test_demo() returns jsonb language plpgsql as $$
 declare ent uuid; site uuid; adm uuid; r jsonb; ot jsonb; res jsonb;
 begin
@@ -20,7 +22,13 @@ begin
     'piece_huile', ot->'pieces'->0->'qte',
     'retrait_a_verifier', (select count(*) from fiches where entreprise_id = ent and type = 'mouvements' and (data->>'urgent')::boolean and data->>'verifieLe' is null),
     'stock_rouleau', (select sum((m.data->>'qte')::numeric) from fiches m join fiches a on a.id = m.data->>'articleId' where m.entreprise_id = ent and m.type = 'mouvements' and a.data->>'ref' = 'ROUL-TD-50'),
-    'besoins_sur_site', (select bool_and(site_id = site) from fiches where entreprise_id = ent and type = 'besoins'));
+    'besoins_sur_site', (select bool_and(site_id = site) from fiches where entreprise_id = ent and type = 'besoins'),
+    'volet_c', jsonb_build_object(
+      'seuil_valide', (select count(*) from fiches where entreprise_id = ent and type = 'seuils' and data->>'statut' = 'valide'),
+      'seuil_propose', (select count(*) from fiches where entreprise_id = ent and type = 'seuils' and data->>'statut' = 'propose'),
+      'achat_commande', (select count(*) from fiches where entreprise_id = ent and type = 'achats' and data->>'statut' = 'commandee'),
+      'valorisations_liees', (select count(*) from fiches v join fiches m on m.id = v.data->>'mouvementId' where v.entreprise_id = ent and v.type = 'valorisations'),
+      'couts_sur_site', (select bool_and(site_id = site) from fiches where entreprise_id = ent and type in ('achats', 'valorisations', 'seuils'))));
   delete from fiches where entreprise_id = ent;
   delete from sites where entreprise_id = ent;
   delete from abonnements where entreprise_id = ent;

@@ -1476,7 +1476,17 @@
     const A2 = { id: id(), ref: 'HUI-HV46', designation: 'Huile hydraulique HV46', unite: 'L', stockMin: 20, actif: true };
     const A3 = { id: id(), ref: 'FIL-AIR', designation: 'Filtre à air compresseur', unite: 'u', stockMin: 1, actif: true };
     for (const a of [A1, A2, A3]) await S('articles', a);
-    for (const [a, q] of [[A1, 3], [A2, 60], [A3, 1]]) await S('mouvements', { id: id(), articleId: a.id, type: 'entree', qte: q, otId: null, le: J(-20, '09:00'), motif: 'Stock initial' });
+    // Volet C : chaque entrée initiale porte un prix (fiche « valorisations », lecture restreinte côté serveur).
+    for (const [a, q, p] of [[A1, 3, 85], [A2, 60, 42], [A3, 1, 310]]) {
+      const m = { id: id(), articleId: a.id, type: 'entree', qte: q, otId: null, le: J(-20, '09:00'), motif: 'Stock initial' };
+      await S('mouvements', m);
+      await S('valorisations', { id: id(), mouvementId: m.id, prixUnitaire: p, devise: 'MAD', statut: 'connu' });
+    }
+    await S('seuils', { id: id(), articleId: A1.id, securite: 1, pointCommande: 4, cible: 8, delaiJours: 21, critique: true, statut: 'valide', justification: 'Presse critique, délai fournisseur 3 semaines', proposePar: mag.nom, proposeLe: J(-10, '10:00'), valideLe: J(-9, '09:00'), validePar: resp.nom });
+    await S('seuils', { id: id(), articleId: A3.id, securite: 1, pointCommande: 2, cible: 4, delaiJours: 10, critique: false, statut: 'propose', justification: 'Compresseur sans secours : garder un filtre d’avance', proposePar: mag.nom, proposeLe: J(-1, '16:00') });
+    await S('achats', { id: id(), ref: 'DA-DM-0001', statut: 'commandee', origine: 'reapprovisionnement', redigePar: mag.nom, redigeLe: J(-6, '10:00'), soumiseLe: J(-6, '10:05'), soumisePar: mag.nom, valideLe: J(-5, '08:30'), validePar: resp.nom,
+      fournisseur: 'Atlas Compresseurs', refCommande: 'BC-DEMO-0042', dateCommande: J(-4).slice(0, 10), livraisonPrevue: J(1).slice(0, 10), devise: 'MAD', commandeLe: J(-4, '11:00'), commandePar: resp.nom,
+      lignes: [{ id: id(), articleId: A3.id, qte: 3, qteCommandee: 3, unite: 'u', prixUnitaire: 310, devise: 'MAD', motif: 'Stock sous le seuil' }] });
     const I = (p, role = 'intervenant') => ({ id: id(), personneId: p.id, role, depuis: J(-3, '08:10'), fin: null, par: resp.nom });
 
     // 1. Panne presse : une demande, deux interventions, un seul arrêt (bornes connues)
@@ -1497,7 +1507,9 @@
     // Volet B : le rouleau est demandé en urgence (en stock, à remettre) ; 2 L d'huile pris en urgence, à vérifier.
     const A4 = { id: id(), ref: 'ROUL-TD-50', designation: 'Rouleau tendeur convoyeur Ø50', unite: 'u', stockMin: 1, actif: true };
     await S('articles', A4);
-    await S('mouvements', { id: id(), articleId: A4.id, type: 'entree', qte: 2, otId: null, le: J(0, '09:15'), motif: 'Livraison fournisseur' });
+    const m4 = { id: id(), articleId: A4.id, type: 'entree', qte: 2, otId: null, le: J(0, '09:15'), motif: 'Livraison fournisseur' };
+    await S('mouvements', m4);
+    await S('valorisations', { id: id(), mouvementId: m4.id, prixUnitaire: 260, devise: 'MAD', statut: 'provisoire' });
     const o3 = id(), b3 = id(), b4 = id();
     await S('besoins', { id: b3, ref: 'BES-DM-0001', otId: o3, equipementId: conv.id, articleId: A4.id, qte: 1, unite: 'u', urgent: true, note: 'Arrêt ligne 2', statut: 'demande', demandeur: tb.nom, demandeLe: J(0, '08:30') });
     await S('besoins', { id: b4, ref: 'BES-DM-0002', otId: o3, equipementId: conv.id, articleId: A2.id, qte: 2, unite: 'L', urgent: true, note: 'Retrait urgent', statut: 'demande', demandeur: tb.nom, demandeLe: J(0, '08:10') });
