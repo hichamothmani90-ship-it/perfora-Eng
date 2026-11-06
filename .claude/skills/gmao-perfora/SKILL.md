@@ -272,4 +272,7 @@ Pièges opérationnels déjà rencontrés :
   remplir le formulaire, `form.requestSubmit()` puis `dialog.dispatchEvent(new Event('close'))` (le vrai code de
   l'action s'exécute : contrôles, enregistrements, synchro).
 - Service worker : un onglet ancien peut bloquer l'évolution d'IndexedDB (géré : message + `onversionchange`).
+- Service worker en local (serveur.py, panneau navigateur) : l'inscription peut échouer (« unknown error when fetching
+  the script ») sans que le code soit en cause ; la vérification qui fait foi est en ligne (GitHub Pages) : cache
+  `gmao-terrain-vNN` complet, ancien cache supprimé, bandeau « Nouvelle version disponible ».
 - E-mails Supabase par défaut : quelques-uns par heure, souvent en indésirables (Outlook).
