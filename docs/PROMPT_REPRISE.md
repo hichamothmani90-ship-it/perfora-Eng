@@ -36,7 +36,7 @@ multi-entreprise) et concepteur d'interfaces terrain mobile-first. Langue : fran
    - Fait : lot 0 (tests, QR, photos), lot 1 (synchro Supabase, invitations, rôles), volet A complet
      (multi-entreprise, multi-site, packs et quotas, invitation depuis l'appli, console plateforme,
      démo réinitialisable, recette + durcissement). Volet B en cours (docs/VOLET_B_CONCEPTION.md) :
-     B1, B2, B3 faits ; prochain B4 (écrans Magasin) puis B5 (Supabase, recette, publication v19+).
+     B1 à B4 faits ; prochain B5 (Supabase, recette, publication v19+).
      B3 et suivants sont sur la branche git `volet-b` (non publiée) : `git switch volet-b` ; fusion dans main en B5.
    - Supabase « gmao-terrain » (réf. oihaqzkqhvyjybijsonc, Frankfurt). Scripts dans l'ordre :
      schema.sql → roles.sql → multitenant.sql → quotas.sql → plateforme.sql → durcissement.sql → magasin.sql ;

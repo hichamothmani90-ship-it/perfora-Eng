@@ -69,7 +69,7 @@
     modele: { entretien: 'Entretien', inspection: 'Inspection', test: 'Test', verification_externe: 'Vérification externe', autre: 'Autre' },
     regle: { fixe: 'Échéance fixe', apres_realisation: 'Après réalisation' },
     typeSuite: { reserve: 'Réserve', suite: 'Action de suite', provisoire: 'Solution provisoire' },
-    mvt: { entree: 'Réception', sortie: 'Sortie', retour: 'Retour', ajustement: 'Ajustement inventaire' },
+    mvt: { entree: 'Réception', sortie: 'Sortie', remise: 'Remise', retour: 'Retour', rebut: 'Rebut', ajustement: 'Ajustement inventaire' },
     entite: { demandes: 'Demande', ots: 'Intervention', equipements: 'Équipement', localisations: 'Lieu', personnes: 'Personne', programmes: 'Programme', articles: 'Article', mouvements: 'Mouvement', besoins: 'Besoin de pièce' },
     etatBesoin: { demande: 'Demandée', reserve: 'Réservée', partiellement_remis: 'Remise en partie', remis: 'Remise', indisponible: 'Indisponible', annule: 'Annulée' },
   };
@@ -105,7 +105,6 @@
     return cacheEtat.get(id) || 'normal';
   }
   const actifs = o => (o.intervenants || []).filter(i => !i.fin);
-  const stock = articleId => list('mouvements').filter(m => m.articleId === articleId).reduce((s, m) => s + m.qte, 0);
   const attenteOuverte = o => (o.attentes || []).find(a => !a.fin);
   function journalDe(id) { return list('journal').filter(j => j.entiteId === id).reverse().sort((a, b) => b.le.localeCompare(a.le)); }
   function refDe(t, id) { const o = data[t]?.get(id); return o ? (o.ref || o.code || o.designation || o.nom || o.libelle || '') : ''; }
@@ -228,10 +227,10 @@
     terrain: ['ot-new', 'dem-ot', 'prog-ot', 'dem-pec', 'dem-classer', 'ot-demarrer', 'ot-planifier', 'ot-annuler', 'ot-suspendre', 'ot-reprendre', 'ot-terminer', 'ot-cloturer',
       'ot-ajout-int', 'ot-retirer', 'ot-ajout-piece', 'ot-annuler-piece', 'ot-ajout-suite', 'ot-lever',
       'bes-new', 'bes-urgent', 'bes-utilise', 'bes-rendre', 'bes-annuler'],
-    magasin: ['art-new', 'mvt'],
+    magasin: ['art-new', 'mvt', 'mag-reserver', 'mag-remettre', 'mag-indispo', 'mag-rattacher', 'mag-verifier'],
     saisie: ['dem-edit', 'dem-annuler', 'photo-ajout', 'signaler'],
   };
-  const ACT_MODULE = { 'art-new': 'magasin', mvt: 'magasin', 'bes-new': 'magasin', 'bes-urgent': 'magasin', 'bes-utilise': 'magasin', 'bes-rendre': 'magasin', 'bes-annuler': 'magasin', 'prog-new': 'preventif', 'prog-edit': 'preventif', 'prog-ot': 'preventif' };
+  const ACT_MODULE = { 'art-new': 'magasin', mvt: 'magasin', 'mag-reserver': 'magasin', 'mag-remettre': 'magasin', 'mag-indispo': 'magasin', 'mag-rattacher': 'magasin', 'mag-verifier': 'magasin', 'bes-new': 'magasin', 'bes-urgent': 'magasin', 'bes-utilise': 'magasin', 'bes-rendre': 'magasin', 'bes-annuler': 'magasin', 'prog-new': 'preventif', 'prog-edit': 'preventif', 'prog-ot': 'preventif' };
   function autorise(act) {
     const r = role();
     if (ACT_MODULE[act] && !aModule(ACT_MODULE[act])) return false;
@@ -281,6 +280,7 @@
   const V = {};
 
   V.accueil = () => {
+    if (role() === 'magasinier' && aModule('magasin') && V.accueilMagasin) return V.accueilMagasin();
     if (!data.equipements.size) {
       return `<h1>Bienvenue</h1><div class="card"><p>Aucune donnée sur cet appareil.</p>
         <div class="actions"><button class="btn primary" data-act="demo">Charger la démo</button><a class="btn" href="#/parc">Créer mes équipements</a></div>
@@ -469,7 +469,7 @@
   function blocPieces(o) {
     const mvts = [...data.mouvements.values()];
     const lignes = besoinsDe(o).map(b => {
-      const e = Calculs.etatBesoin(b, mvts), r = Calculs.rapprochementBesoin(b, mvts, o.pieces), actif = !['annule', 'indisponible'].includes(e);
+      const e = Calculs.etatBesoin(b, mvts), r = Calculs.rapprochementBesoin(b, mvts, o.pieces), actif = e !== 'annule';
       const k = `data-id="${o.id}" data-sub="${b.id}"`;
       const btn = [
         actif && b.articleId && e !== 'remis' ? `<button class="btn sm" data-act="bes-urgent" ${k}>Retrait urgent</button>` : '',
@@ -570,25 +570,6 @@
     return `<h1>Préventif</h1><p class="small muted">Chaque échéance produit une intervention. L’échéance initiale est conservée ; la suivante est calculée à la clôture.</p>
       ${progs.length ? progs.map(progCard).join('') : empty('Aucun programme préventif.')}
       <div class="actions"><button class="btn" data-act="prog-new">+ Programme</button></div>`;
-  };
-
-  V.magasin = () => {
-    const arts = list('articles').filter(a => a.actif !== false).sort((a, b) => a.designation.localeCompare(b.designation));
-    return `<h1>Magasin</h1>${search('#lst', 'Rechercher un article')}<div id="lst">${arts.length ? arts.map(a => {
-      const s = stock(a.id);
-      return `<a class="card" href="#/article/${a.id}"><div class="row"><span class="t grow">${esc(a.designation)}</span>${s <= (a.stockMin || 0) ? badge('Sous le mini', 'red') : ''}<b>${s} ${esc(a.unite)}</b></div><div class="s">${esc(a.ref)} · mini ${esc(a.stockMin || 0)}</div></a>`;
-    }).join('') : empty('Aucun article.')}</div>
-      <div class="actions"><button class="btn" data-act="art-new">+ Article</button></div>`;
-  };
-
-  V.article = r => {
-    const a = data.articles.get(r.id);
-    if (!a) return empty('Article introuvable.');
-    const mv = list('mouvements').filter(m => m.articleId === a.id).sort((x, y) => y.le.localeCompare(x.le));
-    return `<h1>${esc(a.designation)}</h1><div class="card"><dl class="kv"><dt>Référence</dt><dd>${esc(a.ref)}</dd><dt>Stock</dt><dd><b>${stock(a.id)} ${esc(a.unite)}</b></dd><dt>Mini</dt><dd>${esc(a.stockMin || 0)}</dd></dl></div>
-      <div class="actions"><button class="btn primary" data-act="mvt" data-id="${a.id}" data-sub="entree">Réception</button><button class="btn" data-act="mvt" data-id="${a.id}" data-sub="sortie">Sortie hors OT</button><button class="btn" data-act="mvt" data-id="${a.id}" data-sub="ajustement">Inventaire</button></div>
-      <p class="small muted">Les mouvements ne sont jamais modifiés : une erreur se corrige par un mouvement inverse.</p>
-      <h2>Mouvements</h2><div class="card"><ul class="lines">${mv.map(m => `<li><span class="grow">${esc(L.mvt[m.type])}${m.otId ? ` · <a href="#/ot/${m.otId}">${esc(refDe('ots', m.otId))}</a>` : ''}${m.motif ? ' · ' + esc(m.motif) : ''}<br><span class="small muted">${fmtY(m.le)} · ${esc(m.creePar)}</span></span><b>${m.qte > 0 ? '+' : ''}${m.qte}</b></li>`).join('') || '<li class="muted">Aucun mouvement.</li>'}</ul></div>`;
   };
 
   V.indicateurs = r => {
@@ -1325,26 +1306,6 @@
     location.hash = '#/ot/' + o.id;
   };
 
-  A['art-new'] = async () => {
-    const v = await askForm({ title: 'Nouvel article', values: { unite: 'u', stockMin: 0 }, fields: [
-      { name: 'ref', label: 'Référence', type: 'text', required: true }, { name: 'designation', label: 'Désignation', type: 'text', required: true },
-      { name: 'unite', label: 'Unité', type: 'text', required: true }, { name: 'stockMin', label: 'Stock mini', type: 'number' }] });
-    if (!v) return;
-    if (list('articles').some(a => a.ref.toLowerCase() === v.ref.toLowerCase())) { toast('Référence déjà utilisée'); return; }
-    await Store.save('articles', { id: Store.uid(), ...v, actif: true }); render();
-  };
-  A.mvt = async el => {
-    const a = data.articles.get(el.dataset.id), type = el.dataset.sub;
-    const v = await askForm({ title: L.mvt[type], fields: type === 'ajustement'
-      ? [{ type: 'info', text: `Stock actuel : ${stock(a.id)} ${a.unite}` }, { name: 'compte', label: 'Quantité comptée', type: 'number', required: true }, { name: 'motif', label: 'Motif', type: 'text', required: true }]
-      : [{ name: 'qte', label: 'Quantité', type: 'number', required: true }, { name: 'motif', label: type === 'entree' ? 'Bon de livraison / fournisseur' : 'Motif', type: 'text', required: type !== 'entree' }] });
-    if (!v) return;
-    const qte = type === 'ajustement' ? v.compte - stock(a.id) : type === 'sortie' ? -Math.abs(v.qte) : Math.abs(v.qte);
-    if (!qte) { toast('Aucun écart'); return; }
-    await Store.save('mouvements', { id: Store.uid(), articleId: a.id, type, qte, otId: null, le: Store.now(), motif: v.motif });
-    render();
-  };
-
   A['photo-ajout'] = el => {
     const inp = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/*' });
     inp.onchange = async () => {
@@ -1640,7 +1601,11 @@
     if (!enSaisie()) render();
   }
 
-  Store.open().then(async () => {
+  // Aides communes pour les écrans par domaine (js/vues/*.js, scripts classiques chargés après app.js).
+  window.App = { V, A, L, esc, badge, empty, seg, search, askForm, askConfirm, askText, alertBox, toast, edit, list, render, fmt, fmtY, today, refDe,
+    role, autorise, aModule, siteActif, nomSite, mesSites, desigBesoin, CLS_BESOIN, leverAttentesPieces };
+
+  const lancer = () => Store.open().then(async () => {
     net();
     const lien = !!Sync.lireLienEmail(location.hash); // retour d'un e-mail d'invitation : pas d'affichage de page avant
     if (!lien) render();
@@ -1654,6 +1619,8 @@
   }).catch(err => {
     $('#view').innerHTML = `<p class="warn">Stockage local indisponible : ${esc(err.message)}. Vérifiez que le navigateur n’est pas en navigation privée.</p>`;
   });
+  // Démarrage une fois tous les scripts chargés (les écrans de js/vues/ s'enregistrent avant le premier affichage).
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', lancer); else lancer();
   if ('serviceWorker' in navigator && isSecureContext && location.protocol !== 'file:') {
     const avait = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.register('sw.js').catch(() => {});

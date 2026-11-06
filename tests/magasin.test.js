@@ -92,3 +92,22 @@ test('pièces détenues : remises ni utilisées ni rendues', () => {
   assert.equal(C.piecesDetenues([b], m, [{ besoinId: 'b9', qte: 1 }])[0].detenu, 1);
   assert.equal(C.piecesDetenues([b], m, [{ besoinId: 'b9', qte: 2 }]).length, 0);
 });
+
+test('besoin indisponible puis remis : la remise réelle l’emporte (l’attente pourra être levée)', () => {
+  const b = { id: 'b10', articleId: A, siteId: S1, qte: 1, statut: 'indisponible', delai: '2026-11-10' };
+  assert.equal(C.etatBesoin(b, [entree(1)]), 'indisponible');
+  assert.equal(C.etatBesoin(b, [entree(1), mv({ type: 'remise', qte: -1, besoinId: 'b10' })]), 'remis');
+});
+
+test('à servir : urgents d’abord, puis les plus anciens ; indisponibles en dernier ; remis et annulés exclus', () => {
+  const B = [
+    { id: 'x1', qte: 1, statut: 'demande', demandeLe: '2026-11-06T08:00' },
+    { id: 'x2', qte: 1, statut: 'demande', urgent: true, demandeLe: '2026-11-06T10:00' },
+    { id: 'x3', qte: 1, statut: 'indisponible', urgent: true, demandeLe: '2026-11-05T10:00' },
+    { id: 'x4', qte: 1, statut: 'reserve', qteReservee: 1, demandeLe: '2026-11-05T09:00' },
+    { id: 'x5', qte: 1, statut: 'annule', demandeLe: '2026-11-01T09:00' },
+    { id: 'x6', qte: 1, statut: 'demande', demandeLe: '2026-11-01T09:00' },
+  ];
+  const m = [mv({ type: 'remise', qte: -1, besoinId: 'x6' })];
+  assert.deepEqual(C.besoinsAServir(B, m).map(x => x.b.id), ['x2', 'x4', 'x1', 'x3']);
+});

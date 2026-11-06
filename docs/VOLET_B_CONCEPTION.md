@@ -1,6 +1,6 @@
 # Volet B — Magasin relié au terrain : proposition de conception
 
-Statut : choix 1 à 5 **validés** le 6 nov. 2026. **B1 fait** : `calculs.js` (stockPhysique, qteReservee, stockDisponible, etatBesoin, rapprochementBesoin, retraitsAVerifier) + `tests/magasin.test.js` (8 tests, dont les 3 scénarios §37). **B2 fait** : `supabase/magasin.sql` exécuté sur Supabase (type `besoins`, module magasin, droits terrain / magasin, mouvements non modifiables sauf vérification, site hérité) + `supabase/tests_magasin.sql` (15 tests conformes). **B3 fait** (v19 locale) : section « Pièces » de l'intervention, levée automatique de l'attente, stockage `besoins` (DB v4), faux serveur aligné. B4 et B5 à venir — en B5 : exécuter `magasin.sql` mis à jour (renvoi identique d'un mouvement = accepté sans effet), rejouer `tests_magasin.sql` (16 tests) et `tests_etancheite.sql` (push_fiches réécrite).
+Statut : choix 1 à 5 **validés** le 6 nov. 2026. **B1 fait** : `calculs.js` (stockPhysique, qteReservee, stockDisponible, etatBesoin, rapprochementBesoin, retraitsAVerifier) + `tests/magasin.test.js` (8 tests, dont les 3 scénarios §37). **B2 fait** : `supabase/magasin.sql` exécuté sur Supabase (type `besoins`, module magasin, droits terrain / magasin, mouvements non modifiables sauf vérification, site hérité) + `supabase/tests_magasin.sql` (15 tests conformes). **B3 fait** (v19 locale) : section « Pièces » de l'intervention, levée automatique de l'attente, stockage `besoins` (DB v4), faux serveur aligné. **B4 fait** : écrans Magasin (`js/vues/magasin.js`), accueil du magasinier. B5 à venir : exécuter `magasin.sql` mis à jour (renvoi identique d'un mouvement = accepté sans effet), rejouer `tests_magasin.sql` (16 tests) et `tests_etancheite.sql` (push_fiches réécrite).
 Références V3 : §6 (demande de matériel, attente, une demande ne consomme pas le stock), §15 (demander,
 remettre, utiliser, retourner ; retrait urgent), §16 (réceptionner, isoler, inventorier), §35 (besoin,
 réservation, mouvement, rapprochement de remise), §37 (scénarios « deux pièces remises, une utilisée et une
@@ -69,6 +69,17 @@ Rapprochement d'une remise : `remis = utilisé + retourné + encore détenu` (é
   attente levée ≠ reprise réelle, le technicien appuie sur « Démarrer ».
 - Annuler un besoin attendu clôt l'attente liée. Disponible affiché = stock **du site de l'intervention**.
 - Renvoi identique d'un mouvement (réponse réseau perdue) : accepté sans effet par le serveur.
+
+## 5 ter. Décisions prises en B4
+
+- Une remise réelle l'emporte sur « indisponible » (l'attente du technicien peut alors être levée).
+- « Indisponible » reste dans À servir (en dernier) avec son délai ; côté technicien il n'est pas barré.
+- Réserver fixe `qteReservee` = déjà remis + quantité réservée ; réserver ou remettre au-delà du stock est
+  possible après confirmation (le terrain prime ; l'écart se corrige par inventaire).
+- Vérifier un retrait urgent ne modifie jamais sa quantité. Réception / sortie / inventaire : site précis obligatoire.
+- Le magasinier ne lève pas les attentes (il ne modifie pas les interventions) : c'est l'appareil du technicien
+  ou du responsable qui le fait à la réception de la remise.
+- Reste pour plus tard : indicateurs « besoins non couverts » et « délai demande → remise » (volet C ou B5).
 
 ## 6. Choix proposés (à confirmer)
 

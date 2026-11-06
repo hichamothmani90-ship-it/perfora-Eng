@@ -60,7 +60,7 @@ Chaque indicateur affiche périmètre, période, convention, couverture et effec
 
 - **PWA statique, sans build, sans dépendance** : `index.html`, `css/app.css`, `js/store.js` (stockage,
   journal), `js/calculs.js` (règles et indicateurs, fonctions pures), `js/qr.js` (QR hors ligne),
-  `js/app.js` (écrans), `sw.js`.
+  `js/app.js` (écrans), `js/vues/*.js` (écrans par domaine), `sw.js`.
 - **Toute règle métier ou tout calcul d'indicateur va dans `js/calculs.js`** (testable sous Node),
   jamais directement dans une vue. Chaque nouvelle règle = un test dans `tests/`.
   Scripts classiques (pas de modules) pour rester ouvrable partout. Hébergée sur GitHub Pages
@@ -190,8 +190,10 @@ lots d'import, notifications.
 - État vide qui explique quoi faire ; un chiffre indisponible dit quelle donnée manque.
 - Retour visible après chaque action (`toast`) : « enregistré sur l'appareil ».
 - Performance : rendu par chaîne HTML + délégation d'événements (`data-act`, `data-bind`), pas de framework.
-  `app.js` dépasse 1 600 lignes : en B4, sortir les écrans Magasin dans `js/vues/magasin.js` (script classique)
-  en exposant les aides communes (esc, askForm, edit, list…) sur un objet `App`.
+  Écrans par domaine dans `js/vues/*.js` (scripts classiques chargés après `app.js`) : ils lisent les aides
+  communes sur `window.App` (esc, askForm, edit, list, render, role…) et enregistrent `V.*` / `A.*`. `app.js` démarre
+  sur `DOMContentLoaded` pour que ces écrans soient enregistrés avant le premier affichage. Ajouter tout nouveau
+  fichier à `index.html` et à `FILES` dans `sw.js`. Déjà sorti : `js/vues/magasin.js`. Prochains candidats : réglages, console.
 
 ## 7. Conduite de projet
 
