@@ -68,6 +68,19 @@ const Sync = (() => {
     notifier();
     return { premiere, email: u.email };
   }
+  /** Envoie par e-mail un lien pour choisir son mot de passe (première connexion ou oubli).
+      Le lien ramène sur l'appli (adresseRetour), qui demande alors le nouveau mot de passe. */
+  async function demanderLien(email, adresseRetour) {
+    const c = cfg()?.url ? cfg() : PROJET;
+    const r = await requete(`${c.url}/auth/v1/recover?redirect_to=${encodeURIComponent(adresseRetour)}`, {
+      method: 'POST', headers: { apikey: c.cle, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email.trim() }),
+    });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      const m = j.msg || j.message || j.error_description || '';
+      throw new Error(/rate limit|seconds|too many/i.test(m) ? 'Trop de demandes : réessayez dans quelques minutes' : m || `Refusé (${r.status})`);
+    }
+  }
   async function changerMotDePasse(mdp) {
     const c = cfg();
     const r = await requete(`${c.url}/auth/v1/user`, { method: 'PUT', headers: { apikey: c.cle, Authorization: 'Bearer ' + await jeton(), 'Content-Type': 'application/json' }, body: JSON.stringify({ password: mdp }) });
@@ -170,5 +183,5 @@ const Sync = (() => {
   }
   function notifier() { try { surEtat(etatCourant()); } catch { /* affichage */ } }
 
-  return { PROJET, connecter, deconnecter, synchroniser, planifier, demarrer, etatCourant, lireLienEmail, sessionDepuisLien, changerMotDePasse };
+  return { PROJET, connecter, deconnecter, synchroniser, planifier, demarrer, etatCourant, lireLienEmail, sessionDepuisLien, changerMotDePasse, demanderLien };
 })();

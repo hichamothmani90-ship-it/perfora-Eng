@@ -21,6 +21,7 @@ fiches = {}          # id -> {id, type, data, seq}
 seq = [0]
 jetons = {}          # access -> (email, expire)
 rafraichis = {}      # refresh -> email
+ENVOIS = []          # e-mails « envoyés » (lien de mot de passe)
 
 
 def nouvelle_session(email):
@@ -78,6 +79,11 @@ class H(BaseHTTPRequestHandler):
             if grant == "refresh_token" and b.get("refresh_token") in rafraichis:
                 return self.repondre(200, nouvelle_session(rafraichis.pop(b["refresh_token"])))
             return self.repondre(400, {"error_description": "Invalid refresh token"})
+        if u.path == "/auth/v1/recover":
+            if self.headers.get("apikey") != CLE:
+                return self.repondre(401, {"message": "Invalid API key"})
+            ENVOIS.append({"email": self.corps().get("email"), "redirect_to": parse_qs(u.query).get("redirect_to", [""])[0]})
+            return self.repondre(200, {})
         if u.path == "/auth/v1/user":   # PUT simulé en POST impossible : voir do_PUT
             return self.repondre(405, {"message": "PUT attendu"})
         if u.path == "/rest/v1/rpc/push_fiches":
@@ -125,7 +131,7 @@ class H(BaseHTTPRequestHandler):
             return self.repondre(200, rows)
         if u.path == "/etat":   # aide aux tests
             with verrou:
-                return self.repondre(200, {"fiches": len(fiches), "seq": seq[0], "types": {t: sum(1 for f in fiches.values() if f["type"] == t) for t in TYPES}})
+                return self.repondre(200, {"envois": ENVOIS[-3:], "fiches": len(fiches), "seq": seq[0], "types": {t: sum(1 for f in fiches.values() if f["type"] == t) for t in TYPES}})
         self.repondre(404, {"message": "inconnu"})
 
 

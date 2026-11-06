@@ -118,7 +118,8 @@ dl.kv dt { color: var(--muted); } dl.kv dd { margin: 0; }
 /* formulaires */
 label.f { display: block; margin: 14px 0 6px; font-weight: 600; font-size: .92rem; }
 label.f .opt { font-weight: 400; color: var(--muted); }
-input[type=text], input[type=search], input[type=number], input[type=date], input[type=datetime-local], select, textarea {
+input[type=text], input[type=search], input[type=number], input[type=date], input[type=datetime-local],
+input[type=email], input[type=password], input[type=url], input[type=tel], select, textarea {
   width: 100%; min-height: 46px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px;
   background: #fff; font: inherit; color: inherit;
 }

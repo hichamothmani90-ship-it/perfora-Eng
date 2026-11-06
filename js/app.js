@@ -563,7 +563,8 @@
     const s = Sync.etatCourant();
     if (!s.configure) {
       return `<h2>Synchronisation cloud <span class="badge blue">prototype</span></h2><div class="card"><p class="small muted" style="margin-top:0">Partage les données entre tous les appareils via un serveur Supabase. L’appli continue de fonctionner hors ligne : les saisies partent dès que le réseau revient.</p>
-        <button class="btn primary" data-act="sync-config">Connecter ce compte</button></div>`;
+        <div class="actions"><button class="btn primary" data-act="sync-config">Connecter ce compte</button>
+        <button class="btn" data-act="sync-lien">Première connexion ou mot de passe oublié</button></div></div>`;
     }
     return `<h2>Synchronisation cloud <span class="badge blue">prototype</span></h2><div class="card" id="bloc-sync"><dl class="kv">
         <dt>Serveur</dt><dd style="word-break:break-all">${esc(s.url)}</dd>
@@ -571,7 +572,7 @@
         <dt>En attente d’envoi</dt><dd><b>${s.attente}</b> modification(s)</dd>
         <dt>Dernière synchro</dt><dd>${s.dernier ? fmtY(s.dernier) : 'jamais'}</dd>
         ${s.erreur ? `<dt>Erreur</dt><dd class="small" style="color:var(--red)">${esc(s.erreur)}</dd>` : ''}</dl>
-      <div class="actions">${s.connecte ? `<button class="btn primary" data-act="sync-maintenant">Synchroniser maintenant</button>` : `<button class="btn primary" data-act="sync-config">Se reconnecter</button>`}
+      <div class="actions">${s.connecte ? `<button class="btn primary" data-act="sync-maintenant">Synchroniser maintenant</button>` : `<button class="btn primary" data-act="sync-config">Se reconnecter</button><button class="btn" data-act="sync-lien">Mot de passe oublié</button>`}
         <button class="btn" data-act="sync-tout">Envoyer toutes les données de cet appareil</button>
         ${s.connecte ? `<button class="btn ghost" data-act="sync-deconnecter">Se déconnecter</button>` : ''}</div></div>`;
   }
@@ -1022,6 +1023,19 @@
       toast('Connecté · synchronisation en cours');
       await Sync.synchroniser();
       render();
+    } catch (e) {
+      if (/incorrect/.test(e.message)) await alertBox('Connexion refusée', ['E-mail ou mot de passe incorrect.', 'Si vous n’avez jamais choisi de mot de passe (compte créé par invitation), utilisez « Première connexion ou mot de passe oublié » : vous recevrez un lien par e-mail.']);
+      else toast('Échec : ' + e.message);
+    }
+  };
+  A['sync-lien'] = async () => {
+    const v = await askForm({ title: 'Recevoir un lien par e-mail', ok: 'Envoyer le lien', values: { email: data.meta.get('cloud')?.email }, fields: [
+      { type: 'info', text: 'Un e-mail vous permettra de choisir votre mot de passe. Ouvrez-le de préférence sur l’appareil à connecter.' },
+      { name: 'email', label: 'Votre e-mail (compte créé par le responsable)', type: 'email', required: true }] });
+    if (!v) return;
+    try {
+      await Sync.demanderLien(v.email, adressePublique());
+      await alertBox('E-mail envoyé', [`Si ${v.email} correspond à un compte, un lien vient d’être envoyé.`, 'Cliquez dessus : l’appli s’ouvrira et vous demandera de choisir votre mot de passe.', 'Pensez à regarder dans les courriers indésirables.']);
     } catch (e) { toast('Échec : ' + e.message); }
   };
   async function premierEnvoiSiBesoin(premiere) {
