@@ -8,7 +8,7 @@ Comptes (mot de passe test-gmao), clé publique cle-factice :
   test@gmao.test   responsable, entreprise DEMO (pack Pro), sites Tanger + Casablanca
   tech2@gmao.test  technicien,  entreprise DEMO, site Casablanca seulement
   autre@gmao.test  responsable, entreprise AUTRE (pack Essentiel), site Rabat
-Aide aux tests : GET /etat ; POST /test/abonnement {"entreprise":"AUTRE","statut":"suspendu"}
+Aide aux tests : GET /etat ; POST /test/abonnement {"entreprise":"AUTRE","statut":"suspendu"} ou {"entreprise":"DEMO","pack":"entreprise"}
 Quotas (comme supabase/quotas.sql) : rpc/utilisation, rpc/affecter_sites, functions/v1/inviter.
 Console plateforme (comme supabase/plateforme.sql) : rpc/pf_* ; test@gmao.test est administrateur plateforme.
 Lancer : python tests/serveur_factice.py [port]   (8099 par défaut). Données en mémoire."""
@@ -19,8 +19,10 @@ from urllib.parse import urlparse, parse_qs
 PORT = next((int(a) for a in sys.argv[1:] if a.isdigit()), 8099)
 CLE = "cle-factice"
 APPEND_ONLY = {"journal", "mouvements", "photos"}
-TYPES = {"localisations", "equipements", "personnes", "demandes", "ots", "programmes", "articles", "mouvements", "journal", "photos", "besoins"}
+TYPES = {"localisations", "equipements", "personnes", "demandes", "ots", "programmes", "articles", "mouvements", "journal", "photos", "besoins", "seuils", "achats", "valorisations"}
 COMMUNS = {"personnes", "articles"}
+COUTS = {"achats", "valorisations"}          # lecture restreinte (supabase/achats.sql)
+VOIT_COUTS = {"responsable", "magasinier", "achats", "pilote"}
 
 PACKS = {
     "essentiel": {"nom": "Essentiel", "modules": ["base", "preventif"], "maxSites": 1, "maxUtilisateursSite": 2, "maxUtilisateursTotal": 2},  # limites basses pour les tests
@@ -36,12 +38,13 @@ SITES = {  # id -> site
     "s-cas": {"id": "s-cas", "entreprise": "DEMO", "code": "CAS", "nom": "Site Casablanca"},
     "s-rab": {"id": "s-rab", "entreprise": "AUTRE", "code": "RAB", "nom": "Site Rabat"},
 }
-COMPTES = {"test@gmao.test": "test-gmao", "tech2@gmao.test": "test-gmao", "autre@gmao.test": "test-gmao", "mag@gmao.test": "test-gmao"}
+COMPTES = {"test@gmao.test": "test-gmao", "tech2@gmao.test": "test-gmao", "autre@gmao.test": "test-gmao", "mag@gmao.test": "test-gmao", "achat@gmao.test": "test-gmao"}
 PROFILS = {
     "test@gmao.test": {"role": "responsable", "nom": "Responsable test", "actif": True, "entreprise": "DEMO", "sites": ["s-tng", "s-cas"], "defaut": "s-tng"},
     "tech2@gmao.test": {"role": "technicien", "nom": "Technicien test", "actif": True, "entreprise": "DEMO", "sites": ["s-cas"], "defaut": "s-cas"},
     "autre@gmao.test": {"role": "responsable", "nom": "Responsable Autre", "actif": True, "entreprise": "AUTRE", "sites": ["s-rab"], "defaut": "s-rab"},
     "mag@gmao.test": {"role": "magasinier", "nom": "Magasinier test", "actif": True, "entreprise": "DEMO", "sites": ["s-cas"], "defaut": "s-cas"},
+    "achat@gmao.test": {"role": "achats", "nom": "Acheteur test", "actif": True, "entreprise": "DEMO", "sites": ["s-cas", "s-tng"], "defaut": "s-tng"},
 }
 
 verrou = threading.Lock()
@@ -59,15 +62,17 @@ def peut_ecrire(r, t):
         return True
     if t == "ots":
         return r in ("technicien", "prestataire")
-    if t == "articles":
+    if t in ("articles", "seuils"):
         return r == "magasinier"
+    if t in ("achats", "valorisations"):
+        return r in ("magasinier", "achats")
     if t in ("mouvements", "besoins"):
         return r in ("magasinier", "technicien", "prestataire")
     return False
 
 
 def module_de(t):
-    return "magasin" if t in ("articles", "mouvements", "besoins") else "preventif" if t == "programmes" else "base"
+    return "magasin" if t in ("articles", "mouvements", "besoins", "seuils") else "achats" if t in COUTS else "preventif" if t == "programmes" else "base"
 
 
 def role_de(email):
@@ -117,7 +122,8 @@ def controle_quota(code, sites, sauf=None):
 
 def visible(f, email):
     p = PROFILS[email]
-    return f["entreprise"] == p["entreprise"] and (f["site"] is None or f["site"] in mes_sites(email))
+    cout = f["type"] in COUTS or (f["type"] == "journal" and f["data"].get("entite") in COUTS)
+    return f["entreprise"] == p["entreprise"] and (f["site"] is None or f["site"] in mes_sites(email)) and (not cout or p["role"] in VOIT_COUTS)
 
 
 def nouvelle_session(email):
@@ -183,7 +189,10 @@ class H(BaseHTTPRequestHandler):
             return self.repondre(200, {})
         if u.path == "/test/abonnement":
             b = self.corps()
-            ENTREPRISES[b["entreprise"]]["statut"] = b["statut"]
+            if "statut" in b:
+                ENTREPRISES[b["entreprise"]]["statut"] = b["statut"]
+            if "pack" in b:  # ex. {"entreprise":"DEMO","pack":"entreprise"} pour le module achats
+                ENTREPRISES[b["entreprise"]]["pack"] = b["pack"]
             return self.repondre(200, droits(b["entreprise"]))
         email = self.utilisateur()
         if not email:
@@ -289,10 +298,33 @@ class H(BaseHTTPRequestHandler):
                     motif = "mouvement de stock hors intervention : réservé au magasin"
                 elif t == "mouvements" and ex and (terrain or any(k not in ("verifieLe", "verifiePar", "aVerifier", "modifieLe", "modifiePar") for k in pa)):
                     motif = "un mouvement de stock ne se modifie pas (seule sa vérification par le magasin)"
+                # volet C (miroir de supabase/achats.sql)
+                elif t == "seuils" and r != "responsable" and ((pa.get("statut") or "propose") != "propose" or "valideLe" in pa or "validePar" in pa):
+                    motif = "validation des seuils : réservée au responsable"
+                elif t == "seuils" and r != "responsable" and ex and ex["data"].get("statut") == "valide":
+                    motif = "un seuil validé ne se modifie pas : proposez une nouvelle version"
+                elif t == "seuils" and not ex and not pa.get("articleId"):
+                    motif = "un seuil se rattache à un article"
+                elif t == "achats" and r == "achats" and not ex:
+                    motif = "une demande d'achat est rédigée par le magasin ou le responsable"
+                elif t == "achats" and r == "achats" and ex["data"].get("statut") not in ("validee", "transmise", "commandee", "partiellement_recue", "recue"):
+                    motif = "demande d'achat pas encore validée par le responsable"
+                elif t == "achats" and r == "achats" and "statut" in pa and pa["statut"] not in ("transmise", "commandee"):
+                    motif = "les achats renseignent la commande, pas la validation"
+                elif t == "achats" and r == "magasinier" and ((ex and ex["data"].get("statut")) or "brouillon") in ("brouillon", "soumise", "a_completer") and "statut" in pa and pa["statut"] not in ("brouillon", "soumise", "annulee"):
+                    motif = "validation d'une demande d'achat : réservée au responsable"
+                elif t == "achats" and r == "magasinier" and ((ex and ex["data"].get("statut")) or "brouillon") not in ("brouillon", "soumise", "a_completer") and not (
+                        pa.get("statut") == "close" and ex["data"].get("statut") in ("commandee", "partiellement_recue", "recue")
+                        and all(k in ("statut", "closLe", "closPar", "motifCloture", "modifieLe", "modifiePar") for k in pa)):
+                    motif = "demande d'achat validée : modification réservée au responsable et aux achats"
+                elif t == "valorisations" and not ex and not pa.get("mouvementId"):
+                    motif = "un prix se rattache à une entrée de stock"
+                elif t == "valorisations" and ex and r != "responsable":
+                    motif = "correction d'un prix : réservée au responsable"
                 elif t == "ots" and r != "responsable" and ex and ex["data"].get("statut") == "cloturee":
                     motif = "intervention clôturée : modification réservée au responsable"
                 if not motif and t not in COMMUNS:
-                    parent = pa.get("entiteId") if t == "journal" else pa.get("parentId") if t == "photos" else (pa.get("besoinId") or pa.get("otId")) if t in ("besoins", "mouvements") else None
+                    parent = pa.get("entiteId") if t == "journal" else pa.get("parentId") if t == "photos" else (pa.get("besoinId") or pa.get("otId")) if t in ("besoins", "mouvements") else pa.get("mouvementId") if t == "valorisations" else None
                     hp = fiches.get(parent) if parent else None
                     s = (pa.get("siteId") if pa.get("siteId") in SITES else None) or (ex and ex["site"]) or (hp and hp["entreprise"] == ent and hp["site"]) or defaut
                     if not s:

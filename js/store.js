@@ -5,15 +5,16 @@ const Store = (() => {
   const DB_NAME = 'gmao-terrain';
   // v2 (lot 0) : store « photos ». v3 (lot 1) : store « sortie » = file d'envoi vers le cloud.
   // v4 (volet B) : store « besoins » (demandes de pièces depuis une intervention).
+  // v5 (volet C) : stores « seuils », « achats », « valorisations ».
   // Les stores existants sont conservés tels quels.
-  const DB_VER = 4;
+  const DB_VER = 5;
   const TYPES = ['localisations', 'equipements', 'personnes', 'demandes', 'ots',
-    'programmes', 'articles', 'mouvements', 'journal', 'meta', 'photos', 'sortie', 'besoins'];
+    'programmes', 'articles', 'mouvements', 'journal', 'meta', 'photos', 'sortie', 'besoins', 'seuils', 'achats', 'valorisations'];
   /** Données métier (exportées, synchronisées). meta et sortie restent propres à l'appareil. */
   const METIER = TYPES.filter(t => t !== 'meta' && t !== 'sortie');
   const APPEND_ONLY = ['journal', 'mouvements', 'photos'];
   /** Fiches rattachées à un site (les autres — personnes, articles — sont communes à l'entreprise). */
-  const SITE_TYPES = ['localisations', 'equipements', 'demandes', 'ots', 'programmes', 'mouvements', 'photos', 'journal', 'besoins'];
+  const SITE_TYPES = ['localisations', 'equipements', 'demandes', 'ots', 'programmes', 'mouvements', 'photos', 'journal', 'besoins', 'seuils', 'achats', 'valorisations'];
   let siteDe = null;
   const definirSite = fn => { siteDe = fn; };
   const data = {};

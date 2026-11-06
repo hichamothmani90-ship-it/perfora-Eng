@@ -103,6 +103,9 @@ Chaque indicateur affiche périmètre, période, convention, couverture et effec
   (`module_de`), rôle (`peut_ecrire`), règles métier, puis site (envoyé › existant › hérité du parent pour
   journal / photos › site par défaut du compte) non autorisé ou changé par un non-responsable ; il recopie
   `siteId` dans `data`. `mon_profil()` renvoie entreprise, sites, siteDefaut, abonnement, adminPlateforme.
+  **Montants** (volet C) : uniquement dans les fiches `achats` et `valorisations`, lisibles seulement si `voit_couts()`
+  (responsable, magasinier, achats, pilote) ; la même restriction couvre les lignes de journal de ces types. Ne jamais
+  poser de prix sur un article, un mouvement ou une intervention (lisibles par les techniciens).
   Toute nouvelle table de données doit porter entreprise_id (+ site_id) et une politique RLS équivalente ;
   rejouer `supabase/tests_etancheite.sql` après chaque changement de règle.
 - **Appli multi-site** (A2) : `list(t)` filtre les types de `Store.SITE_TYPES` sur le site actif
@@ -152,12 +155,15 @@ Implémenté (object stores) :
 | `articles` | ref, designation, unite, stockMin, actif |
 | `mouvements` | articleId, type (entree, sortie, remise, retour, rebut, ajustement), qte signée, otId, besoinId, urgent / aVerifier / verifieLe / verifiePar, motif, le — immuables (sauf vérification) |
 | `besoins` | ref BES-, otId, equipementId, articleId **ou** description, qte, unite, urgent, note, statut (demande, reserve, indisponible, annule ; « remis » est déduit des remises), qteReservee et delai (magasin seulement), demandeur, demandeLe — depuis DB v4 |
+| `seuils` | articleId, siteId, securite, pointCommande, cible, delaiJours, critique, justification, statut (propose / valide / refuse), proposePar/Le, validePar/Le — une version validée ne se modifie pas |
+| `achats` | ref DA-, siteId, statut (brouillon … close), origine, lignes [{articleId \| description, qte, unite, motif, qteCommandee, prixUnitaire}], redigePar/Le, fournisseur, refCommande — **lecture restreinte** |
+| `valorisations` | mouvementId, prixUnitaire, devise (MAD), prixUnitaireMAD, statut (connu / provisoire) — **lecture restreinte** |
 | `journal` | entite, entiteId, action, champ, avant, apres, motif, auteur, le — append-only |
 | `photos` | parentType (demandes / ots), parentId, dataUrl JPEG ≤ 1280 px, le — depuis DB v2 |
 | `sortie` | file d'envoi cloud : {type, rid, patch} triés par id chronologique — propre à l'appareil |
 | `meta` | `device` {code, personneId}, `compteurs`, `sauvegarde` {le}, `adresse` {url des QR}, `cloud` {url, cle, session, curseur, dernier, erreur} |
 
-Version actuelle du stockage : **DB_VER = 4**. Pièces d'une intervention : `o.pieces[]` = déclarations d'**utilisation** (`besoinId` si la pièce vient du magasin) ; une attente `motif: 'piece'` peut porter `besoinId` (levée automatique, `Calculs.attentesALever`). Côté serveur : table unique `fiches` (id, type, data jsonb,
+Version actuelle du stockage : **DB_VER = 5** (v5 : seuils, achats, valorisations). Pièces d'une intervention : `o.pieces[]` = déclarations d'**utilisation** (`besoinId` si la pièce vient du magasin) ; une attente `motif: 'piece'` peut porter `besoinId` (levée automatique, `Calculs.attentesALever`). Côté serveur : table unique `fiches` (id, type, data jsonb,
 seq, recu_le, auteur), RLS « authenticated », aucune règle DELETE.
 
 Listes de choix : reprendre **exactement** les codes de la V3 (sections 32-33) déjà dans l'objet `L`
@@ -193,7 +199,8 @@ lots d'import, notifications.
   Écrans par domaine dans `js/vues/*.js` (scripts classiques chargés après `app.js`) : ils lisent les aides
   communes sur `window.App` (esc, askForm, edit, list, render, role…) et enregistrent `V.*` / `A.*`. `app.js` démarre
   sur `DOMContentLoaded` pour que ces écrans soient enregistrés avant le premier affichage. Ajouter tout nouveau
-  fichier à `index.html` et à `FILES` dans `sw.js`. Déjà sorti : `js/vues/magasin.js`. Prochains candidats : réglages, console.
+  fichier à `index.html` et à `FILES` dans `sw.js`. Déjà sortis : `js/vues/magasin.js`, `js/vues/reappro.js` (seuils, à réapprovisionner), `js/vues/achats.js` (circuit achats,
+  réception, isolés, valeur du stock). Prochains candidats : réglages, console.
 
 ## 7. Conduite de projet
 
@@ -251,11 +258,18 @@ seule mémoire fiable : tout ce qui compte doit y être écrit avant de continue
    `docs/FEUILLE_DE_ROUTE.md`, puis `git log --oneline -10` et `git status` avant toute action.
 
 Pièges opérationnels déjà rencontrés :
-- SQL Editor Supabase : insérer le script via `monaco.editor.getEditors()[0].setValue(...)` (pas de `\`,
-  de backtick ni de `${` dans le script) ; confirmer « Run query » sur l'alerte « destructive » ; un
+- SQL Editor Supabase : **pousser d'abord le script sur GitHub**, puis dans l'onglet Supabase
+  `fetch('https://raw.githubusercontent.com/hichamothmani90-ship-it/perfora-Eng/<branche>/supabase/x.sql')` →
+  `monaco.editor.getEditors()[0].setValue(t)` ; comparer l'empreinte SHA-1 avec le fichier local (ce qui s'exécute est
+  exactement ce qui est commité). Le serveur local, `file://` et le presse-papiers ne passent pas (CSP, onglets). À défaut,
+  insérer le texte via `setValue(...)` (pas de `\`, de backtick ni de `${`) ; confirmer « Run query » sur l'alerte « destructive » ; un
   `begin … rollback` n'est pas conservé → tester avec une fonction plpgsql temporaire qui nettoie, puis la
   supprimer ; la grille de résultats est virtualisée → agréger en une ligne (`jsonb_object_agg`).
-- Fenêtres de saisie de l'appli dans un onglet masqué : fermeture retardée par le navigateur → tester par
-  appels directs (`Sync.*`, `Store.*`) quand le panneau est caché.
+  Panneau masqué : la grille ne s'affiche pas du tout → lire le résultat via
+  `do $x$ begin raise exception 'RESULTAT %', (select …)::text; end $x$;` (message d'erreur lisible ; tout est annulé,
+  pratique aussi pour un test qui ne doit rien laisser).
+- Fenêtres de saisie de l'appli dans un onglet masqué : fermeture retardée par le navigateur. Contournement fiable :
+  remplir le formulaire, `form.requestSubmit()` puis `dialog.dispatchEvent(new Event('close'))` (le vrai code de
+  l'action s'exécute : contrôles, enregistrements, synchro).
 - Service worker : un onglet ancien peut bloquer l'évolution d'IndexedDB (géré : message + `onversionchange`).
 - E-mails Supabase par défaut : quelques-uns par heure, souvent en indésirables (Outlook).

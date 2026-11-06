@@ -195,6 +195,175 @@
     return besoinsDeLOT.map(b => ({ besoin: b, ...rapprochementBesoin(b, mouvements, pieces) })).filter(r => r.detenu > 0);
   }
 
-  const Calculs = { besoinsAServir, attentesALever, piecesDetenues, stockPhysique, qteReservee, stockDisponible, etatBesoin, rapprochementBesoin, retraitsAVerifier, qteRemise, addDays, daysBetween, minutesBetween, dureeUnion, mediane, NATURE_DU_BESOIN, ETAT_RANK, otOuvert, demandeOuverte, indexOtsParDemande, etatEquipement, verifierCloture, echeanceSuivante, indicateurs };
+
+  // ---------- stocks, réapprovisionnement et achats (volet C, V3 §14, §16, §17, §18) ----------
+  // Conventions des mouvements :
+  //   entree (qte > 0, achatId / ligneId si réception de commande) = quantité utilisable mise en stock ;
+  //   isolement (qte = 0, quantite = N, achatId / ligneId) = pièces reçues mais douteuses, hors stock utilisable ;
+  //   liberation (qte = +N, isolementId) = pièces isolées déclarées utilisables ;
+  //   disposition (qte = 0, quantite = N, isolementId, decision : retour_fournisseur / rebut / reparation).
+  // Les prix ne sont jamais sur les mouvements : ils vivent dans les fiches « valorisations » (lecture restreinte).
+  const num = v => Number(v) || 0;
+  const surArticleSite = (o, articleId, siteId) => o.articleId === articleId && surSite(o, siteId);
+  const parDate = (a, b) => (a.le || '').localeCompare(b.le || '') || (a.creeLe || '').localeCompare(b.creeLe || '') || String(a.id).localeCompare(String(b.id));
+
+  /** Seuil actif : dernière version validée pour l'article et le site. Sinon repère provisoire tiré de stockMin. */
+  function seuilActif(seuils, article, siteId) {
+    const v = seuils.filter(x => x.articleId === article.id && (!siteId || x.siteId === siteId) && x.statut === 'valide')
+      .sort((a, b) => (b.valideLe || '').localeCompare(a.valideLe || ''))[0];
+    if (v) return { ...v, provisoire: false };
+    const m = num(article.stockMin);
+    return m > 0 ? { articleId: article.id, siteId, securite: 0, pointCommande: m, cible: m, delaiJours: null, critique: false, provisoire: true } : null;
+  }
+
+  /** Quantités demandées par les interventions et pas encore couvertes par une réservation ni une remise. */
+  function besoinsNonCouverts(besoins, mouvements, articleId, siteId) {
+    return besoins.filter(b => surArticleSite(b, articleId, siteId) && ['demande', 'reserve', 'partiellement_remis', 'indisponible'].includes(etatBesoin(b, mouvements)))
+      .reduce((s, b) => {
+        const remis = qteRemise(mouvements, b.id), reserveRestant = Math.max(0, abs(b.qteReservee) - remis);
+        return s + Math.max(0, abs(b.qte) - remis - reserveRestant);
+      }, 0);
+  }
+
+  /** Réception d'une ligne de commande : reçu = utilisable + isolé ; reliquat = commandé − reçu (jamais négatif). */
+  function receptionLigne(achat, ligne, mouvements) {
+    const lies = mouvements.filter(m => m.achatId === achat.id && m.ligneId === ligne.id);
+    const utilisable = lies.filter(m => m.type === 'entree').reduce((s, m) => s + num(m.qte), 0);
+    const isole = lies.filter(m => m.type === 'isolement').reduce((s, m) => s + num(m.quantite), 0);
+    const recu = utilisable + isole, commande = num(ligne.qteCommandee ?? ligne.qte);
+    return { commande, recu, utilisable, isole, reliquat: ligne.solde ? 0 : Math.max(0, commande - recu) };
+  }
+
+  const ACHAT_COMMANDE = ['commandee', 'partiellement_recue', 'recue'];
+  /** État d'une demande d'achat : saisi jusqu'à la commande, puis déduit des réceptions réelles. */
+  function etatAchat(achat, mouvements) {
+    if (!ACHAT_COMMANDE.includes(achat.statut)) return achat.statut;
+    const r = (achat.lignes || []).map(l => receptionLigne(achat, l, mouvements));
+    if (r.length && r.every(x => x.reliquat === 0)) return 'recue';
+    if (r.some(x => x.recu > 0)) return 'partiellement_recue';
+    return 'commandee';
+  }
+
+  /** Quantité en commande (reliquats des commandes passées en externe). Une commande n'est pas du stock. */
+  function qteEnCommande(achats, mouvements, articleId, siteId) {
+    let n = 0;
+    for (const a of achats) {
+      if (!ACHAT_COMMANDE.includes(a.statut) || !surSite(a, siteId)) continue;
+      for (const l of a.lignes || []) if (l.articleId === articleId) n += receptionLigne(a, l, mouvements).reliquat;
+    }
+    return n;
+  }
+
+  /** Pièces isolées en attente de décision (reçues, ni libérées ni sorties). */
+  function qteIsolee(mouvements, articleId, siteId) {
+    const m = mouvements.filter(x => surArticleSite(x, articleId, siteId));
+    const isole = m.filter(x => x.type === 'isolement').reduce((s, x) => s + num(x.quantite), 0);
+    const decide = m.filter(x => x.type === 'liberation').reduce((s, x) => s + num(x.qte), 0)
+      + m.filter(x => x.type === 'disposition').reduce((s, x) => s + num(x.quantite), 0);
+    return Math.max(0, isole - decide);
+  }
+
+  /** Situation d'un article sur un site et proposition de réapprovisionnement (ne commande rien). */
+  function situationArticle(D, article, siteId) {
+    const { besoins = [], mouvements = [], achats = [], seuils = [] } = D;
+    const physique = stockPhysique(mouvements, article.id, siteId);
+    const reserve = qteReservee(besoins, mouvements, article.id, siteId);
+    const disponible = physique - reserve;
+    const nonCouverts = besoinsNonCouverts(besoins, mouvements, article.id, siteId);
+    const enCommande = qteEnCommande(achats, mouvements, article.id, siteId);
+    const couverture = disponible - nonCouverts + enCommande;
+    const seuil = seuilActif(seuils, article, siteId);
+    const alerte = !!seuil && couverture < num(seuil.pointCommande);
+    const proposee = alerte ? Math.ceil(Math.max(num(seuil.cible), num(seuil.pointCommande)) - couverture) : 0;
+    return { article, seuil, physique, reserve, disponible, nonCouverts, enCommande, couverture, isole: qteIsolee(mouvements, article.id, siteId),
+      rupture: disponible - nonCouverts <= 0 && (nonCouverts > 0 || !!seuil), alerte, proposee };
+  }
+
+  /** Récapitulatif « à réapprovisionner » : rupture d'abord, puis article critique, puis écart au point de commande. */
+  function aReapprovisionner(D, siteId) {
+    return (D.articles || []).filter(a => a.actif !== false).map(a => situationArticle(D, a, siteId)).filter(x => x.alerte)
+      .sort((x, y) => (y.rupture - x.rupture) || (!!y.seuil.critique - !!x.seuil.critique)
+        || ((num(y.seuil.pointCommande) - y.couverture) - (num(x.seuil.pointCommande) - x.couverture)));
+  }
+
+  /** Prix unitaire en MAD HT d'une entrée, ou null si inconnu (un prix inconnu ne vaut jamais zéro). */
+  function prixMAD(v) {
+    if (!v) return null;
+    if (v.prixUnitaireMAD != null && v.prixUnitaireMAD !== '') return num(v.prixUnitaireMAD);
+    if ((v.devise || 'MAD') === 'MAD' && v.prixUnitaire != null && v.prixUnitaire !== '') return num(v.prixUnitaire);
+    return null; // autre devise sans conversion explicite : non valorisé
+  }
+
+  /** CUMP mobile par article et site, rejoué dans l'ordre des dates (V3 §18).
+      Entrée valorisée : CUMP = (valeur avant + valeur entrée) / (quantité avant + quantité entrée).
+      Sortie : prend le CUMP du moment (coût figé, une livraison postérieure ne le réécrit pas).
+      Retour d'une pièce remise : réintègre sa valeur de sortie. Entrée sans prix : quantité « non valorisée ».
+      Retourne aussi le coût unitaire figé de chaque mouvement (couts : Map id → coût ou null). */
+  function valorisation(mouvements, valorisations, articleId, siteId) {
+    const prix = new Map(valorisations.map(v => [v.mouvementId, v]));
+    const mv = mouvements.filter(m => surArticleSite(m, articleId, siteId) && num(m.qte) !== 0).sort(parDate);
+    let qv = 0, valeur = 0, qnv = 0, provisoire = false;
+    const couts = new Map(), sortieParBesoin = new Map();
+    const cump = () => qv > 0 ? valeur / qv : null;
+    for (const m of mv) {
+      const q = num(m.qte);
+      if (q > 0) {
+        const p = m.type === 'retour' && m.besoinId && sortieParBesoin.has(m.besoinId) ? sortieParBesoin.get(m.besoinId)
+          : (m.type === 'entree' || m.type === 'liberation') ? prixMAD(prix.get(m.id) || prix.get(m.isolementId)) : cump();
+        if (p == null) { qnv += q; couts.set(m.id, null); continue; }
+        if (prix.get(m.id)?.statut === 'provisoire') provisoire = true;
+        qv += q; valeur += q * p; couts.set(m.id, p);
+      } else {
+        const out = -q, c = cump();
+        const deValorise = Math.min(out, qv);
+        couts.set(m.id, c);
+        if (c != null) { valeur -= deValorise * c; qv -= deValorise; if (m.besoinId) sortieParBesoin.set(m.besoinId, c); }
+        qnv = Math.max(0, qnv - (out - deValorise));
+        if (qv <= 1e-9) { qv = 0; valeur = 0; }
+      }
+    }
+    return { quantite: qv + qnv, quantiteValorisee: qv, quantiteNonValorisee: qnv, valeur, cump: cump(), incomplet: qnv > 0, provisoire, couts };
+  }
+
+  /** Consommation moyenne par semaine sur une période (remises et sorties, retours déduits) : aide à proposer un seuil.
+      V3 §14 : 2 filtres / semaine × 3 semaines de délai + 2 de sécurité = seuil indicatif de 8. */
+  function consommationHebdo(mouvements, articleId, siteId, today, jours = 90) {
+    const debut = addDays(today, -jours);
+    const m = mouvements.filter(x => surArticleSite(x, articleId, siteId) && (x.le || '').slice(0, 10) > debut && (x.le || '').slice(0, 10) <= today);
+    const sorti = m.filter(x => ['remise', 'sortie'].includes(x.type)).reduce((s, x) => s + abs(x.qte), 0)
+      - m.filter(x => x.type === 'retour').reduce((s, x) => s + abs(x.qte), 0);
+    return Math.max(0, sorti) / (jours / 7);
+  }
+  const seuilIndicatif = (consoHebdo, delaiJours, securite) => Math.ceil(consoHebdo * (num(delaiJours) / 7) + num(securite));
+
+  /** Montant d'une commande externe (MAD HT) : lignes avec prix connu ; les lignes sans prix sont comptées à part. */
+  function montantCommande(achat) {
+    let montant = 0, sansPrix = 0;
+    for (const l of achat.lignes || []) {
+      const p = prixMAD(l), qc = num(l.qteCommandee ?? l.qte);
+      if (p == null) sansPrix++; else montant += qc * p;
+    }
+    return { montant, sansPrix, complet: sansPrix === 0 };
+  }
+
+  /** Pièces isolées en attente de décision, isolement par isolement (reste = isolé − libéré − sorti autrement). */
+  function isolementsEnAttente(mouvements) {
+    const dec = new Map();
+    for (const m of mouvements) if (m.isolementId && (m.type === 'liberation' || m.type === 'disposition'))
+      dec.set(m.isolementId, (dec.get(m.isolementId) || 0) + (m.type === 'liberation' ? num(m.qte) : num(m.quantite)));
+    return mouvements.filter(m => m.type === 'isolement').map(m => ({ m, reste: num(m.quantite) - (dec.get(m.id) || 0) })).filter(x => x.reste > 0)
+      .sort((x, y) => (x.m.le || '').localeCompare(y.m.le || ''));
+  }
+
+  /** Coût consommé par un besoin : quantité utilisée × coût figé de ses remises (moyenne pondérée), null si inconnu. */
+  function coutConsomme(besoin, mouvements, pieces, couts) {
+    const rem = remisesDuBesoin(mouvements, besoin.id);
+    const q = rem.reduce((s, m) => s + abs(m.qte), 0);
+    if (!q || rem.some(m => couts.get(m.id) == null)) return null;
+    const cu = rem.reduce((s, m) => s + abs(m.qte) * couts.get(m.id), 0) / q;
+    return rapprochementBesoin(besoin, mouvements, pieces).utilise * cu;
+  }
+
+  const Calculs = { montantCommande, isolementsEnAttente, consommationHebdo, seuilIndicatif, seuilActif, besoinsNonCouverts, receptionLigne, etatAchat, qteEnCommande, qteIsolee, situationArticle, aReapprovisionner, prixMAD, valorisation, coutConsomme, besoinsAServir, attentesALever, piecesDetenues, stockPhysique, qteReservee, stockDisponible, etatBesoin, rapprochementBesoin, retraitsAVerifier, qteRemise, addDays, daysBetween, minutesBetween, dureeUnion, mediane, NATURE_DU_BESOIN, ETAT_RANK, otOuvert, demandeOuverte, indexOtsParDemande, etatEquipement, verifierCloture, echeanceSuivante, indicateurs };
   if (typeof module === 'object' && module.exports) module.exports = Calculs; else root.Calculs = Calculs;
 })(this);

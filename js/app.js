@@ -5,7 +5,7 @@
 (() => {
   const { data } = Store;
   /** Version affichée dans Réglages : à incrémenter avec VERSION dans sw.js. */
-  const APP_VERSION = 'v19';
+  const APP_VERSION = 'v20';
   const $ = s => document.querySelector(s);
   // Multi-site : les listes de fiches de site ne montrent que le site actif (« tous » possible).
   // Les fiches sans site (anciennes ou pas encore synchronisées) restent visibles.
@@ -38,6 +38,7 @@
       : t === 'photos' ? g(o.parentType, o.parentId)
       : t === 'mouvements' ? g('besoins', o.besoinId) || g('ots', o.otId)
       : t === 'besoins' ? g('ots', o.otId)
+      : t === 'valorisations' ? g('mouvements', o.mouvementId)
       : null;
     return parent || siteCreation();
   });
@@ -63,7 +64,7 @@
     famille: { mecanique: 'Mécanique', electrique: 'Électrique', automatisme: 'Automatisme', instrumentation: 'Instrumentation', pneumatique: 'Pneumatique', hydraulique: 'Hydraulique', utilite_externe: 'Utilité externe', autre: 'Autre' },
     activite: { inspection: 'Inspection', mesure: 'Mesure', diagnostic: 'Diagnostic', reglage: 'Réglage', nettoyage_technique: 'Nettoyage', graissage: 'Graissage', depannage: 'Dépannage', reparation: 'Réparation', remplacement: 'Remplacement', montage_demontage: 'Montage / démontage', installation: 'Installation', modification: 'Modification', essai: 'Essai', verification_externe: 'Vérif. externe', autre: 'Autre' },
     attente: { piece: 'Pièce', acces_exploitation: 'Accès / exploitation', autorisation: 'Autorisation', specialiste: 'Spécialiste', outillage_moyen: 'Outillage / moyen', verification_essai: 'Vérification / essai', autre: 'Autre' },
-    role: { technicien: 'Technicien', responsable: 'Responsable', magasinier: 'Magasinier', prestataire: 'Prestataire', exploitation: 'Exploitation', pilote: 'Pilote' },
+    role: { technicien: 'Technicien', responsable: 'Responsable', magasinier: 'Magasinier', achats: 'Achats', prestataire: 'Prestataire', exploitation: 'Exploitation', pilote: 'Pilote' },
     roleOT: { coordinateur: 'Coordinateur', intervenant: 'Intervenant', renfort: 'Renfort', prestataire: 'Prestataire' },
     arret: { oui: 'Oui', non: 'Non', inconnu: 'Inconnu' },
     modele: { entretien: 'Entretien', inspection: 'Inspection', test: 'Test', verification_externe: 'Vérification externe', autre: 'Autre' },
@@ -223,14 +224,15 @@
   const role = () => Sync.profil()?.role || null;
   const estResp = () => !role() || role() === 'responsable';
   const DROITS = {
-    responsable: ['eq-new', 'eq-edit', 'loc-new', 'prog-new', 'prog-edit', 'pers-new', 'pers-edit', 'ot-rouvrir', 'sync-tout', 'equipe'],
+    responsable: ['eq-new', 'eq-edit', 'loc-new', 'prog-new', 'prog-edit', 'pers-new', 'pers-edit', 'ot-rouvrir', 'sync-tout', 'equipe', 'seuil-valider', 'seuil-refuser', 'achat-valider', 'achat-completer', 'achat-refuser'],
     terrain: ['ot-new', 'dem-ot', 'prog-ot', 'dem-pec', 'dem-classer', 'ot-demarrer', 'ot-planifier', 'ot-annuler', 'ot-suspendre', 'ot-reprendre', 'ot-terminer', 'ot-cloturer',
       'ot-ajout-int', 'ot-retirer', 'ot-ajout-piece', 'ot-annuler-piece', 'ot-ajout-suite', 'ot-lever',
       'bes-new', 'bes-urgent', 'bes-utilise', 'bes-rendre', 'bes-annuler'],
-    magasin: ['art-new', 'mvt', 'mag-reserver', 'mag-remettre', 'mag-indispo', 'mag-rattacher', 'mag-verifier'],
+    magasin: ['art-new', 'mvt', 'mag-reserver', 'mag-remettre', 'mag-indispo', 'mag-rattacher', 'mag-verifier', 'seuil-proposer', 'achat-new', 'achat-soumettre', 'achat-annuler', 'achat-qte', 'achat-recevoir', 'achat-clore', 'iso-decider'],
+    achats: ['achat-commande'],
     saisie: ['dem-edit', 'dem-annuler', 'photo-ajout', 'signaler'],
   };
-  const ACT_MODULE = { 'art-new': 'magasin', mvt: 'magasin', 'mag-reserver': 'magasin', 'mag-remettre': 'magasin', 'mag-indispo': 'magasin', 'mag-rattacher': 'magasin', 'mag-verifier': 'magasin', 'bes-new': 'magasin', 'bes-urgent': 'magasin', 'bes-utilise': 'magasin', 'bes-rendre': 'magasin', 'bes-annuler': 'magasin', 'prog-new': 'preventif', 'prog-edit': 'preventif', 'prog-ot': 'preventif' };
+  const ACT_MODULE = { 'art-new': 'magasin', mvt: 'magasin', 'mag-reserver': 'magasin', 'mag-remettre': 'magasin', 'mag-indispo': 'magasin', 'mag-rattacher': 'magasin', 'mag-verifier': 'magasin', 'seuil-proposer': 'magasin', 'seuil-valider': 'magasin', 'seuil-refuser': 'magasin', 'achat-new': 'achats', 'achat-soumettre': 'achats', 'achat-annuler': 'achats', 'achat-qte': 'achats', 'achat-valider': 'achats', 'achat-completer': 'achats', 'achat-refuser': 'achats', 'achat-commande': 'achats', 'achat-recevoir': 'achats', 'achat-clore': 'achats', 'iso-decider': 'achats', 'bes-new': 'magasin', 'bes-urgent': 'magasin', 'bes-utilise': 'magasin', 'bes-rendre': 'magasin', 'bes-annuler': 'magasin', 'prog-new': 'preventif', 'prog-edit': 'preventif', 'prog-ot': 'preventif' };
   function autorise(act) {
     const r = role();
     if (ACT_MODULE[act] && !aModule(ACT_MODULE[act])) return false;
@@ -239,11 +241,12 @@
     if (DROITS.responsable.includes(act)) return false;
     if (DROITS.terrain.includes(act)) return ['technicien', 'prestataire'].includes(r);
     if (DROITS.magasin.includes(act)) return r === 'magasinier';
+    if (DROITS.achats.includes(act)) return r === 'achats';
     if (DROITS.saisie.includes(act)) return r !== 'pilote';
     return true;
   }
   const peutModifierOT = o => !ecritureOK() ? false : o.statut === 'cloturee' ? estResp() : (!role() || ['responsable', 'technicien', 'prestataire'].includes(role()));
-  const REFUS_TXT = { responsable: 'Réservé au responsable', terrain: 'Réservé aux techniciens et au responsable', magasin: 'Réservé au magasin et au responsable', saisie: 'Consultation seule' };
+  const REFUS_TXT = { responsable: 'Réservé au responsable', terrain: 'Réservé aux techniciens et au responsable', magasin: 'Réservé au magasin et au responsable', achats: 'Réservé aux achats et au responsable', saisie: 'Consultation seule' };
   function motifRefus(act) {
     if (ACT_MODULE[act] && !aModule(ACT_MODULE[act])) return `Module « ${ACT_MODULE[act]} » non inclus dans votre abonnement`;
     if (!ecritureOK()) return 'Abonnement suspendu ou expiré : consultation seule'; for (const [k, l] of Object.entries(DROITS)) if (l.includes(act)) return REFUS_TXT[k]; return 'Action non autorisée'; }
@@ -281,6 +284,7 @@
 
   V.accueil = () => {
     if (role() === 'magasinier' && aModule('magasin') && V.accueilMagasin) return V.accueilMagasin();
+    if (role() === 'achats' && aModule('achats') && V.accueilAchats) return V.accueilAchats();
     if (!data.equipements.size) {
       return `<h1>Bienvenue</h1><div class="card"><p>Aucune donnée sur cet appareil.</p>
         <div class="actions"><button class="btn primary" data-act="demo">Charger la démo</button><a class="btn" href="#/parc">Créer mes équipements</a></div>
@@ -623,9 +627,9 @@
        <div id="pf-liste"><p class="muted">Chargement…</p></div>`
     : empty('Réservé à l’administrateur plateforme.');
 
-  V.plus = () => `<h1>Plus</h1>${[['#/preventif', '↻ Préventif', 'Programmes et échéances'], ['#/qr', '▣ QR codes', 'Planche imprimable des équipements'], ['#/magasin', '▤ Magasin', 'Articles, stock, mouvements'], ['#/indicateurs', '▥ Indicateurs', 'Pilotage par équipement'], ['#/journal', '☰ Journal d’audit', 'Toutes les modifications'], ['#/reglages', '⚙ Réglages', 'Utilisateur, personnes, sauvegarde']]
+  V.plus = () => `<h1>Plus</h1>${[['#/preventif', '↻ Préventif', 'Programmes et échéances'], ['#/qr', '▣ QR codes', 'Planche imprimable des équipements'], ['#/magasin', '▤ Magasin', 'Articles, stock, mouvements'], ['#/achats', '₪ Achats', 'Demandes d’achat, commandes, réceptions'], ['#/valeur', '∑ Valeur du stock', 'Coût moyen pondéré par article et site'], ['#/indicateurs', '▥ Indicateurs', 'Pilotage par équipement'], ['#/journal', '☰ Journal d’audit', 'Toutes les modifications'], ['#/reglages', '⚙ Réglages', 'Utilisateur, personnes, sauvegarde']]
     .concat(Sync.profil()?.adminPlateforme ? [['#/plateforme', '◆ Console plateforme', 'Clients, abonnements, démo commerciale']] : [])
-    .filter(([h]) => !(h === '#/magasin' && !aModule('magasin')) && !(h === '#/preventif' && !aModule('preventif')))
+    .filter(([h]) => !(h === '#/magasin' && !aModule('magasin')) && !(h === '#/preventif' && !aModule('preventif')) && !(['#/achats', '#/valeur'].includes(h) && !(aModule('achats') && App.voitCouts?.())))
     .map(([h, t, s]) => `<a class="card" href="${h}"><div class="t">${t}</div><div class="s">${s}</div></a>`).join('')}`;
 
   V.reglages = () => {
@@ -1340,14 +1344,18 @@
     };
     inp.click();
   };
+  /** Export CSV pour Excel (point-virgule, UTF-8 avec BOM). Texte protégé contre l'injection de formules ;
+      les nombres restent des nombres. */
+  function exportCsv(head, rows, nom) {
+    const cell = v => { if (typeof v === 'number' && Number.isFinite(v)) return String(v).replace('.', ','); let s = String(v ?? ''); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return '"' + s.replace(/"/g, '""') + '"'; };
+    download(new Blob(['\ufeff' + [head, ...rows].map(r => r.map(cell).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8' }), nom);
+  }
   A.csv = () => {
-    const cell = v => { let s = String(v ?? ''); if (/^[=+\-@]/.test(s)) s = "'" + s; return '"' + s.replace(/"/g, '""') + '"'; };
     const head = ['Référence', 'Code équipement', 'Équipement', 'Nature', 'Priorité', 'Statut', 'Créée le', 'Clôturée le', 'Intervenants', 'Activités', 'Travaux', 'Résultat', 'Cause', 'Certitude', 'Avec arrêt', 'Début arrêt', 'Fin arrêt', 'Demandes'];
     const rows = list('ots').sort((a, b) => a.creeLe.localeCompare(b.creeLe)).map(o => [o.ref, eq(o.equipementId)?.code, eq(o.equipementId)?.designation, L.nature[o.nature], L.priorite[o.priorite], L.statutOT[o.statut], o.creeLe, o.clotureLe,
       (o.intervenants || []).map(i => persNom(i.personneId)).join(', '), (o.activites || []).map(a => L.activite[a]).join(', '), o.travaux, L.resultat[o.resultat], o.cause, L.certitude[o.certitudeCause], L.arret[o.avecArret], o.arretDebut, o.arretFin,
       (o.demandeIds || []).map(id => refDe('demandes', id)).join(', ')]);
-    const csv = '﻿' + [head, ...rows].map(r => r.map(cell).join(';')).join('\r\n');
-    download(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `gmao-interventions-${today()}.csv`);
+    exportCsv(head, rows, `gmao-interventions-${today()}.csv`);
   };
   function download(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); }
   A['sync-ouvrir'] = () => { location.hash = '#/reglages'; setTimeout(() => $('#bloc-sync')?.scrollIntoView({ block: 'center' }), 50); };
@@ -1462,12 +1470,23 @@
     const P = (nom, role) => ({ id: id(), nom, role, actif: true });
     const resp = P('Responsable maintenance', 'responsable'), ta = P('Technicien A (mécanique)', 'technicien'), tb = P('Technicien B (automatisme)', 'technicien'), mag = P('Magasinier', 'magasinier');
     for (const p of [resp, ta, tb, mag]) await S('personnes', p);
-    await Store.persistMeta({ ...Store.device(), personneId: ta.id });
+    // Appareil sans compte : on signe comme le technicien A de la démo. Avec un compte, la signature reste celle du compte.
+    if (!Sync.profil()) await Store.persistMeta({ ...Store.device(), personneId: ta.id });
     const A1 = { id: id(), ref: 'J-VER-80', designation: 'Joint de vérin Ø80', unite: 'u', stockMin: 2, actif: true };
     const A2 = { id: id(), ref: 'HUI-HV46', designation: 'Huile hydraulique HV46', unite: 'L', stockMin: 20, actif: true };
     const A3 = { id: id(), ref: 'FIL-AIR', designation: 'Filtre à air compresseur', unite: 'u', stockMin: 1, actif: true };
     for (const a of [A1, A2, A3]) await S('articles', a);
-    for (const [a, q] of [[A1, 3], [A2, 60], [A3, 1]]) await S('mouvements', { id: id(), articleId: a.id, type: 'entree', qte: q, otId: null, le: J(-20, '09:00'), motif: 'Stock initial' });
+    // Volet C : chaque entrée initiale porte un prix (fiche « valorisations », lecture restreinte côté serveur).
+    for (const [a, q, p] of [[A1, 3, 85], [A2, 60, 42], [A3, 1, 310]]) {
+      const m = { id: id(), articleId: a.id, type: 'entree', qte: q, otId: null, le: J(-20, '09:00'), motif: 'Stock initial' };
+      await S('mouvements', m);
+      await S('valorisations', { id: id(), mouvementId: m.id, prixUnitaire: p, devise: 'MAD', statut: 'connu' });
+    }
+    await S('seuils', { id: id(), articleId: A1.id, securite: 1, pointCommande: 4, cible: 8, delaiJours: 21, critique: true, statut: 'valide', justification: 'Presse critique, délai fournisseur 3 semaines', proposePar: mag.nom, proposeLe: J(-10, '10:00'), valideLe: J(-9, '09:00'), validePar: resp.nom });
+    await S('seuils', { id: id(), articleId: A3.id, securite: 1, pointCommande: 2, cible: 4, delaiJours: 10, critique: false, statut: 'propose', justification: 'Compresseur sans secours : garder un filtre d’avance', proposePar: mag.nom, proposeLe: J(-1, '16:00') });
+    await S('achats', { id: id(), ref: 'DA-DM-0001', statut: 'commandee', origine: 'reapprovisionnement', redigePar: mag.nom, redigeLe: J(-6, '10:00'), soumiseLe: J(-6, '10:05'), soumisePar: mag.nom, valideLe: J(-5, '08:30'), validePar: resp.nom,
+      fournisseur: 'Atlas Compresseurs', refCommande: 'BC-DEMO-0042', dateCommande: J(-4).slice(0, 10), livraisonPrevue: J(1).slice(0, 10), devise: 'MAD', commandeLe: J(-4, '11:00'), commandePar: resp.nom,
+      lignes: [{ id: id(), articleId: A3.id, qte: 3, qteCommandee: 3, unite: 'u', prixUnitaire: 310, devise: 'MAD', motif: 'Stock sous le seuil' }] });
     const I = (p, role = 'intervenant') => ({ id: id(), personneId: p.id, role, depuis: J(-3, '08:10'), fin: null, par: resp.nom });
 
     // 1. Panne presse : une demande, deux interventions, un seul arrêt (bornes connues)
@@ -1488,7 +1507,9 @@
     // Volet B : le rouleau est demandé en urgence (en stock, à remettre) ; 2 L d'huile pris en urgence, à vérifier.
     const A4 = { id: id(), ref: 'ROUL-TD-50', designation: 'Rouleau tendeur convoyeur Ø50', unite: 'u', stockMin: 1, actif: true };
     await S('articles', A4);
-    await S('mouvements', { id: id(), articleId: A4.id, type: 'entree', qte: 2, otId: null, le: J(0, '09:15'), motif: 'Livraison fournisseur' });
+    const m4 = { id: id(), articleId: A4.id, type: 'entree', qte: 2, otId: null, le: J(0, '09:15'), motif: 'Livraison fournisseur' };
+    await S('mouvements', m4);
+    await S('valorisations', { id: id(), mouvementId: m4.id, prixUnitaire: 260, devise: 'MAD', statut: 'provisoire' });
     const o3 = id(), b3 = id(), b4 = id();
     await S('besoins', { id: b3, ref: 'BES-DM-0001', otId: o3, equipementId: conv.id, articleId: A4.id, qte: 1, unite: 'u', urgent: true, note: 'Arrêt ligne 2', statut: 'demande', demandeur: tb.nom, demandeLe: J(0, '08:30') });
     await S('besoins', { id: b4, ref: 'BES-DM-0002', otId: o3, equipementId: conv.id, articleId: A2.id, qte: 2, unite: 'L', urgent: true, note: 'Retrait urgent', statut: 'demande', demandeur: tb.nom, demandeLe: J(0, '08:10') });
@@ -1510,8 +1531,8 @@
     const [name, id] = path.split('/');
     return { name, id: id ? decodeURIComponent(id) : null, q: new URLSearchParams(qs || '') };
   }
-  const TAB_OF = { demande: 'demandes', ot: 'ots', eq: 'parc', article: 'magasin', signaler: '', qr: 'parc', plateforme: 'plus' };
-  const MOBILE_PLUS = ['preventif', 'magasin', 'article', 'indicateurs', 'journal', 'reglages', 'plus'];
+  const TAB_OF = { demande: 'demandes', ot: 'ots', eq: 'parc', article: 'magasin', reappro: 'magasin', achat: 'plus', achats: 'plus', valeur: 'plus', signaler: '', qr: 'parc', plateforme: 'plus' };
+  const MOBILE_PLUS = ['preventif', 'magasin', 'article', 'reappro', 'achat', 'achats', 'valeur', 'indicateurs', 'journal', 'reglages', 'plus'];
   function render() {
     cacheEtat = null;
     R = parseHash();
@@ -1611,7 +1632,7 @@
 
   // Aides communes pour les écrans par domaine (js/vues/*.js, scripts classiques chargés après app.js).
   window.App = { V, A, L, esc, badge, empty, seg, search, askForm, askConfirm, askText, alertBox, toast, edit, list, render, fmt, fmtY, today, refDe,
-    role, autorise, aModule, siteActif, nomSite, mesSites, desigBesoin, CLS_BESOIN, leverAttentesPieces };
+    role, autorise, aModule, siteActif, nomSite, mesSites, desigBesoin, CLS_BESOIN, leverAttentesPieces, exportCsv };
 
   const lancer = () => Store.open().then(async () => {
     net();

@@ -1,6 +1,52 @@
 # Volet C — Définition des stocks, réapprovisionnement et achats : proposition de conception
 
-Statut : **proposition à valider** (6 nov. 2026). Rien n'est encore codé.
+Statut : choix 1 à 7 **validés** le 6 nov. 2026. Travail sur la branche git `volet-c` (publication en C5).
+**C1 fait** : `calculs.js` (seuilActif, besoinsNonCouverts, receptionLigne, etatAchat, qteEnCommande, qteIsolee,
+situationArticle, aReapprovisionner, prixMAD, valorisation, coutConsomme) + `tests/achats.test.js` (10 tests).
+Conventions de mouvements retenues : `entree` = utilisable reçu ; `isolement` (qte 0, quantite N) ; `liberation`
+(+N, isolementId) ; `disposition` (qte 0, quantite N, decision). Aucun prix sur les mouvements.
+Fiche `valorisations` : { mouvementId, prixUnitaire, devise (MAD par défaut), prixUnitaireMAD si autre devise,
+statut connu / provisoire }. Une pièce libérée prend le prix de sa réception (valorisation de l'isolement).
+**C2 fait** : `supabase/achats.sql` exécuté sur Supabase (types seuils / achats / valorisations, rôle « achats »,
+fonction `voit_couts()`, lecture restreinte des fiches achats / valorisations **et des lignes de journal qui les
+concernent**, règles de validation) + `supabase/tests_achats.sql` (21 tests conformes, dont « technicien : 0 prix
+lisible »). Non-régression : tests_magasin 16/16, tests_etancheite 12/12.
+Règles ajoutées : un seuil validé ne se modifie pas (nouvelle version proposée) ; le magasinier rédige et soumet
+une demande d'achat, ne la valide pas, et après validation ne peut que la clore une fois commandée ; le rôle achats
+ne crée pas de demande et ne renseigne que la commande (statuts transmise / commandee) d'une demande validée ;
+un prix se rattache à une entrée de stock (site hérité) et sa correction est réservée au responsable.
+**C3 fait** (v20 locale) : `js/vues/reappro.js` — bloc « Seuils » de la fiche article (repère provisoire, proposition,
+valider / refuser, historique, consommation hebdomadaire et seuil indicatif V3), onglet **À réapprovisionner** (par
+site ; en « tous les sites », un récapitulatif par site), export CSV (nombres réels, texte protégé), création d'une
+demande d'achat en brouillon depuis les lignes cochées (une par site, aucun prix), consultation / modification des
+quantités / soumission / annulation de la demande. Stockage local v5. Faux serveur aligné sur `achats.sql` (compte
+`achat@` rôle achats ; `POST /test/abonnement {"entreprise":"DEMO","pack":"entreprise"}`).
+
+**C5 fait** : démo enrichie (`supabase/demo.sql`), guide, publication v20 — **volet C terminé**.
+**C4 fait** : `js/vues/achats.js` — écran **Achats** (menu Plus : à valider, à commander, à réceptionner,
+brouillons, terminées ; pièces isolées en attente), détail d'une demande (valider / à compléter / refuser ; commande
+externe saisie par le rôle achats ou le responsable : fournisseur, référence, dates, devise et taux explicites, quantité
+commandée et prix par ligne ; réception partielle avec isolé et bon de livraison ; clôture, motif obligatoire s'il reste
+un reliquat), décisions sur pièces isolées (libérer, retour fournisseur, rebut, réparation), **Valeur du stock** (CUMP
+par article et site, quantités sans prix montrées « non valorisé »), accueil du rôle achats, prix facultatif à la
+réception manuelle. Calculs ajoutés : `montantCommande`, `isolementsEnAttente` (50 tests).
+
+## 5 quater. Décisions prises en C3
+
+- Le récapitulatif reste visible des techniciens (aucun prix) ; les demandes d'achat ne leur parviennent jamais.
+- Un seuil se définit sur un site précis ; le responsable peut « Valider maintenant » sa propre saisie ; contrôle
+  sécurité ≤ point de commande ≤ cible ; justification obligatoire (motif de révision V3 §14).
+- Seuil indicatif = consommation hebdomadaire (90 j, retours déduits) × délai + sécurité, simple aide (V3 §14).
+- Correction en passant : charger la démo sur un appareil connecté ne change plus la signature (elle reste celle du compte).
+
+## 5 quinquies. Décisions prises en C4
+
+- La réception crée l'entrée (utilisable) et l'isolement ; le prix de la ligne de commande est copié dans une fiche
+  `valorisations` pour chacun (une pièce libérée prend ainsi le prix de sa réception).
+- Prix en devise étrangère : valorisés seulement si un taux est saisi (`prixUnitaireMAD`), sinon « non valorisé ».
+- Clôture avec reliquat : motif obligatoire ; une demande close ne compte plus « en commande ».
+- Réception au-delà du reste attendu : refusée à l'écran (sur-livraison à traiter hors commande).
+- Valeur du stock : un article sans aucun prix affiche « non valorisé », jamais 0,00 MAD.
 Références V3 : §14 (seuils proposés et validés), §15-16 (stock explicable, réception partielle, pièces isolées),
 §17 (besoins achats : circuit et états), §18 (CUMP, prix manquant, coûts distincts), §24 (rôle Achats facultatif,
 prix masqués aux techniciens), §33 (compatibilités et seuils), §37 (scénarios de vérification).
@@ -74,7 +120,7 @@ réception restent lisibles par tous **sans prix** (le technicien voit le stock,
 | C4 | Circuit achats, réception partielle, isolés, valeur du stock | Navigateur, 3 rôles + technicien sans prix |
 | C5 | Faux serveur, démo, guide, recette, publication v20 | — |
 
-## 7. Choix à valider
+## 7. Choix validés (6 nov. 2026)
 
 1. **Modules** : seuils et « À réapprovisionner » dans le module **magasin** (pack Pro) ; demandes d'achat, réceptions
    liées et valorisation dans le module **achats** (pack Entreprise, ou option du Pro).

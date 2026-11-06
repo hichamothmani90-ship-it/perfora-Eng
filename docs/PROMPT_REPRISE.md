@@ -28,7 +28,7 @@ multi-entreprise) et concepteur d'interfaces terrain mobile-first. Langue : fran
      (décision du 6 nov. 2026 : traçabilité légère, pas de chronomètre).
    Si tu as besoin d'un passage précis, demande à lire le fichier.
 
-3. ÉTAT (fin du 6 nov. 2026, appli v19 publiée = volets A et B terminés) — détail : docs/FEUILLE_DE_ROUTE.md et docs/RECETTE_VOLET_A.md
+3. ÉTAT (fin du 6 nov. 2026, appli v20 publiée = volets A, B et C terminés) — détail : docs/FEUILLE_DE_ROUTE.md et docs/RECETTE_VOLET_A.md
    - Appli PWA statique, hors ligne, sans dépendance, sur GitHub Pages :
      https://hichamothmani90-ship-it.github.io/perfora-Eng/ (dépôt hichamothmani90-ship-it/perfora-Eng,
      branche main ; chaque push publie en ~5 min ; si le déploiement Pages échoue, pousser un commit vide).
@@ -36,16 +36,19 @@ multi-entreprise) et concepteur d'interfaces terrain mobile-first. Langue : fran
    - Fait : lot 0 (tests, QR, photos), lot 1 (synchro Supabase, invitations, rôles), volet A complet
      (multi-entreprise, multi-site, packs et quotas, invitation depuis l'appli, console plateforme,
      démo réinitialisable, recette + durcissement). Volet B terminé (docs/VOLET_B_CONCEPTION.md) : magasin relié au
-     terrain, écrans Magasin dans js/vues/magasin.js. Prochain : volet C (réapprovisionnement / achats) ou mise
+     terrain, écrans Magasin dans js/vues/magasin.js. Volet C terminé (docs/VOLET_C_CONCEPTION.md) : seuils, à
+     réapprovisionner, achats, réception partielle, isolés, valeur du stock ; prix lisibles seulement par responsable,
+     magasinier, achats, pilote. Prochain : volet D (énergie et eau). Ou mise
      en production (docs/RECETTE_VOLET_A.md §4). Démo VITRINE à réinitialiser une fois (nouvelles données magasin).
    - Supabase « gmao-terrain » (réf. oihaqzkqhvyjybijsonc, Frankfurt). Scripts dans l'ordre :
-     schema.sql → roles.sql → multitenant.sql → quotas.sql → plateforme.sql → durcissement.sql → magasin.sql ; tests : tests_etancheite, tests_quotas, tests_plateforme, tests_magasin, tests_demo ;
+     schema.sql → roles.sql → multitenant.sql → quotas.sql → plateforme.sql → durcissement.sql → magasin.sql → achats.sql → demo.sql ; tests : tests_etancheite, tests_quotas, tests_plateforme, tests_magasin, tests_demo, tests_achats ;
      Edge Function supabase/functions/inviter. Entreprises : DEMO « Perfora Démo » (Site Tanger, pack Pro ;
      othmanihicham99@gmail.com responsable + administrateur plateforme ; hothmani36@outlook.fr magasinier)
      et VITRINE « Vitrine Perfora » (démo réinitialisable ; hicham.othmani90@gmail.com responsable).
    - Tests : node --test tests/*.test.js (35) ; supabase/tests_*.sql (à rejouer dans le SQL Editor).
-     Faux serveur : python tests/serveur_factice.py 8095 (comptes test@ responsable, tech2@ technicien,
-     mag@ magasinier, autre@ autre entreprise ; mot de passe test-gmao) ; appli : python serveur.py 8081 ;
+     Faux serveur : python tests/serveur_factice.py 8094 (comptes test@ responsable, tech2@ technicien,
+     mag@ magasinier, achat@ achats, autre@ autre entreprise ; mot de passe test-gmao ; pack de DEMO modifiable par
+     POST /test/abonnement) ; appli : python serveur.py 8081 ;
      deux appareils = http://localhost:8081 et http://127.0.0.1:8081 (les ports 8080 / 8099 peuvent
      être tenus par d'anciens processus).
 
