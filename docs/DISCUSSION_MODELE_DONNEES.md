@@ -14,7 +14,10 @@ compteurs (D3), pour ne pas devoir migrer des données plus tard.
 
 Questions à trancher :
 1. **Emplacements** dans le magasin (allée, étagère, casier) : utile pour vos clients ?
-2. **Plusieurs magasins par site** (magasin central + armoire d'atelier) ou un seul par site ?
+2. ~~Plusieurs magasins par site~~ — **décidé le 6 nov. 2026 : un seul magasin par site au départ.** Évolution sans
+   reprise de données : une fiche « magasin » par site sera ajoutée plus tard ; tout mouvement sans magasin désigné
+   appartient au magasin principal du site (les mouvements ne sont jamais réécrits) ; les seuils suivent la même règle ;
+   un transfert entre magasins sera un nouveau type de mouvement.
 3. **Conditionnement** : acheté par carton de 10, sorti à l'unité ?
 4. **Inventaire** : comptage périodique → écart → ajustement motivé (aujourd'hui : ajustement à la main).
 5. **Pièces suivies une à une** (numéro de série, pièces réparables qui reviennent en stock) ?
