@@ -93,7 +93,8 @@ Objectif : plusieurs clients isolés sur la même plateforme, chacun avec ses si
 - **Consommations** par période, usage et site ; jamais d'addition entre unités différentes ; sous-compteurs ≠ total site.
 - **Factures** et rapprochement facturé / mesuré ; coûts ; ratios facultatifs (kWh par tonne produite) si donnée de production fournie.
 - Tableau de bord énergie ; lien avec actions (fuite d'air → intervention).
-- **Proposition détaillée** : [`VOLET_D_CONCEPTION.md`](VOLET_D_CONCEPTION.md) (choix à valider, étapes D1 à D5).
+- **Conception** : [`VOLET_D_CONCEPTION.md`](VOLET_D_CONCEPTION.md) (choix validés le 6 nov. 2026, étapes D1 à D5 ; D1 fait).
+- **Avant D3** : simplification du parcours demande → intervention, proposée dans [`PARCOURS_DEMANDE_INTERVENTION.md`](PARCOURS_DEMANDE_INTERVENTION.md).
 
 ### Volet E — Pilotage avancé et rapports  · ~2 semaines  (V3 §10-11, §26, §29)
 - Calendriers de temps requis ; disponibilité sur requis ; MTTR « délai de rétablissement calendaire » ; MTBF seulement avec heures de marche.

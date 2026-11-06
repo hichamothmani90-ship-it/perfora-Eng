@@ -364,6 +364,194 @@
     return rapprochementBesoin(besoin, mouvements, pieces).utilise * cu;
   }
 
-  const Calculs = { montantCommande, isolementsEnAttente, consommationHebdo, seuilIndicatif, seuilActif, besoinsNonCouverts, receptionLigne, etatAchat, qteEnCommande, qteIsolee, situationArticle, aReapprovisionner, prixMAD, valorisation, coutConsomme, besoinsAServir, attentesALever, piecesDetenues, stockPhysique, qteReservee, stockDisponible, etatBesoin, rapprochementBesoin, retraitsAVerifier, qteRemise, addDays, daysBetween, minutesBetween, dureeUnion, mediane, NATURE_DU_BESOIN, ETAT_RANK, otOuvert, demandeOuverte, indexOtsParDemande, etatEquipement, verifierCloture, echeanceSuivante, indicateurs };
+  // ---------- volet D : énergie et eau (V3 §19, §20, §36, §37) ----------
+  // Compteur : { id, unite, mode: 'cumulatif' | 'periode' | 'instantane', coefficient, frequenceJours, toleranceVariation }.
+  // Relevé : { id, compteurId, le, valeur, unite?, estime?, debut? (mode période), remplaceId? (correction),
+  //   decision?: 'confirme' | 'invalide' (responsable) }. Rupture = relevé { nature: 'rupture', indexFinal?, indexInitial?,
+  //   coefficient? } : remplacement, remise à zéro ou changement de coefficient. Un relevé n'est jamais modifié.
+  const UNITES = ['kWh', 'm³', 'L', 'kg', 'Nm³', 'h', 'cycles', '°C', 'bar'];
+  const UNITES_RESSOURCE = { electricite: ['kWh'], eau: ['m³'], gasoil: ['L'], fuel: ['L', 'kg'], gaz: ['Nm³', 'kWh', 'kg'],
+    air_comprime: ['Nm³', 'm³', 'h'], froid: ['kWh', 'h'], autre: UNITES };
+  // Seule une variation inhabituelle peut être confirmée : les autres anomalies se corrigent (nouveau relevé ou rupture).
+  const ANOMALIES_CONFIRMABLES = ['variation'];
+  const instant = s => (s && s.length === 10 ? s + 'T00:00' : s);
+  const finJour = s => (s && s.length === 10 ? addDays(s, 1) + 'T00:00' : s);
+  const arrondi = x => (x == null ? null : Math.round(x * 1000) / 1000);
+  const jours = minutes => Math.round(minutes / 144) / 10;
+
+  /** Relevés d'un compteur dans l'ordre : retenu, suspect, invalidé, remplacé ou rupture ; et les segments de consommation. */
+  function analyserReleves(compteur, releves, { maintenant = null } = {}) {
+    const mode = compteur.mode || 'cumulatif';
+    const facteur = num(compteur.toleranceVariation) || 3;
+    const tous = releves.filter(r => r.compteurId === compteur.id);
+    const remplaces = new Set(tous.filter(r => r.remplaceId).map(r => r.remplaceId));
+    const ordre = [...tous].sort((a, b) => (a.le || '').localeCompare(b.le || '') || (a.creeLe || '').localeCompare(b.creeLe || ''));
+    const lignes = [], segments = [], taux = [];
+    let coef = num(compteur.coefficient) || 1;
+    let base = null; // dernier point retenu : { le, valeur (cumulatif), coef, estime }
+    for (const r of ordre) {
+      if (remplaces.has(r.id)) { lignes.push({ releve: r, statut: 'remplace', anomalies: [] }); continue; }
+      if (r.nature === 'rupture') {
+        if (mode === 'cumulatif' && base && r.indexFinal != null && Number(r.indexFinal) >= base.valeur)
+          segments.push({ debut: base.le, fin: r.le, quantite: arrondi((Number(r.indexFinal) - base.valeur) * base.coef), estime: base.estime });
+        if (r.coefficient != null && num(r.coefficient) > 0) coef = num(r.coefficient);
+        // Sans index initial connu, la nouvelle série commence au prochain relevé : le trou reste visible dans la couverture.
+        base = mode === 'cumulatif' ? (r.indexInitial != null ? { le: r.le, valeur: Number(r.indexInitial), coef, estime: false } : null) : { le: r.le, coef };
+        lignes.push({ releve: r, statut: 'rupture', anomalies: [] });
+        continue;
+      }
+      const an = [], v = Number(r.valeur);
+      let q = null, debut = null;
+      if (r.valeur == null || r.valeur === '' || !Number.isFinite(v)) an.push('valeur_invalide');
+      if (r.unite && compteur.unite && r.unite !== compteur.unite) an.push('unite');
+      if (maintenant && r.le > maintenant) an.push('date_future');
+      if (base && r.le === base.le) an.push('doublon');
+      if (!an.length && mode === 'cumulatif' && base) {
+        if (v < base.valeur) an.push('baisse_index'); else { q = (v - base.valeur) * base.coef; debut = base.le; }
+      }
+      if (!an.length && mode === 'periode') {
+        debut = r.debut ? instant(r.debut) : base?.le || null;
+        if (v < 0) an.push('valeur_negative');
+        else if (debut && debut >= r.le) an.push('date_incoherente');
+        else if (base && debut && debut < base.le) an.push('chevauchement');
+        else if (debut) q = v * coef;
+      }
+      if (!an.length && q != null) {
+        const j = minutesBetween(debut, r.le) / 1440, m = mediane(taux);
+        if (j > 0 && taux.length >= 3 && m > 0 && (q / j > m * facteur || q / j < m / facteur)) an.push('variation');
+      }
+      const confirmable = an.length > 0 && an.every(a => ANOMALIES_CONFIRMABLES.includes(a));
+      if (r.decision === 'invalide') { lignes.push({ releve: r, statut: 'invalide', anomalies: an }); continue; }
+      if (an.length && !(confirmable && r.decision === 'confirme')) { lignes.push({ releve: r, statut: 'suspect', anomalies: an, confirmable }); continue; }
+      if (q != null) {
+        const j = minutesBetween(debut, r.le) / 1440;
+        segments.push({ debut, fin: r.le, quantite: arrondi(q), estime: !!r.estime || !!(mode === 'cumulatif' && base?.estime) });
+        if (j > 0) taux.push(q / j);
+      }
+      base = mode === 'cumulatif' ? { le: r.le, valeur: v, coef, estime: !!r.estime } : { le: r.le, coef };
+      lignes.push({ releve: r, statut: 'retenu', anomalies: an });
+    }
+    return { lignes, segments };
+  }
+
+  /** Consommation sur une période demandée : seulement la partie couverte par des relevés, couverture affichée.
+   *  Un segment à cheval sur une borne n'est compté que si `prorata` est demandé, et le résultat est alors « estimé ». */
+  function consommationPeriode(compteur, releves, du, au, { prorata = false, maintenant = null } = {}) {
+    const d0 = instant(du), d1 = finJour(au), total = minutesBetween(d0, d1);
+    const a = analyserReleves(compteur, releves, { maintenant });
+    const dans = l => l.releve.le >= d0 && l.releve.le < d1;
+    const suspects = a.lignes.filter(l => l.statut === 'suspect' && dans(l)).length;
+    if (compteur.mode === 'instantane') {
+      const v = a.lignes.filter(l => l.statut === 'retenu' && dans(l)).map(l => Number(l.releve.valeur));
+      return { mode: 'instantane', unite: compteur.unite, quantite: null, nb: v.length, min: v.length ? Math.min(...v) : null,
+        max: v.length ? Math.max(...v) : null, derniere: v.length ? v[v.length - 1] : null, suspects };
+    }
+    let q = 0, couvert = 0, partiels = 0, estime = false;
+    for (const s of a.segments) {
+      if (s.fin <= d0 || s.debut >= d1) continue;
+      if (s.debut >= d0 && s.fin <= d1) { q += s.quantite; couvert += minutesBetween(s.debut, s.fin); estime = estime || s.estime; continue; }
+      partiels++;
+      if (!prorata) continue;
+      const deb = s.debut > d0 ? s.debut : d0, fin = s.fin < d1 ? s.fin : d1, part = minutesBetween(deb, fin);
+      q += s.quantite * part / minutesBetween(s.debut, s.fin); couvert += part; estime = true;
+    }
+    return { mode: compteur.mode || 'cumulatif', unite: compteur.unite, quantite: couvert > 0 ? arrondi(q) : null,
+      couvertureJours: jours(couvert), periodeJours: jours(total), complet: couvert >= total, segmentsPartiels: partiels, estime, suspects };
+  }
+
+  /** Point retenu le plus proche d'une date de facture (écart en jours ≤ tolérance), parmi les bornes des segments. */
+  function pointProche(segments, date, toleranceJours) {
+    let best = null;
+    for (const p of new Set(segments.flatMap(s => [s.debut, s.fin]))) {
+      const e = Math.abs(daysBetween(p, date));
+      if (e <= toleranceJours && (!best || e < best.e)) best = { le: p, e };
+    }
+    return best?.le || null;
+  }
+
+  /** Facturé / mesuré sur l'intervalle exact de la facture (du 15 au 15 n'est pas un mois civil).
+   *  Bornes non couvertes par des relevés : « incomplet », jamais un écart certain. */
+  function rapprochementFacture(facture, compteurs, releves, { toleranceJours = 1, tolerancePct = 2, maintenant = null } = {}) {
+    const liste = compteurs.filter(c => (facture.compteurIds || []).includes(c.id));
+    const details = liste.map(c => {
+      if (c.unite !== facture.unite) return { compteurId: c.id, mesure: null, manque: 'unite' };
+      const { segments } = analyserReleves(c, releves, { maintenant });
+      const deb = pointProche(segments, facture.du, toleranceJours), fin = pointProche(segments, facture.au, toleranceJours);
+      if (!deb || !fin || fin <= deb) return { compteurId: c.id, mesure: null, debut: deb, fin, manque: !deb ? 'debut' : 'fin' };
+      const dedans = segments.filter(s => s.debut >= deb && s.fin <= fin);
+      const couvert = dureeUnion(dedans.map(s => [s.debut, s.fin]));
+      const mesure = arrondi(dedans.reduce((t, s) => t + s.quantite, 0));
+      return { compteurId: c.id, mesure, debut: deb, fin, estime: dedans.some(s => s.estime), manque: couvert < minutesBetween(deb, fin) ? 'continuite' : null };
+    });
+    const base = { facture: facture.quantite ?? null, unite: facture.unite, details };
+    if (!liste.length) return { ...base, statut: 'incomplet', mesure: null, ecart: null, ecartPct: null };
+    if (details.some(d => d.manque === 'unite')) return { ...base, statut: 'unites_differentes', mesure: null, ecart: null, ecartPct: null };
+    const mesure = arrondi(details.reduce((t, d) => t + (d.mesure || 0), 0));
+    if (details.some(d => d.manque) || facture.quantite == null) return { ...base, statut: 'incomplet', mesure, ecart: null, ecartPct: null };
+    const ecart = arrondi(Number(facture.quantite) - mesure), ecartPct = mesure ? Math.round(ecart / mesure * 1000) / 10 : null;
+    return { ...base, statut: ecartPct != null && Math.abs(ecartPct) <= tolerancePct ? 'concordant' : 'ecart', mesure, ecart, ecartPct,
+      estime: details.some(d => d.estime) };
+  }
+
+  /** Principal et sous-compteurs ne s'additionnent jamais : résidu = principal − Σ sous-compteurs, « à expliquer ». */
+  function residuSousComptage(principal, sous, releves, du, au, { seuilPct = 5, toleranceJours = 1, maintenant = null } = {}) {
+    const p = consommationPeriode(principal, releves, du, au, { maintenant });
+    const ss = sous.map(c => ({ compteur: c, conso: c.unite === principal.unite ? consommationPeriode(c, releves, du, au, { maintenant }) : null }));
+    const horsUnite = ss.filter(x => !x.conso).map(x => x.compteur.id);
+    const comparables = p.quantite != null && !horsUnite.length
+      && ss.every(x => x.conso.quantite != null && Math.abs(x.conso.couvertureJours - p.couvertureJours) <= toleranceJours);
+    if (!comparables) return { statut: 'non_comparable', principal: p, sous: ss, horsUnite, residu: null, residuPct: null };
+    const residu = arrondi(p.quantite - ss.reduce((t, x) => t + x.conso.quantite, 0));
+    const residuPct = p.quantite ? Math.round(residu / p.quantite * 1000) / 10 : null;
+    const statut = residuPct == null ? 'non_comparable' : residuPct < -seuilPct ? 'incoherent' : residuPct > seuilPct ? 'a_expliquer' : 'faible';
+    return { statut, principal: p, sous: ss, horsUnite, residu, residuPct };
+  }
+
+  /** Totaux par ressource et par unité ; jamais de total toutes énergies confondues. Non mesuré ≠ zéro. */
+  function totauxParUnite(lignes) {
+    const t = new Map();
+    for (const l of lignes) {
+      const k = `${l.ressource}|${l.unite}`;
+      const x = t.get(k) || { ressource: l.ressource, unite: l.unite, quantite: null, nonMesures: 0 };
+      if (l.quantite == null) x.nonMesures++; else x.quantite = arrondi((x.quantite || 0) + Number(l.quantite));
+      t.set(k, x);
+    }
+    return [...t.values()];
+  }
+
+  /** Compteurs à relever : dernier relevé (même suspect) + fréquence en jours ≤ aujourd'hui ; jamais relevé = dû. */
+  function relevesDus(compteurs, releves, today) {
+    return compteurs.filter(c => c.actif !== false && num(c.frequenceJours) > 0).map(c => {
+      const der = releves.filter(r => r.compteurId === c.id && r.decision !== 'invalide').reduce((m, r) => (!m || r.le > m ? r.le : m), null);
+      const prochaine = der ? addDays(der, num(c.frequenceJours)) : today.slice(0, 10);
+      return { compteur: c, dernier: der, prochaine, retardJours: daysBetween(prochaine, today) };
+    }).filter(x => x.prochaine <= today.slice(0, 10)).sort((a, b) => b.retardJours - a.retardJours);
+  }
+
+  /** Bilan d'une cuve : stock initial + livraisons + transferts entrants − stock final − transferts sortants (même unité). */
+  function bilanCombustible({ unite, stockInitial, stockFinal, livraisons = [], transfertsEntrants = [], transfertsSortants = [], usageMesure = null }) {
+    const mvts = [...livraisons, ...transfertsEntrants, ...transfertsSortants];
+    if (mvts.some(m => m.unite && m.unite !== unite)) return { unite, sorti: null, erreur: 'unites' };
+    const manque = [stockInitial == null && 'stock_initial', stockFinal == null && 'stock_final'].filter(Boolean);
+    if (manque.length) return { unite, sorti: null, manque };
+    const s = l => l.reduce((t, m) => t + num(m.quantite), 0);
+    const sorti = arrondi(num(stockInitial) + s(livraisons) + s(transfertsEntrants) - num(stockFinal) - s(transfertsSortants));
+    return { unite, sorti, incoherent: sorti < 0, ecartUsage: usageMesure == null ? null : arrondi(sorti - num(usageMesure)) };
+  }
+
+  /** Montants de factures par devise ; montant inconnu compté à part, jamais comme zéro. */
+  function totalFactures(factures) {
+    const t = {};
+    let sansMontant = 0;
+    for (const f of factures) {
+      if (f.montantHT == null || f.montantHT === '') { sansMontant++; continue; }
+      const d = f.devise || 'MAD';
+      t[d] = arrondi((t[d] || 0) + Number(f.montantHT));
+    }
+    return { parDevise: t, sansMontant };
+  }
+
+  const Calculs = { UNITES, UNITES_RESSOURCE, ANOMALIES_CONFIRMABLES, analyserReleves, consommationPeriode, rapprochementFacture, residuSousComptage, totauxParUnite, relevesDus, bilanCombustible, totalFactures,
+    montantCommande, isolementsEnAttente, consommationHebdo, seuilIndicatif, seuilActif, besoinsNonCouverts, receptionLigne, etatAchat, qteEnCommande, qteIsolee, situationArticle, aReapprovisionner, prixMAD, valorisation, coutConsomme, besoinsAServir, attentesALever, piecesDetenues, stockPhysique, qteReservee, stockDisponible, etatBesoin, rapprochementBesoin, retraitsAVerifier, qteRemise, addDays, daysBetween, minutesBetween, dureeUnion, mediane, NATURE_DU_BESOIN, ETAT_RANK, otOuvert, demandeOuverte, indexOtsParDemande, etatEquipement, verifierCloture, echeanceSuivante, indicateurs };
   if (typeof module === 'object' && module.exports) module.exports = Calculs; else root.Calculs = Calculs;
 })(this);

@@ -1,6 +1,6 @@
 # Volet D — Énergie et eau : proposition de conception
 
-Statut : **proposition à valider** (6 nov. 2026). Rien n'est encore codé.
+Statut : **validé le 6 nov. 2026** avec les ajustements de la section 6. D1 (calculs et tests) fait le 6 nov. 2026.
 Références V3 : §19 (compteurs, modes de mesure, contrôle ciblé des relevés), §20 (factures, bilan combustible, air
 comprimé et froid, de l'écart à l'intervention, ratios), §21 (écrans Énergie et eau, pilotage, qualité des données),
 §36 (modèle : compteur, relevé et rupture, anomalie, facture et bilan, donnée externe), §37 (scénarios : index remplacé,
@@ -76,16 +76,31 @@ jamais d'addition entre unités, jamais de valeur inventée, jamais d'économie 
 | D4 | Énergie : consommations, à examiner, créer une demande, factures et rapprochement | Navigateur, rôles |
 | D5 | Démo (compteurs, relevés dont un suspect et un remplacement, facture du 15 au 15), guide, recette, publication | — |
 
-## 6. Choix à valider
+## 6. Choix validés (6 nov. 2026)
 
-1. **Module « energie » dans le pack Entreprise** (comme prévu) ; option possible pour le Pro plus tard.
-2. **Ressources proposées** : électricité, eau, gasoil, fuel, gaz, air comprimé, froid (+ « autre ») ; unités par
-   ressource (kWh, m³, L, Nm³, h, cycles, °C, bar).
-3. **Qui saisit les relevés** : techniciens et prestataires, **plus l'exploitation** (souvent ce sont les opérateurs qui
-   font la tournée) ; le responsable désigne un relevé « attendu de » par compteur, sans exclure les autres.
-4. **Relevés immuables** : une erreur se corrige par un nouveau relevé lié (historique conservé), jamais en écrasant.
-5. **Relevé suspect gardé et exclu des calculs** jusqu'à décision ; couverture affichée ; aucune interpolation.
-6. **Factures saisies à la main** (photo du PDF possible), montants en lecture restreinte (pas d'OCR dans ce volet).
-7. **Bilan des cuves de combustible** inclus en D5 (si tu as des clients avec gasoil / fuel stockés) ; sinon reporté.
-8. **Ratios de production** (kWh par tonne…) reportés au volet E (pilotage), car ils exigent une donnée de production
-   datée et fiable.
+1. **Module « energie » dans le pack Entreprise.**
+2. **Ressources** : électricité, eau, gasoil, fuel, gaz, air comprimé, froid, « autre » ; unités kWh, m³, L, kg, Nm³, h,
+   cycles, °C, bar (`Calculs.UNITES_RESSOURCE`).
+3. **Saisie des relevés** : techniciens, prestataires et exploitation ; **photo du compteur facultative** à chaque relevé.
+   Deux modes à l'écran : **cumulatif** (index) ou **non cumulatif** (quantité consommée depuis le relevé précédent ou sur
+   une période) ; la valeur instantanée (température, pression) existe dans les calculs et sera proposée en option.
+   **Fréquence de relevé en jours** par compteur. Les factures sont mensuelles : le rapprochement se fait sur leurs dates
+   exactes, quelle que soit la fréquence des relevés.
+4. **Relevés jamais écrasés** (recommandation retenue) : à l'écran, un bouton « Corriger » ; on ressaisit la valeur, l'appli
+   crée un nouveau relevé lié et affiche l'ancien barré « remplacé ». Même effort qu'une modification pour l'utilisateur,
+   mais l'historique reste prouvable (contestation de facture, audit, deux appareils hors ligne qui corrigent en même temps).
+5. **Relevé suspect gardé et exclu** jusqu'à décision. Seule une variation inhabituelle peut être « confirmée » ; une baisse
+   d'index, un doublon, une unité fausse ou un chevauchement se corrigent (nouveau relevé ou rupture déclarée).
+6. **Factures** : on joint le PDF ou la photo (pièce jointe, taille limitée) et on saisit à la main la période (du / au),
+   la quantité (kWh, m³…), le montant HT (TTC facultatif) et les compteurs concernés. Pas de lecture automatique.
+   Montants en lecture restreinte.
+7. **Bilan des cuves** : calcul prêt (D1) ; écran en D5 si les étapes précédentes se passent bien, sinon petite étape D6.
+8. **Ratios de production** (kWh par tonne…) : volet E, à discuter.
+
+## 7. Fait en D1 (6 nov. 2026)
+
+`js/calculs.js` : `analyserReleves` (statut de chaque relevé : retenu, suspect, invalidé, remplacé, rupture ; segments de
+consommation), `consommationPeriode` (couverture, prorata seulement sur demande et « estimé »), `rapprochementFacture`
+(bornes au plus proche du relevé, tolérance 1 jour ; incomplet si une borne manque), `residuSousComptage` (à expliquer,
+incohérent, non comparable), `totauxParUnite`, `relevesDus`, `bilanCombustible`, `totalFactures`.
+`tests/energie.test.js` : 16 tests dont les 7 scénarios V3 §37.
