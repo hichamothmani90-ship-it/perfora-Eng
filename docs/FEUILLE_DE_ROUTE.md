@@ -76,6 +76,7 @@ Objectif : plusieurs clients isolés sur la même plateforme, chacun avec ses si
   délai, quantités) → réceptions partielles → contrôle / isolement → mise en stock.
 - **Valorisation** : coût moyen pondéré (CUMP), coût inconnu signalé (jamais zéro), historique figé sur les mouvements.
 - Profil « Achats » facultatif (V3 §24).
+- **Proposition détaillée** : [`VOLET_C_CONCEPTION.md`](VOLET_C_CONCEPTION.md) (choix à valider, étapes C1 à C5).
 
 ### Volet D — Énergie et eau  · ~3 semaines  (V3 §19 mesures énergie et eau, §20 rapprochements, §36)
 - **Compteurs** : ressource (électricité, gaz, eau, air, fioul…), mode (cumulatif, par période, instantané), unité,
