@@ -195,6 +195,12 @@ const Sync = (() => {
       p_max_sites: v.maxSites ?? null, p_max_utilisateurs_site: v.maxUtilisateursSite ?? null, p_max_utilisateurs_total: v.maxUtilisateursTotal ?? null }),
     ajouterSite: (ent, code, nom) => rpc('pf_ajouter_site', { p_entreprise: ent, p_code: code, p_nom: nom }),
     reinitialiserDemo: ent => rpc('pf_reinitialiser_demo', { p_entreprise: ent }),
+    // mise en service d'un client (supabase/mise_en_service.sql)
+    referentiel: ent => rpc('pf_referentiel', { p_entreprise: ent }),
+    importer: (ent, lot, fichier, fiches, essai) => rpc('pf_importer', { p_entreprise: ent, p_lot: lot, p_fichier: fichier, p_fiches: fiches, p_essai: !!essai }),
+    annulerLot: (ent, lot) => rpc('pf_annuler_lot', { p_entreprise: ent, p_lot: lot }),
+    mesLire: ent => rpc('pf_mes_lire', { p_entreprise: ent }),
+    mesEtape: (ent, cle, fait) => rpc('pf_mes_etape', { p_entreprise: ent, p_cle: cle, p_fait: !!fait }),
   };
   async function definirProfil(cible, role, nom, actif) {
     await api('/rest/v1/rpc/definir_profil', { method: 'POST', body: JSON.stringify({ cible, nouveau_role: role, nouveau_nom: nom, est_actif: actif }) });

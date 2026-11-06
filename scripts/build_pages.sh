@@ -12,6 +12,7 @@ if [ "$cible" = "app" ]; then
   cp index.html sw.js manifest.webmanifest icon.svg dist/
   cp -r css js dist/
   cp deploy/app/_headers dist/_headers
+  mkdir -p dist/kit && cp kit/Kit_demarrage_Perfora.xlsx dist/kit/   # kit vide, téléchargeable depuis la console
 else
   echo "Cible inconnue : $cible (seule « app » existe ; le site est dans le dépôt perfora-site)" >&2; exit 1
 fi

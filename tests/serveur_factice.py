@@ -12,15 +12,16 @@ Aide aux tests : GET /etat ; POST /test/abonnement {"entreprise":"AUTRE","statut
 Quotas (comme supabase/quotas.sql) : rpc/utilisation, rpc/affecter_sites, functions/v1/inviter.
 Console plateforme (comme supabase/plateforme.sql) : rpc/pf_* ; test@gmao.test est administrateur plateforme.
 Lancer : python tests/serveur_factice.py [port]   (8099 par défaut). Données en mémoire."""
-import json, secrets, sys, threading, time
+import json, re, secrets, sys, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
 PORT = next((int(a) for a in sys.argv[1:] if a.isdigit()), 8099)
 CLE = "cle-factice"
 APPEND_ONLY = {"journal", "mouvements", "photos"}
-TYPES = {"localisations", "equipements", "personnes", "demandes", "ots", "programmes", "articles", "mouvements", "journal", "photos", "besoins", "seuils", "achats", "valorisations", "compteurs", "releves", "factures_energie", "parametres"}
-COMMUNS = {"personnes", "articles", "parametres"}
+TYPES = {"localisations", "equipements", "personnes", "demandes", "ots", "programmes", "articles", "mouvements", "journal", "photos", "besoins", "seuils", "achats", "valorisations", "compteurs", "releves", "factures_energie", "parametres", "fournisseurs"}
+COMMUNS = {"personnes", "articles", "parametres", "fournisseurs"}
+LOTS, ETAPES = {}, {}     # reprise des données (supabase/mise_en_service.sql)
 COUTS = {"achats", "valorisations", "factures_energie"}          # lecture restreinte (supabase/achats.sql, energie.sql)
 VOIT_COUTS = {"responsable", "magasinier", "achats", "pilote"}
 
@@ -71,19 +72,39 @@ def peut_ecrire(r, t):
         return r in ("magasinier", "technicien", "prestataire")
     if t == "releves":
         return r in ("technicien", "prestataire", "exploitation")
+    if t == "fournisseurs":
+        return r in ("magasinier", "achats")
     if t == "factures_energie":
         return r == "achats"
     return False
 
 
 def module_de(t):
-    return ("magasin" if t in ("articles", "mouvements", "besoins", "seuils") else "achats" if t in ("achats", "valorisations")
+    return ("magasin" if t in ("articles", "mouvements", "besoins", "seuils", "fournisseurs") else "achats" if t in ("achats", "valorisations")
             else "energie" if t in ("compteurs", "releves", "factures_energie") else "preventif" if t == "programmes" else "base")
 
 
 def cloture_par_responsable(ent):
     f = fiches.get("parametres-" + ENTREPRISES[ent]["id"])
     return bool(f and f["entreprise"] == ent and f["data"].get("clotureParResponsable"))
+
+
+def module_compteur(t, pa, ex, ent, mod):
+    """D2 bis : un compteur d'équipement (et ses relevés, son journal) relève du préventif."""
+    exd = (ex or {}).get("data", {})
+    if t == "compteurs":
+        u = pa.get("usage") or exd.get("usage")
+    elif t == "releves":
+        c = fiches.get(pa.get("compteurId") or exd.get("compteurId") or "")
+        u = c and c["entreprise"] == ent and c["data"].get("usage")
+    elif t == "journal" and pa.get("entite") in ("compteurs", "releves"):
+        x = fiches.get(pa.get("entiteId") or "")
+        if x and x["type"] == "releves":
+            x = fiches.get(x["data"].get("compteurId") or "")
+        u = x and x["entreprise"] == ent and x["data"].get("usage")
+    else:
+        return mod
+    return "preventif" if u == "equipement" else mod
 
 
 def role_de(email):
@@ -136,6 +157,69 @@ def visible(f, email):
     cout = (f["type"] in COUTS or (f["type"] == "journal" and f["data"].get("entite") in COUTS)
             or (f["type"] == "photos" and f["data"].get("parentType") == "factures_energie"))
     return f["entreprise"] == p["entreprise"] and (f["site"] is None or f["site"] in mes_sites(email)) and (not cout or p["role"] in VOIT_COUTS)
+
+
+ADMIS = ("localisations", "equipements", "compteurs", "releves", "fournisseurs", "articles", "mouvements", "valorisations", "programmes", "personnes")
+COMMUNS_IMPORT = ("articles", "fournisseurs", "personnes")
+REFS = (("localisationId", "localisations"), ("parentId", None), ("equipementId", "equipements"), ("compteurId", "compteurs"),
+        ("articleId", "articles"), ("mouvementId", "mouvements"), ("fournisseurId", "fournisseurs"))
+
+
+def importer(code, b):
+    """Miroir de pf_importer : tout ou rien ; p_essai = vérification à blanc."""
+    lot, lst, essai = b.get("p_lot") or "", b.get("p_fiches") or [], bool(b.get("p_essai"))
+    if not re.match(r"^[A-Za-z0-9-]{6,64}$", lot):
+        return 400, {"message": "Identifiant de lot invalide"}
+    if lot in LOTS:
+        return 400, {"message": "Ce lot a déjà été importé"}
+    if not lst:
+        return 400, {"message": "Aucune fiche à importer"}
+    with verrou:
+        nouveau, refus, resume = {}, [], {}
+        tout = lambda: list(fiches.values()) + list(nouveau.values())
+        for f in lst:
+            t, d = f.get("type"), {**(f.get("data") or {}), "id": f.get("id"), "lotImport": lot}
+            s, motif = None, None
+            if t not in ADMIS:
+                motif = "type non importable"
+            elif not f.get("id"):
+                motif = "identifiant manquant"
+            elif f["id"] in fiches or f["id"] in nouveau:
+                motif = "identifiant déjà utilisé"
+            elif t not in COMMUNS_IMPORT:
+                s = d.get("siteId")
+                if s not in SITES or SITES[s]["entreprise"] != code:
+                    motif = "site absent ou d'une autre entreprise"
+            if not motif:
+                meme = [x for x in tout() if x["entreprise"] == code and x["type"] == t]
+                up = lambda v: (v or "").upper()
+                if t in ("equipements", "compteurs") and any(up(x["data"].get("code")) == up(d.get("code")) for x in meme):
+                    motif = "code équipement déjà utilisé" if t == "equipements" else "code compteur déjà utilisé"
+                elif t == "localisations" and any(x["site"] == s and up(x["data"].get("code")) == up(d.get("code")) for x in meme):
+                    motif = "code de lieu déjà utilisé sur ce site"
+                elif t == "articles" and any(up(x["data"].get("ref")) == up(d.get("ref")) for x in meme):
+                    motif = "référence d'article déjà utilisée"
+                elif t == "fournisseurs" and any((x["data"].get("nom") or "").lower() == (d.get("nom") or "").lower() for x in meme):
+                    motif = "fournisseur déjà présent"
+            if motif:
+                refus.append({"id": f.get("id"), "type": t, "motif": motif})
+                continue
+            nouveau[f["id"]] = {"id": f["id"], "type": t, "data": d, "entreprise": code, "site": s}
+            resume[t] = resume.get(t, 0) + 1
+        par_id = {x["id"]: x for x in tout()}
+        for x in nouveau.values():
+            for k, cible in REFS:
+                v = x["data"].get(k)
+                y = par_id.get(v) if v else None
+                if v and not (y and y["entreprise"] == code and y["type"] == (cible or x["type"])):
+                    refus.append({"id": x["id"], "type": x["type"], "motif": f"référence introuvable ({k})"})
+        importe = not essai and not refus
+        if importe:
+            for x in nouveau.values():
+                seq[0] += 1
+                fiches[x["id"]] = {**x, "seq": seq[0]}
+            LOTS[lot] = {"id": lot, "entreprise": code, "creeLe": time.strftime("%Y-%m-%dT%H:%M:%S"), "fichier": b.get("p_fichier"), "resume": resume, "annuleLe": None, "seq": seq[0]}
+    return 200, {"essai": essai, "acceptes": len(nouveau), "refus": refus, "resume": resume, "importe": importe}
 
 
 def nouvelle_session(email):
@@ -295,8 +379,8 @@ class H(BaseHTTPRequestHandler):
                     motif = "fiche d'une autre entreprise"
                 elif t == "journal" and pa.get("entiteId") in refuses:
                     motif = "modification liée refusée"
-                elif module_de(cible) not in dr["modules"]:
-                    motif = f"module « {module_de(cible)} » non inclus dans l'abonnement"
+                elif module_compteur(t, pa, ex, ent, module_de(cible)) not in dr["modules"]:
+                    motif = f"module « {module_compteur(t, pa, ex, ent, module_de(cible))} » non inclus dans l'abonnement"
                 elif not peut_ecrire(r, cible):
                     motif = f"droits insuffisants ({r})"
                 # volet B (miroir de supabase/magasin.sql)
@@ -340,9 +424,9 @@ class H(BaseHTTPRequestHandler):
                 elif t == "parametres" and f["id"] != "parametres-" + ENTREPRISES[ent]["id"]:
                     motif = "paramètres : identifiant réservé à l'entreprise"
                 # volet D (miroir de supabase/energie.sql)
-                elif t == "compteurs" and ex and any(k in pa and pa[k] != ex["data"].get(k) for k in ("mode", "unite", "coefficient")) \
+                elif t == "compteurs" and ex and any(k in pa and pa[k] != ex["data"].get(k) for k in ("mode", "unite", "coefficient", "usage")) \
                         and any(x["type"] == "releves" and x["entreprise"] == ent and x["data"].get("compteurId") == f["id"] for x in fiches.values()):
-                    motif = "compteur déjà relevé : mode, unité et coefficient ne changent que par une rupture déclarée"
+                    motif = "compteur déjà relevé : usage, mode, unité et coefficient ne changent plus (rupture déclarée ou nouveau compteur)"
                 elif t == "releves" and not ex and not (fiches.get(pa.get("compteurId") or "") or {}).get("type") == "compteurs":
                     motif = "un relevé se rattache à un compteur connu"
                 elif t == "releves" and not ex and fiches[pa["compteurId"]]["entreprise"] != ent:
@@ -433,6 +517,43 @@ class H(BaseHTTPRequestHandler):
                                    "data": {**d, "id": fid, "siteId": site, "creeLe": d.get("creeLe", "2026-11-06T08:00"), "modifieLe": "2026-11-06T08:00"}}
             e["reinitLe"] = time.strftime("%Y-%m-%dT%H:%M:%S")
             return self.repondre(200, {"fiches": len(seed), "reinitLe": e["reinitLe"]})
+        if nom == "pf_referentiel":
+            mine = lambda t: [f for f in fiches.values() if f["entreprise"] == code and f["type"] == t]
+            return self.repondre(200, {
+                "sites": [{"id": k, "code": v["code"], "nom": v["nom"]} for k, v in SITES.items() if v["entreprise"] == code],
+                "localisations": [{"id": f["id"], "code": f["data"].get("code"), "siteId": f["site"]} for f in mine("localisations")],
+                "equipements": [{"id": f["id"], "code": f["data"].get("code"), "siteId": f["site"]} for f in mine("equipements")],
+                "compteurs": [{"id": f["id"], "code": f["data"].get("code"), "siteId": f["site"], "unite": f["data"].get("unite")} for f in mine("compteurs")],
+                "articles": [{"id": f["id"], "ref": f["data"].get("ref")} for f in mine("articles")],
+                "fournisseurs": [{"id": f["id"], "nom": f["data"].get("nom")} for f in mine("fournisseurs")],
+                "personnes": [{"id": f["id"], "nom": f["data"].get("nom")} for f in mine("personnes")]})
+        if nom == "pf_importer":
+            return self.repondre(*importer(code, b))
+        if nom == "pf_annuler_lot":
+            l = LOTS.get(b.get("p_lot"))
+            if not l or l["entreprise"] != code:
+                return self.repondre(400, {"message": "Lot inconnu pour cette entreprise"})
+            if l["annuleLe"]:
+                return self.repondre(400, {"message": "Lot déjà annulé"})
+            with verrou:
+                if any(f["entreprise"] == code and f["seq"] > l["seq"] and f["type"] != "parametres" for f in fiches.values()):
+                    return self.repondre(400, {"message": "Le client (ou un lot plus récent) a enregistré des données depuis cet import : annulation impossible, corrigez fiche par fiche"})
+                ids = [i for i, f in fiches.items() if f["entreprise"] == code and f["data"].get("lotImport") == l["id"]]
+                for i in ids:
+                    del fiches[i]
+            l["annuleLe"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+            return self.repondre(200, {"supprimees": len(ids)})
+        if nom == "pf_mes_lire":
+            return self.repondre(200, {"etapes": ETAPES.get(code, {}), "lots": sorted(({k: v for k, v in l.items() if k not in ("entreprise", "seq")} for l in LOTS.values() if l["entreprise"] == code), key=lambda l: l["creeLe"], reverse=True)})
+        if nom == "pf_mes_etape":
+            if b.get("p_cle") not in ("kit_envoye", "kit_recu", "import", "responsable_invite", "qr_imprimes", "equipe_invitee", "mise_en_service"):
+                return self.repondre(400, {"message": "Étape inconnue"})
+            et = ETAPES.setdefault(code, {})
+            if b.get("p_fait"):
+                et[b["p_cle"]] = time.strftime("%Y-%m-%dT%H:%M:%S")
+            else:
+                et.pop(b["p_cle"], None)
+            return self.repondre(200, et)
         return self.repondre(404, {"message": "inconnu"})
 
     def mon_profil(self, email):

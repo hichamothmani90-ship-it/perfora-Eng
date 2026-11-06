@@ -7,11 +7,12 @@ const Store = (() => {
   // v4 (volet B) : store « besoins » (demandes de pièces depuis une intervention).
   // v5 (volet C) : stores « seuils », « achats », « valorisations ».
   // v6 (volet D) : stores « compteurs », « releves », « factures_energie », « parametres » (réglages de l'entreprise).
+  // v7 (mise en service) : store « fournisseurs ».
   // Les stores existants sont conservés tels quels.
-  const DB_VER = 6;
+  const DB_VER = 7;
   const TYPES = ['localisations', 'equipements', 'personnes', 'demandes', 'ots',
     'programmes', 'articles', 'mouvements', 'journal', 'meta', 'photos', 'sortie', 'besoins', 'seuils', 'achats', 'valorisations',
-    'compteurs', 'releves', 'factures_energie', 'parametres'];
+    'compteurs', 'releves', 'factures_energie', 'parametres', 'fournisseurs'];
   /** Données métier (exportées, synchronisées). meta et sortie restent propres à l'appareil. */
   const METIER = TYPES.filter(t => t !== 'meta' && t !== 'sortie');
   const APPEND_ONLY = ['journal', 'mouvements', 'photos'];
