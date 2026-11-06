@@ -1,0 +1,12 @@
+{
+  "name": "GMAO terrain",
+  "short_name": "GMAO",
+  "description": "Maintenance terrain : signaler, intervenir, clôturer — hors ligne.",
+  "lang": "fr",
+  "start_url": "./#/accueil",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f5f1",
+  "theme_color": "#1d4ed8",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
