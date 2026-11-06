@@ -45,8 +45,17 @@ ne déclare pas perfora.ma ; l'ancien dépôt n'a plus d'effet une fois les DNS 
   `https://app.perfora.ma/**` et `https://hichamothmani90-ship-it.github.io/perfora-Eng/**` (transition).
 - v22 : adresse par défaut des QR codes = app.perfora.ma ; bandeau « Perfora déménage » sur l'ancienne adresse github.io.
 - Chaque `git push` sur main publie automatiquement : GitHub Pages (ancienne adresse) et app.perfora.ma (Cloudflare).
-- Reste : `contact@perfora.ma` (Cloudflare Email Routing → Gmail, confirmation par e-mail à faire par toi), envoi des
-  invitations par un service dédié depuis no-reply@perfora.ma, redirection www → perfora.ma (facultatif).
+- **E-mails (6 nov. 2026)** :
+  - Réception : Cloudflare Email Routing actif sur perfora.ma ; règle `contact@perfora.ma` → hicham.othmani90@gmail.com
+    (adresse déjà vérifiée) ; enregistrements MX route1-3.mx.cloudflare.net, SPF `include:_spf.mx.cloudflare.net`, DKIM cf2024-1.
+  - Envoi : Resend (compte existant, qui contient aussi auth.audixa.ma), domaine perfora.ma **vérifié**, région Irlande
+    (eu-west-1), suivi des ouvertures et des clics désactivé. DNS ajoutés à la main (pas d'accès donné à Resend sur
+    Cloudflare) : `resend._domainkey` TXT, `rsend` et `send` CNAME (DNS only), `_dmarc` TXT `v=DMARC1; p=none;`.
+  - Supabase → Authentication → Emails → SMTP : smtp.resend.com, port 465, utilisateur `resend`, mot de passe = clé
+    d'API Resend « Supabase Perfora » (droit d'envoi seulement, saisie par Hicham), expéditeur `no-reply@perfora.ma`,
+    nom « Perfora ». Limite Supabase : 30 e-mails d'authentification par heure (réglable).
+  - Restes facultatifs : redirection www → perfora.ma ; supprimer l'ancien `default._domainkey` (hérité de Nindohost) ;
+    durcir DMARC (`p=quarantine`) après quelques semaines d'envois sans problème.
 
 ## C. Transition des téléphones (important)
 

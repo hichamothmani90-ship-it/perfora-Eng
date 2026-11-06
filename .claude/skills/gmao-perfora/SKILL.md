@@ -279,4 +279,6 @@ Pièges opérationnels déjà rencontrés :
 - Service worker en local (serveur.py, panneau navigateur) : l'inscription peut échouer (« unknown error when fetching
   the script ») sans que le code soit en cause ; la vérification qui fait foi est en ligne (GitHub Pages) : cache
   `gmao-terrain-vNN` complet, ancien cache supprimé, bandeau « Nouvelle version disponible ».
-- E-mails Supabase par défaut : quelques-uns par heure, souvent en indésirables (Outlook).
+- E-mails : depuis le 6 nov. 2026, Supabase envoie par Resend (smtp.resend.com, no-reply@perfora.ma, domaine vérifié,
+  région UE) ; contact@perfora.ma est routé par Cloudflare vers Gmail. Ne jamais recharger une page de réglages où
+  l'utilisateur vient de coller un secret sans avoir enregistré (piège rencontré : saisie perdue).

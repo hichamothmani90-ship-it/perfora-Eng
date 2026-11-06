@@ -40,7 +40,7 @@ multi-entreprise) et concepteur d'interfaces terrain mobile-first. Langue : fran
      réapprovisionner, achats, réception partielle, isolés, valeur du stock ; prix lisibles seulement par responsable,
      magasinier, achats, pilote. Cadrage du lancement : docs/CADRAGE_LANCEMENT.md ;
      phase 1 faite : https://app.perfora.ma (appli, Cloudflare Pages perfora-app) et https://perfora.ma
-     (site, dépôt perfora-site) en ligne ; DNS chez Cloudflare (docs/MISE_EN_LIGNE_PERFORA_MA.md). Reste e-mails pro. Ensuite volet D (énergie et eau). Ou mise
+     (site, dépôt perfora-site) en ligne ; DNS chez Cloudflare (docs/MISE_EN_LIGNE_PERFORA_MA.md). E-mails pro en place (contact@ → Gmail ; envois Supabase par Resend depuis no-reply@perfora.ma). Ensuite volet D (énergie et eau). Ou mise
      en production (docs/RECETTE_VOLET_A.md §4). Démo VITRINE à réinitialiser une fois (nouvelles données magasin).
    - Supabase « gmao-terrain » (réf. oihaqzkqhvyjybijsonc, Frankfurt). Scripts dans l'ordre :
      schema.sql → roles.sql → multitenant.sql → quotas.sql → plateforme.sql → durcissement.sql → magasin.sql → achats.sql → demo.sql ; tests : tests_etancheite, tests_quotas, tests_plateforme, tests_magasin, tests_demo, tests_achats ;
