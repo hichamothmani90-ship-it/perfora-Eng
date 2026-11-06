@@ -39,6 +39,7 @@
       : t === 'mouvements' ? g('besoins', o.besoinId) || g('ots', o.otId)
       : t === 'besoins' ? g('ots', o.otId)
       : t === 'valorisations' ? g('mouvements', o.mouvementId)
+      : t === 'releves' ? g('compteurs', o.compteurId)
       : null;
     return parent || siteCreation();
   });
@@ -58,7 +59,7 @@
     statutDem: { a_examiner: 'À examiner', prise_en_charge: 'Prise en charge', traitement_organise: 'Traitement organisé', close_sans_travail: 'Close sans travail', annulee: 'Annulée' },
     nature: { a_qualifier: 'À qualifier', corrective: 'Corrective', preventive: 'Préventive', assistance_production: 'Assistance production', travaux_techniques: 'Travaux techniques' },
     priorite: { urgence_securite: 'Urgence sécurité', critique_service: 'Critique', rapide: 'Rapide', planifiable: 'Planifiable', a_qualifier: 'À qualifier' },
-    statutOT: { a_preparer: 'À planifier', a_planifier: 'À planifier', planifiee: 'Planifiée', prete: 'Prête', en_cours: 'En cours', suspendue: 'En attente', travail_termine: 'Travail terminé', cloturee: 'Clôturée', annulee: 'Annulée' },
+    statutOT: { a_preparer: 'À planifier', a_planifier: 'À planifier', planifiee: 'Planifiée', prete: 'Prête', en_cours: 'En cours', suspendue: 'En attente', travail_termine: 'À valider', cloturee: 'Clôturée', annulee: 'Annulée' },
     resultat: { resolu: 'Résolu', retabli_provisoirement: 'Rétabli provisoirement', aucun_defaut_constate: 'Aucun défaut constaté', partiel: 'Partiel', non_resolu: 'Non résolu' },
     certitude: { non_determinee: 'Non déterminée', probable: 'Probable', confirmee: 'Confirmée' },
     famille: { mecanique: 'Mécanique', electrique: 'Électrique', automatisme: 'Automatisme', instrumentation: 'Instrumentation', pneumatique: 'Pneumatique', hydraulique: 'Hydraulique', utilite_externe: 'Utilité externe', autre: 'Autre' },
@@ -130,7 +131,7 @@
     return badge(L.statutDem[d.statut], c);
   }
   function badgeOT(o) {
-    const c = { en_cours: 'blue', planifiee: 'blue', suspendue: 'amber', cloturee: 'green', travail_termine: 'blue' }[o.statut] || '';
+    const c = { en_cours: 'blue', planifiee: 'blue', suspendue: 'amber', cloturee: 'green', travail_termine: 'amber' }[o.statut] || '';
     return badge(L.statutOT[o.statut], c);
   }
   const badgeEtat = e => badge(L.etat[e] || 'Normal', { indisponible: 'red', degrade: 'amber', anomalie: 'amber', normal: 'green' }[e] || '');
@@ -224,7 +225,7 @@
   const role = () => Sync.profil()?.role || null;
   const estResp = () => !role() || role() === 'responsable';
   const DROITS = {
-    responsable: ['eq-new', 'eq-edit', 'loc-new', 'prog-new', 'prog-edit', 'pers-new', 'pers-edit', 'ot-rouvrir', 'sync-tout', 'equipe', 'seuil-valider', 'seuil-refuser', 'achat-valider', 'achat-completer', 'achat-refuser'],
+    responsable: ['eq-new', 'eq-edit', 'loc-new', 'prog-new', 'prog-edit', 'pers-new', 'pers-edit', 'ot-rouvrir', 'sync-tout', 'equipe', 'param-cloture', 'seuil-valider', 'seuil-refuser', 'achat-valider', 'achat-completer', 'achat-refuser'],
     terrain: ['ot-new', 'dem-intervenir', 'dem-planifier', 'prog-ot', 'dem-pec', 'dem-classer', 'ot-demarrer', 'ot-planifier', 'ot-annuler', 'ot-suspendre', 'ot-reprendre', 'ot-terminer', 'ot-cloturer',
       'ot-ajout-int', 'ot-retirer', 'ot-ajout-piece', 'ot-annuler-piece', 'ot-ajout-suite', 'ot-lever',
       'bes-new', 'bes-urgent', 'bes-utilise', 'bes-rendre', 'bes-annuler'],
@@ -233,8 +234,13 @@
     saisie: ['dem-edit', 'dem-annuler', 'photo-ajout', 'signaler'],
   };
   const ACT_MODULE = { 'art-new': 'magasin', mvt: 'magasin', 'mag-reserver': 'magasin', 'mag-remettre': 'magasin', 'mag-indispo': 'magasin', 'mag-rattacher': 'magasin', 'mag-verifier': 'magasin', 'seuil-proposer': 'magasin', 'seuil-valider': 'magasin', 'seuil-refuser': 'magasin', 'achat-new': 'achats', 'achat-soumettre': 'achats', 'achat-annuler': 'achats', 'achat-qte': 'achats', 'achat-valider': 'achats', 'achat-completer': 'achats', 'achat-refuser': 'achats', 'achat-commande': 'achats', 'achat-recevoir': 'achats', 'achat-clore': 'achats', 'iso-decider': 'achats', 'bes-new': 'magasin', 'bes-urgent': 'magasin', 'bes-utilise': 'magasin', 'bes-rendre': 'magasin', 'bes-annuler': 'magasin', 'prog-new': 'preventif', 'prog-edit': 'preventif', 'prog-ot': 'preventif' };
+  // Réglages de l'entreprise (une fiche « parametres », écrite par le responsable, lue par tous).
+  const parametres = () => data.parametres.get('parametres-' + (Sync.profil()?.entreprise?.id || 'local')) || null;
+  /** Clôture réservée au responsable (réglage) : les autres terminent, le responsable valide. */
+  const clotureParResp = () => !!parametres()?.clotureParResponsable && !estResp();
   function autorise(act) {
     const r = role();
+    if (act === 'ot-cloturer' && clotureParResp()) return false;
     if (ACT_MODULE[act] && !aModule(ACT_MODULE[act])) return false;
     if (r && !ecritureOK() && Object.values(DROITS).some(l => l.includes(act))) return false;
     if (!r || r === 'responsable') return true;
@@ -299,6 +305,7 @@
     const me = Store.currentUser();
     const mine = me ? otsO.filter(o => actifs(o).some(i => i.personneId === me.id)) : [];
     const susp = otsO.filter(o => o.statut === 'suspendue');
+    const aValider = estResp() ? otsO.filter(o => o.statut === 'travail_termine') : [];
     const prev = preventifsSansOT(7);
     return `<h1>Aujourd’hui <span class="muted small" style="font-weight:400">${fmtY(today())}</span></h1>
       ${!me ? `<p class="warn">Indiquez qui utilise cet appareil pour signer vos saisies. <a href="#" data-act="who">Choisir</a></p>` : ''}
@@ -310,6 +317,7 @@
         <a class="tile" href="#/preventif"><b>${prev.length}</b><span>Préventifs à lancer (7 j)</span></a>
       </div>
       ${indispo.length ? `<h2>Indisponibles</h2>${indispo.map(eqCard).join('')}` : ''}
+      ${aValider.length ? `<h2>Interventions à valider</h2>${aValider.map(otCard).join('')}` : ''}
       ${me ? `<h2>Mes travaux</h2>${mine.length ? mine.map(otCard).join('') : empty('Aucun travail affecté.')}` : ''}
       <h2>Demandes à examiner</h2>${aEx.length ? aEx.slice(0, 8).map(demCard).join('') : empty('Rien à examiner.')}
       ${susp.length ? `<h2>Travaux en attente</h2>${susp.map(otCard).join('')}` : ''}
@@ -648,6 +656,8 @@
         <p class="small muted">Version de l’appli : <b>${APP_VERSION}</b> · ${Sync.etatCourant().configure ? (Sync.etatCourant().connecte ? 'connectée au cloud' : 'cloud configuré, non connectée') : '<b>non connectée au cloud</b> (données sur cet appareil uniquement)'}<br>Code appareil : <b>${esc(dev.code)}</b> (dans les références, évite les doublons entre appareils).<br>Hors ligne : ${esc(swState)}</p></div>
       ${blocEntreprise()}
       ${blocSynchro()}
+      ${estResp() ? `<h2>Règles de l’entreprise</h2><div class="card"><div class="row"><span class="grow"><b>Clôture des interventions validée par le responsable</b><br><span class="small muted">${parametres()?.clotureParResponsable ? 'Activé : les techniciens terminent, vous validez la clôture (accueil « Interventions à valider »).' : 'Désactivé : les techniciens clôturent eux-mêmes leurs interventions.'}</span></span>${badge(parametres()?.clotureParResponsable ? 'Activé' : 'Désactivé', parametres()?.clotureParResponsable ? 'green' : '')}</div>
+        <div class="actions" style="margin-bottom:0"><button class="btn sm" data-act="param-cloture">${parametres()?.clotureParResponsable ? 'Désactiver' : 'Activer'}</button></div></div>` : ''}
       ${Sync.profil()?.role === 'responsable' ? `<h2>Équipe et droits</h2><div class="card" id="equipe"><p class="muted small" style="margin:0">Chargement de l’équipe…</p></div>` : ''}
       <h2>Adresse de l’application</h2><div class="card"><p class="small muted" style="margin-top:0">Adresse utilisée dans les QR codes. Elle doit être accessible depuis les téléphones (HTTPS).</p>
         <input type="text" value="${esc(adressePublique())}" data-bind="meta|adresse|url" inputmode="url"></div>
@@ -1102,6 +1112,13 @@
     return true;
   }
   A['ot-cloturer'] = async el => { await cloturer(data.ots.get(el.dataset.id)); };
+  A['param-cloture'] = async () => {
+    const id = 'parametres-' + (Sync.profil()?.entreprise?.id || 'local');
+    const cur = data.parametres.get(id) || { id };
+    await Store.save('parametres', { ...cur, clotureParResponsable: !cur.clotureParResponsable }, { action: 'reglage' });
+    toast(cur.clotureParResponsable ? 'Les techniciens clôturent eux-mêmes' : 'Clôture validée par le responsable');
+    render();
+  };
   // Fin de travail en une fenêtre : ce qu'il faut pour clôturer, puis clôture si tout y est.
   A['ot-terminer'] = async el => {
     const o = data.ots.get(el.dataset.id);
@@ -1116,12 +1133,21 @@
       ...(sansSuite ? [{ name: 'suite', label: 'Suite à donner, si partiel ou non résolu', type: 'text' },
         { name: 'suiteResp', label: 'Responsable de la suite', type: 'select', options: personnesOpts(), empty: '—' }] : []),
     ];
-    const v = await askForm({ title: 'Terminer l’intervention', ok: 'Clôturer', values: { travaux: o.travaux, resultat: o.resultat, certitudeCause: o.certitudeCause, cause: o.cause }, fields });
+    const valider = clotureParResp();
+    if (valider) fields.push({ type: 'info', text: 'Le responsable valide la clôture.' });
+    const v = await askForm({ title: 'Terminer l’intervention', ok: valider ? 'Terminer' : 'Clôturer', values: { travaux: o.travaux, resultat: o.resultat, certitudeCause: o.certitudeCause, cause: o.cause }, fields });
     if (!v) return;
     const patch = { travaux: v.travaux, resultat: v.resultat, certitudeCause: v.certitudeCause || o.certitudeCause, cause: v.cause || null };
     if (v.nature) patch.nature = v.nature;
     if (v.arretFin) patch.arretFin = v.arretFin;
     if (v.suite) patch.reserves = [...(o.reserves || []), { id: Store.uid(), type: 'suite', texte: v.suite, responsableId: v.suiteResp || null, echeance: null, bloquante: false, statut: 'ouverte', creeLe: Store.now() }];
+    if (valider) {
+      const err = Calculs.verifierCloture({ ...o, ...patch });
+      if (err.length) { await edit('ots', o.id, patch, { action: 'saisie_fin' }); await alertBox('Avant de terminer', err.map(e => '• ' + e)); return; }
+      await edit('ots', o.id, { ...patch, statut: 'travail_termine', attentes: fermerAttentes(o) }, { action: 'travail_termine' });
+      toast(`${o.ref} terminée : clôture à valider par le responsable`);
+      return;
+    }
     // Si la clôture n'aboutit pas, la saisie est gardée et l'intervention reste ouverte.
     if (!(await cloturer({ ...o, ...patch }))) await edit('ots', o.id, patch, { action: 'saisie_fin' });
   };

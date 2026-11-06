@@ -6,15 +6,17 @@ const Store = (() => {
   // v2 (lot 0) : store « photos ». v3 (lot 1) : store « sortie » = file d'envoi vers le cloud.
   // v4 (volet B) : store « besoins » (demandes de pièces depuis une intervention).
   // v5 (volet C) : stores « seuils », « achats », « valorisations ».
+  // v6 (volet D) : stores « compteurs », « releves », « factures_energie », « parametres » (réglages de l'entreprise).
   // Les stores existants sont conservés tels quels.
-  const DB_VER = 5;
+  const DB_VER = 6;
   const TYPES = ['localisations', 'equipements', 'personnes', 'demandes', 'ots',
-    'programmes', 'articles', 'mouvements', 'journal', 'meta', 'photos', 'sortie', 'besoins', 'seuils', 'achats', 'valorisations'];
+    'programmes', 'articles', 'mouvements', 'journal', 'meta', 'photos', 'sortie', 'besoins', 'seuils', 'achats', 'valorisations',
+    'compteurs', 'releves', 'factures_energie', 'parametres'];
   /** Données métier (exportées, synchronisées). meta et sortie restent propres à l'appareil. */
   const METIER = TYPES.filter(t => t !== 'meta' && t !== 'sortie');
   const APPEND_ONLY = ['journal', 'mouvements', 'photos'];
   /** Fiches rattachées à un site (les autres — personnes, articles — sont communes à l'entreprise). */
-  const SITE_TYPES = ['localisations', 'equipements', 'demandes', 'ots', 'programmes', 'mouvements', 'photos', 'journal', 'besoins', 'seuils', 'achats', 'valorisations'];
+  const SITE_TYPES = ['localisations', 'equipements', 'demandes', 'ots', 'programmes', 'mouvements', 'photos', 'journal', 'besoins', 'seuils', 'achats', 'valorisations', 'compteurs', 'releves', 'factures_energie'];
   let siteDe = null;
   const definirSite = fn => { siteDe = fn; };
   const data = {};

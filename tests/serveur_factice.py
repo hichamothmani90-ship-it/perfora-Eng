@@ -19,9 +19,9 @@ from urllib.parse import urlparse, parse_qs
 PORT = next((int(a) for a in sys.argv[1:] if a.isdigit()), 8099)
 CLE = "cle-factice"
 APPEND_ONLY = {"journal", "mouvements", "photos"}
-TYPES = {"localisations", "equipements", "personnes", "demandes", "ots", "programmes", "articles", "mouvements", "journal", "photos", "besoins", "seuils", "achats", "valorisations"}
-COMMUNS = {"personnes", "articles"}
-COUTS = {"achats", "valorisations"}          # lecture restreinte (supabase/achats.sql)
+TYPES = {"localisations", "equipements", "personnes", "demandes", "ots", "programmes", "articles", "mouvements", "journal", "photos", "besoins", "seuils", "achats", "valorisations", "compteurs", "releves", "factures_energie", "parametres"}
+COMMUNS = {"personnes", "articles", "parametres"}
+COUTS = {"achats", "valorisations", "factures_energie"}          # lecture restreinte (supabase/achats.sql, energie.sql)
 VOIT_COUTS = {"responsable", "magasinier", "achats", "pilote"}
 
 PACKS = {
@@ -38,12 +38,13 @@ SITES = {  # id -> site
     "s-cas": {"id": "s-cas", "entreprise": "DEMO", "code": "CAS", "nom": "Site Casablanca"},
     "s-rab": {"id": "s-rab", "entreprise": "AUTRE", "code": "RAB", "nom": "Site Rabat"},
 }
-COMPTES = {"test@gmao.test": "test-gmao", "tech2@gmao.test": "test-gmao", "autre@gmao.test": "test-gmao", "mag@gmao.test": "test-gmao", "achat@gmao.test": "test-gmao"}
+COMPTES = {"expl@gmao.test": "test-gmao", "test@gmao.test": "test-gmao", "tech2@gmao.test": "test-gmao", "autre@gmao.test": "test-gmao", "mag@gmao.test": "test-gmao", "achat@gmao.test": "test-gmao"}
 PROFILS = {
     "test@gmao.test": {"role": "responsable", "nom": "Responsable test", "actif": True, "entreprise": "DEMO", "sites": ["s-tng", "s-cas"], "defaut": "s-tng"},
     "tech2@gmao.test": {"role": "technicien", "nom": "Technicien test", "actif": True, "entreprise": "DEMO", "sites": ["s-cas"], "defaut": "s-cas"},
     "autre@gmao.test": {"role": "responsable", "nom": "Responsable Autre", "actif": True, "entreprise": "AUTRE", "sites": ["s-rab"], "defaut": "s-rab"},
     "mag@gmao.test": {"role": "magasinier", "nom": "Magasinier test", "actif": True, "entreprise": "DEMO", "sites": ["s-cas"], "defaut": "s-cas"},
+    "expl@gmao.test": {"role": "exploitation", "nom": "Opérateur test", "actif": True, "entreprise": "DEMO", "sites": ["s-cas"], "defaut": "s-cas"},
     "achat@gmao.test": {"role": "achats", "nom": "Acheteur test", "actif": True, "entreprise": "DEMO", "sites": ["s-cas", "s-tng"], "defaut": "s-tng"},
 }
 
@@ -68,11 +69,21 @@ def peut_ecrire(r, t):
         return r in ("magasinier", "achats")
     if t in ("mouvements", "besoins"):
         return r in ("magasinier", "technicien", "prestataire")
+    if t == "releves":
+        return r in ("technicien", "prestataire", "exploitation")
+    if t == "factures_energie":
+        return r == "achats"
     return False
 
 
 def module_de(t):
-    return "magasin" if t in ("articles", "mouvements", "besoins", "seuils") else "achats" if t in COUTS else "preventif" if t == "programmes" else "base"
+    return ("magasin" if t in ("articles", "mouvements", "besoins", "seuils") else "achats" if t in ("achats", "valorisations")
+            else "energie" if t in ("compteurs", "releves", "factures_energie") else "preventif" if t == "programmes" else "base")
+
+
+def cloture_par_responsable(ent):
+    f = fiches.get("parametres-" + ENTREPRISES[ent]["id"])
+    return bool(f and f["entreprise"] == ent and f["data"].get("clotureParResponsable"))
 
 
 def role_de(email):
@@ -122,7 +133,8 @@ def controle_quota(code, sites, sauf=None):
 
 def visible(f, email):
     p = PROFILS[email]
-    cout = f["type"] in COUTS or (f["type"] == "journal" and f["data"].get("entite") in COUTS)
+    cout = (f["type"] in COUTS or (f["type"] == "journal" and f["data"].get("entite") in COUTS)
+            or (f["type"] == "photos" and f["data"].get("parentType") == "factures_energie"))
     return f["entreprise"] == p["entreprise"] and (f["site"] is None or f["site"] in mes_sites(email)) and (not cout or p["role"] in VOIT_COUTS)
 
 
@@ -272,7 +284,7 @@ class H(BaseHTTPRequestHandler):
                 cible = pa.get("entite") if t == "journal" else t
                 ex = fiches.get(f["id"])
                 motif, s = None, None
-                if t == "mouvements" and ex and ex["entreprise"] == ent and all(ex["data"].get(k) == v for k, v in pa.items()):
+                if t in ("mouvements", "releves") and ex and ex["entreprise"] == ent and all(ex["data"].get(k) == v for k, v in pa.items()):
                     acceptes += 1  # renvoi identique (réponse perdue, envoi complet) : rien à changer
                     continue
                 if t not in TYPES:
@@ -323,8 +335,27 @@ class H(BaseHTTPRequestHandler):
                     motif = "correction d'un prix : réservée au responsable"
                 elif t == "ots" and r != "responsable" and ex and ex["data"].get("statut") == "cloturee":
                     motif = "intervention clôturée : modification réservée au responsable"
+                elif t == "ots" and r != "responsable" and pa.get("statut") == "cloturee" and cloture_par_responsable(ent):
+                    motif = "clôture réservée au responsable (réglage de l'entreprise) : terminez l'intervention, le responsable la clôture"
+                elif t == "parametres" and f["id"] != "parametres-" + ENTREPRISES[ent]["id"]:
+                    motif = "paramètres : identifiant réservé à l'entreprise"
+                # volet D (miroir de supabase/energie.sql)
+                elif t == "compteurs" and ex and any(k in pa and pa[k] != ex["data"].get(k) for k in ("mode", "unite", "coefficient")) \
+                        and any(x["type"] == "releves" and x["entreprise"] == ent and x["data"].get("compteurId") == f["id"] for x in fiches.values()):
+                    motif = "compteur déjà relevé : mode, unité et coefficient ne changent que par une rupture déclarée"
+                elif t == "releves" and not ex and not (fiches.get(pa.get("compteurId") or "") or {}).get("type") == "compteurs":
+                    motif = "un relevé se rattache à un compteur connu"
+                elif t == "releves" and not ex and fiches[pa["compteurId"]]["entreprise"] != ent:
+                    motif = "un relevé se rattache à un compteur connu"
+                elif t == "releves" and not ex and r != "responsable" and any(k in pa for k in ("decision", "decidePar", "decideLe")):
+                    motif = "qualification d'un relevé : réservée au responsable"
+                elif t == "releves" and not ex and pa.get("remplaceId") and not (
+                        (lambda x: x and x["type"] == "releves" and x["entreprise"] == ent and x["data"].get("compteurId") == pa.get("compteurId"))(fiches.get(pa["remplaceId"]))):
+                    motif = "une correction remplace un relevé du même compteur"
+                elif t == "releves" and ex and (r != "responsable" or any(k not in ("decision", "motifDecision", "decideLe", "decidePar", "modifieLe", "modifiePar") for k in pa)):
+                    motif = "un relevé ne se modifie pas : saisissez une correction (seule sa qualification par le responsable)"
                 if not motif and t not in COMMUNS:
-                    parent = pa.get("entiteId") if t == "journal" else pa.get("parentId") if t == "photos" else (pa.get("besoinId") or pa.get("otId")) if t in ("besoins", "mouvements") else pa.get("mouvementId") if t == "valorisations" else None
+                    parent = pa.get("entiteId") if t == "journal" else pa.get("parentId") if t == "photos" else (pa.get("besoinId") or pa.get("otId")) if t in ("besoins", "mouvements") else pa.get("mouvementId") if t == "valorisations" else pa.get("compteurId") if t == "releves" else None
                     hp = fiches.get(parent) if parent else None
                     s = (pa.get("siteId") if pa.get("siteId") in SITES else None) or (ex and ex["site"]) or (hp and hp["entreprise"] == ent and hp["site"]) or defaut
                     if not s:
