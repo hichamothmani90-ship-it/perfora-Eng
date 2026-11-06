@@ -7,7 +7,7 @@ une proposition. Les prix et conditions des fournisseurs sont à revérifier au 
 
 - 6 nov. 2026 : **Cloudflare Pages** pour l'appli et le site ; **zone DNS de perfora.ma chez Cloudflare** (domaine
   toujours enregistré chez Nindohost). Ancien hébergement inconnu : sans effet une fois les DNS chez Cloudflare.
-  Mise en œuvre : [`MISE_EN_LIGNE_PERFORA_MA.md`](MISE_EN_LIGNE_PERFORA_MA.md). Site de présentation v1 : dossier `site/`.
+  Mise en œuvre : [`MISE_EN_LIGNE_PERFORA_MA.md`](MISE_EN_LIGNE_PERFORA_MA.md). Site de présentation v1 : dépôt séparé `perfora-site`.
 - 6 nov. 2026 : **pas de société pour l'instant, statut d'auto-entrepreneur** (identifiants fiscaux disponibles) ;
   Payzone accepte ce statut (vérifié par Hicham). Contact public : WhatsApp +212 680 03 28 88 (bouton « Demander une
   démo » du site). À confirmer avec un comptable : plafond annuel de chiffre d'affaires du statut pour des prestations

@@ -39,7 +39,7 @@ multi-entreprise) et concepteur d'interfaces terrain mobile-first. Langue : fran
      terrain, écrans Magasin dans js/vues/magasin.js. Volet C terminé (docs/VOLET_C_CONCEPTION.md) : seuils, à
      réapprovisionner, achats, réception partielle, isolés, valeur du stock ; prix lisibles seulement par responsable,
      magasinier, achats, pilote. Cadrage du lancement : docs/CADRAGE_LANCEMENT.md ;
-     phase 1 en cours (perfora.ma sur Cloudflare : docs/MISE_EN_LIGNE_PERFORA_MA.md ; site/ prêt ; attente du compte
+     phase 1 en cours (perfora.ma sur Cloudflare : docs/MISE_EN_LIGNE_PERFORA_MA.md ; site : dépôt perfora-site ; attente du compte
      Cloudflare et du changement de serveurs de noms chez Nindohost). Ensuite volet D (énergie et eau). Ou mise
      en production (docs/RECETTE_VOLET_A.md §4). Démo VITRINE à réinitialiser une fois (nouvelles données magasin).
    - Supabase « gmao-terrain » (réf. oihaqzkqhvyjybijsonc, Frankfurt). Scripts dans l'ordre :

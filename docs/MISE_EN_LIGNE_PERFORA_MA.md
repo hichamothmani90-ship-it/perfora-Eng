@@ -24,11 +24,18 @@ ne déclare pas perfora.ma ; l'ancien dépôt n'a plus d'effet une fois les DNS 
 | Étape | Réglage |
 |---|---|
 | Projet `perfora-app` | branche `main` · build : `sh scripts/build_pages.sh app` · sortie : `dist` · domaine `app.perfora.ma` |
-| Projet `perfora-site` | branche `main` · build : `sh scripts/build_pages.sh site` · sortie : `dist` · domaines `perfora.ma` et `www.perfora.ma` (www → perfora.ma) |
+| Projet `perfora-site` | **dépôt séparé `perfora-site`** (Cloudflare refuse deux projets sur un même dépôt) · branche `main` · pas de build · sortie : `/` · domaines `perfora.ma` et `www.perfora.ma` (www → perfora.ma) |
 | Vérification avant bascule | sur les adresses `*.pages.dev` : connexion, synchro, caméra QR, hors ligne, en-têtes de sécurité (`deploy/app/_headers`) |
 | Supabase | Authentication → URL Configuration : Site URL `https://app.perfora.ma`, URL de redirection autorisées : app.perfora.ma + github.io (transition) |
 | Appli | adresse publique par défaut des QR codes → `https://app.perfora.ma/` ; sur l'ancienne adresse, bandeau « Perfora déménage » une fois tout envoyé |
 | E-mails | Cloudflare Email Routing : `contact@perfora.ma` → ta boîte Gmail (réception gratuite). Envoi des invitations : service dédié (Brevo ou Resend) depuis `no-reply@perfora.ma`, enregistrements SPF / DKIM / DMARC, réglage SMTP dans Supabase |
+
+## B bis. Fait le 6 nov. 2026
+
+- perfora.ma ajouté à Cloudflare (offre Free) ; serveurs de noms Nindohost remplacés par `kay.ns.cloudflare.com` et
+  `ram.ns.cloudflare.com` (domaine enregistré le 3 nov. 2026 : aucun ancien hébergement à détacher). DNSSEC : inactif.
+- Application Cloudflare installée sur GitHub ; projet Pages `perfora-app` (dépôt perfora-Eng, build
+  `sh scripts/build_pages.sh app`, sortie `dist`) → https://perfora-app.pages.dev ; projet `perfora-site` (dépôt perfora-site).
 
 ## C. Transition des téléphones (important)
 
@@ -41,7 +48,8 @@ depuis app.perfora.ma pour des QR durables.
 
 ## D. Fichiers concernés
 
-- `site/` : site de présentation (index, mentions légales à compléter, styles, script, en-têtes).
+- Dépôt `perfora-site` (https://github.com/hichamothmani90-ship-it/perfora-site, copie locale `Claude Perfora/perfora-site`) :
+  site de présentation (index, mentions légales à compléter, styles, script, en-têtes).
 - `scripts/build_pages.sh` : prépare `dist/` (rien d'autre que le nécessaire n'est publié).
 - `deploy/app/_headers` : en-têtes de sécurité de l'appli (politique de contenu stricte, caméra autorisée).
-- Numéro WhatsApp du bouton « Demander une démo » : constante `WHATSAPP` dans `site/site.js`.
+- Numéro WhatsApp du bouton « Demander une démo » : constante `WHATSAPP` dans `site.js` du dépôt perfora-site.
