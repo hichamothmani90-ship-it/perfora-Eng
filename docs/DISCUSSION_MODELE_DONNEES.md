@@ -40,19 +40,18 @@ Questions à trancher :
 
 Aujourd'hui, le préventif est seulement **calendaire** (tous les N jours, échéance fixe ou après réalisation).
 
-Proposition à discuter :
-- **Un seul type de compteur** avec un champ « usage » (ressource ou équipement) et l'équipement mesuré. Les relevés,
-  ruptures (remplacement du compteur horaire), contrôles et corrections restent les mêmes. Un compresseur peut avoir les
-  deux : compteur kWh (ressource) et compteur horaire (équipement).
-- **Programme préventif sur compteur** : « toutes les 500 h » ; échéance = index de la dernière réalisation + 500 ;
-  alerte à l'approche (ex. 90 %) ; date estimée à partir du rythme moyen des relevés. Option « le premier des deux »
-  (500 h ou 6 mois).
-- À la clôture d'une intervention préventive, on note l'**index du compteur** : il devient le point de départ suivant.
-- **Pack** : les compteurs d'équipement relèvent du préventif (pack Pro), les compteurs de ressources de l'énergie
-  (pack Entreprise). Le serveur décidera le module selon l'usage du compteur.
+**Décidé le 6 nov. 2026 :**
+- **Un seul type de compteur** avec un champ `usage` : `ressource` ou `equipement` (+ `equipementId`). Mêmes relevés,
+  ruptures, contrôles et corrections. Un équipement peut avoir les deux (compresseur : kWh et heures).
+- **Pack** : le serveur choisit le module selon l'usage : `equipement` → preventif (pack Pro), `ressource` → energie
+  (pack Entreprise). L'usage est figé après le premier relevé (comme le mode, l'unité et le coefficient).
+- **Relevés des compteurs d'équipement** : fréquence en jours par compteur ; saisis par techniciens, prestataires,
+  exploitation (conducteurs de machine).
+- **Programme préventif sur compteur** : « toutes les N unités » (ex. 500 h) ; échéance = index de la dernière
+  réalisation + N ; **« le premier des deux »** facultatif (ex. 500 h ou 6 mois) ; **alerte par marge en unités du
+  compteur** fixée par programme (ex. 50 h avant) ; date **estimée** au rythme des derniers relevés retenus, affichée
+  comme estimation.
+- **Index noté à la clôture** d'une intervention préventive sur compteur : obligatoire, devient le départ suivant.
 
-Questions à trancher :
-1. Vos clients relèvent-ils déjà des heures de marche ? À quelle fréquence, et qui ?
-2. Préventif sur compteur seul, ou « le premier des deux » (compteur ou calendrier) ?
-3. Seuil d'alerte avant l'échéance : fixe (ex. 50 h avant) ou en pourcentage ?
-4. Compteurs d'équipement dans le pack Pro (avec le préventif) : d'accord ?
+Mise en œuvre prévue : D2 bis (serveur : module selon l'usage, usage figé) regroupé avec les éventuels changements
+magasin / achats pour une seule mise à jour de Supabase ; calculs (échéance, estimation, alerte) testés ; écrans avec D3.
