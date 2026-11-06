@@ -169,6 +169,7 @@
   async function edit(t, id, patch, { render: rr = true, motif = null, action = null } = {}) {
     const cur = data[t].get(id);
     if (!cur) return;
+    if (t === 'ots' && !peutModifierOT(cur)) { toast(cur.statut === 'cloturee' ? 'Intervention clôturée : correction réservée au responsable' : 'Consultation seule'); render(); return; }
     if (t === 'ots' && cur.statut === 'cloturee' && !motif && !action) {
       motif = await askText('Correction d’une intervention clôturée', 'Motif de la correction (conservé dans le journal)');
       if (!motif) { render(); return; }
@@ -176,6 +177,30 @@
     await Store.save(t, { ...cur, ...patch }, { motif, action });
     if (rr) render(); else toast('✓ Enregistré sur l’appareil');
   }
+
+  // ---------- droits (miroir de supabase/roles.sql ; le serveur reste l'autorité) ----------
+  // Sans compte cloud : appli locale, aucune restriction.
+  const role = () => Sync.profil()?.role || null;
+  const estResp = () => !role() || role() === 'responsable';
+  const DROITS = {
+    responsable: ['eq-new', 'eq-edit', 'loc-new', 'prog-new', 'prog-edit', 'pers-new', 'pers-edit', 'ot-rouvrir', 'sync-tout', 'equipe'],
+    terrain: ['ot-new', 'dem-ot', 'prog-ot', 'dem-pec', 'dem-classer', 'ot-demarrer', 'ot-planifier', 'ot-annuler', 'ot-suspendre', 'ot-reprendre', 'ot-terminer', 'ot-cloturer',
+      'ot-ajout-int', 'ot-retirer', 'ot-ajout-piece', 'ot-annuler-piece', 'ot-ajout-suite', 'ot-lever'],
+    magasin: ['art-new', 'mvt'],
+    saisie: ['dem-edit', 'dem-annuler', 'photo-ajout', 'signaler'],
+  };
+  function autorise(act) {
+    const r = role();
+    if (!r || r === 'responsable') return true;
+    if (DROITS.responsable.includes(act)) return false;
+    if (DROITS.terrain.includes(act)) return ['technicien', 'prestataire'].includes(r);
+    if (DROITS.magasin.includes(act)) return r === 'magasinier';
+    if (DROITS.saisie.includes(act)) return r !== 'pilote';
+    return true;
+  }
+  const peutModifierOT = o => o.statut === 'cloturee' ? estResp() : (!role() || ['responsable', 'technicien', 'prestataire'].includes(role()));
+  const REFUS_TXT = { responsable: 'Réservé au responsable', terrain: 'Réservé aux techniciens et au responsable', magasin: 'Réservé au magasin et au responsable', saisie: 'Consultation seule' };
+  function motifRefus(act) { for (const [k, l] of Object.entries(DROITS)) if (l.includes(act)) return REFUS_TXT[k]; return 'Action non autorisée'; }
 
   // ---------- objets métier ----------
   const { NATURE_DU_BESOIN } = Calculs;
@@ -544,10 +569,11 @@
       : !isSecureContext ? 'Mode hors ligne indisponible à cette adresse (il faut localhost ou HTTPS). Les données restent enregistrées sur l’appareil.'
         : navigator.serviceWorker.controller ? 'Actif : l’application s’ouvre sans réseau.' : 'En cours d’activation (rechargez la page une fois).';
     return `<h1>Réglages</h1>
-      <h2>Cet appareil</h2><div class="card"><label class="f" style="margin-top:0">Qui utilise cet appareil ?</label>
-        <select data-bind="meta|device|personneId"><option value="">— Choisir —</option>${list('personnes').filter(p => p.actif !== false).map(p => `<option value="${p.id}" ${dev.personneId === p.id ? 'selected' : ''}>${esc(p.nom)} (${esc(L.role[p.role])})</option>`).join('')}</select>
+      <h2>Cet appareil</h2><div class="card">${Sync.profil() ? `<p style="margin-top:0">Connecté : <b>${esc(Store.currentUser()?.nom || Sync.profil().nom || Sync.profil().email)}</b> · ${badge(L.role[Sync.profil().role] || Sync.profil().role, 'blue')}<br><span class="small muted">${esc(Sync.profil().email)} — identité et droits fixés par le compte.</span></p>` : `<label class="f" style="margin-top:0">Qui utilise cet appareil ?</label>
+        <select data-bind="meta|device|personneId"><option value="">— Choisir —</option>${list('personnes').filter(p => p.actif !== false).map(p => `<option value="${p.id}" ${dev.personneId === p.id ? 'selected' : ''}>${esc(p.nom)} (${esc(L.role[p.role])})</option>`).join('')}</select>`}
         <p class="small muted">Code appareil : <b>${esc(dev.code)}</b> (dans les références, évite les doublons entre appareils).<br>Hors ligne : ${esc(swState)}</p></div>
       ${blocSynchro()}
+      ${Sync.profil()?.role === 'responsable' ? `<h2>Équipe et droits</h2><div class="card" id="equipe"><p class="muted small" style="margin:0">Chargement de l’équipe…</p></div>` : ''}
       <h2>Adresse de l’application</h2><div class="card"><p class="small muted" style="margin-top:0">Adresse utilisée dans les QR codes. Elle doit être accessible depuis les téléphones (HTTPS).</p>
         <input type="text" value="${esc(adressePublique())}" data-bind="meta|adresse|url" inputmode="url"></div>
       <h2>Personnes</h2><div class="card"><ul class="lines">${list('personnes').map(p => `<li><span class="grow">${esc(p.nom)} <span class="muted small">· ${esc(L.role[p.role])}${p.societe ? ' · ' + esc(p.societe) : ''}</span></span><button class="btn sm ghost" data-act="pers-edit" data-id="${p.id}">Modifier</button></li>`).join('') || '<li class="muted">Aucune personne.</li>'}</ul><button class="btn sm" data-act="pers-new">+ Personne</button></div>
@@ -571,7 +597,9 @@
         <dt>Compte</dt><dd>${s.connecte ? esc(s.email || '—') : '<span class="badge red">déconnecté</span>'}</dd>
         <dt>En attente d’envoi</dt><dd><b>${s.attente}</b> modification(s)</dd>
         <dt>Dernière synchro</dt><dd>${s.dernier ? fmtY(s.dernier) : 'jamais'}</dd>
+        ${s.profil ? `<dt>Rôle</dt><dd>${esc(L.role[s.profil.role] || s.profil.role)}</dd>` : ''}
         ${s.erreur ? `<dt>Erreur</dt><dd class="small" style="color:var(--red)">${esc(s.erreur)}</dd>` : ''}</dl>
+      ${s.refus.filter(r => r.type !== 'journal').length ? `<details class="more"><summary>Modifications refusées par le serveur (${s.refus.filter(r => r.type !== 'journal').length})</summary><ul class="lines">${s.refus.filter(r => r.type !== 'journal').map(r => `<li class="small"><span class="grow">${esc(L.entite[r.type] || r.type)} ${esc(refDe(r.type, r.id))} — ${esc(r.motif)}</span><span class="muted">${fmt(r.le)}</span></li>`).join('')}</ul></details>` : ''}
       <div class="actions">${s.connecte ? `<button class="btn primary" data-act="sync-maintenant">Synchroniser maintenant</button>` : `<button class="btn primary" data-act="sync-config">Se reconnecter</button><button class="btn" data-act="sync-lien">Mot de passe oublié</button>`}
         <button class="btn" data-act="sync-tout">Envoyer toutes les données de cet appareil</button>
         ${s.connecte ? `<button class="btn ghost" data-act="sync-deconnecter">Se déconnecter</button>` : ''}</div></div>`;
@@ -604,6 +632,31 @@
 
   // ---------- comportements après affichage ----------
   const AFTER = {};
+  AFTER.reglages = async () => {
+    const box = $('#equipe');
+    if (!box) return;
+    try {
+      const liste = await Sync.equipe();
+      const moi = Sync.profil()?.userId;
+      box.innerHTML = `<ul class="lines">${liste.map(p => `<li style="flex-wrap:wrap"><span class="grow"><b>${esc(p.nom || p.email)}</b>${p.actif ? '' : ' ' + badge('désactivé', 'red')}<br><span class="small muted">${esc(p.email)}</span></span>
+          <select data-profil="${p.user_id}" ${p.user_id === moi ? 'disabled title="Votre propre rôle"' : ''} style="width:auto;min-height:38px">${['responsable', 'technicien', 'prestataire', 'magasinier', 'exploitation', 'pilote'].map(r => `<option value="${r}" ${p.role === r ? 'selected' : ''}>${L.role[r]}</option>`).join('')}</select>
+          ${p.user_id === moi ? '' : `<button class="btn sm ghost" data-equipe="${p.user_id}" data-nom="${esc(p.nom || '')}" data-role="${p.role}" data-actif="${p.actif}">Modifier</button>`}</li>`).join('')}</ul>
+        <p class="small muted">Nouveau membre : Supabase → Authentication → Users → <b>Add user → Send invitation</b>. Il arrive ici en <b>Technicien</b> ; ajustez son rôle. Le serveur applique ces droits sur tous les appareils.</p>`;
+      box.querySelectorAll('[data-profil]').forEach(sel => sel.onchange = async () => {
+        const p = liste.find(x => x.user_id === sel.dataset.profil);
+        try { await Sync.definirProfil(p.user_id, sel.value, p.nom, p.actif); toast('Rôle mis à jour'); Sync.planifier(200); } catch (e) { toast('Échec : ' + e.message); }
+        AFTER.reglages();
+      });
+      box.querySelectorAll('[data-equipe]').forEach(b => b.onclick = async () => {
+        const v = await askForm({ title: 'Membre de l’équipe', values: { nom: b.dataset.nom, actif: b.dataset.actif === 'true' }, fields: [
+          { name: 'nom', label: 'Nom affiché', type: 'text', required: true },
+          { name: 'actif', label: 'Compte actif (décocher pour retirer l’accès)', type: 'checkbox' }] });
+        if (!v) return;
+        try { await Sync.definirProfil(b.dataset.equipe, b.dataset.role, v.nom, v.actif); toast('Membre mis à jour'); Sync.planifier(200); } catch (e) { toast('Échec : ' + e.message); }
+        AFTER.reglages();
+      });
+    } catch (e) { box.innerHTML = `<p class="warn" style="margin:0">Équipe indisponible : ${esc(e.message)}</p>`; }
+  };
   AFTER.signaler = r => {
     const form = $('#sig');
     const pick = id => {
@@ -712,6 +765,7 @@
   const A = {};
 
   A.who = async () => {
+    if (Sync.profil()) { location.hash = '#/reglages'; return; }
     const v = await askForm({ title: 'Qui utilise cet appareil ?', ok: 'Valider', values: { p: Store.device().personneId }, fields: [
       { name: 'p', label: 'Personne', type: 'select', options: personnesOpts(), empty: '— Choisir —' },
       { name: 'nom', label: 'Ou nouvelle personne : nom', type: 'text' },
@@ -821,7 +875,7 @@
     const o = data.ots.get(el.dataset.id);
     const v = await askForm({ title: 'Ajouter un intervenant', ok: 'Ajouter', fields: [
       { name: 'personneId', label: 'Personne', type: 'select', options: personnesOpts(), empty: '— Choisir —' },
-      { name: 'nom', label: 'Ou nom d’un prestataire / renfort', type: 'text' },
+      ...(estResp() ? [{ name: 'nom', label: 'Ou nom d’un prestataire / renfort', type: 'text' }] : []),
       { name: 'role', label: 'Rôle', type: 'chips', options: L.roleOT, default: 'intervenant', required: true }] });
     if (!v || (!v.personneId && !v.nom)) return;
     let pid = v.personneId;
@@ -1017,6 +1071,7 @@
     try {
       toast('Connexion…');
       const premiere = await Sync.connecter(v);
+      try { await Sync.chargerProfil(); } catch (e) { toast(e.message); }
       // Premier branchement : tout ce qui existe déjà sur l'appareil part au serveur (fusion, sans
       // suppression), sinon une fiche modifiée plus tard n'arriverait qu'en partie ailleurs.
       await premierEnvoiSiBesoin(premiere);
@@ -1052,6 +1107,7 @@
     if (l.erreur) { await alertBox('Lien de connexion', [l.erreur]); return true; }
     try {
       const { premiere, email } = await Sync.sessionDepuisLien(l);
+      try { await Sync.chargerProfil(); } catch { /* sera réessayé à la synchro */ }
       if (['invite', 'recovery', 'signup'].includes(l.type)) {
         for (;;) {
           const v = await askForm({ title: 'Choisissez votre mot de passe', ok: 'Enregistrer', cancel: null, fields: [
@@ -1162,6 +1218,19 @@
     $('#fab').classList.toggle('hidden', R.name === 'signaler');
     const me = Store.currentUser();
     $('#who').textContent = me ? '👤 ' + me.nom : '👤 Qui êtes-vous ?';
+    if (role()) {
+      document.querySelectorAll('#view [data-act]').forEach(b => { if (!autorise(b.dataset.act)) b.remove(); });
+      $('#fab').classList.toggle('hidden', R.name === 'signaler' || !autorise('signaler'));
+      if (R.name === 'ot') {
+        const o = data.ots.get(R.id);
+        if (o && !peutModifierOT(o)) {
+          document.querySelectorAll('#view [data-bind]').forEach(i => { i.disabled = true; });
+          document.querySelectorAll('#view [data-act^="ot-"]').forEach(b => b.remove());
+        }
+      }
+    }
+    const p = Sync.profil();
+    if (p) $('#who').textContent = `👤 ${Store.currentUser()?.nom || p.nom || p.email} · ${L.role[p.role] || p.role}`;
     AFTER[R.name]?.(R);
   }
 
@@ -1170,6 +1239,7 @@
     const el = e.target.closest('[data-act]');
     if (!el) return;
     e.preventDefault();
+    if (!autorise(el.dataset.act)) { toast(motifRefus(el.dataset.act)); return; }
     A[el.dataset.act]?.(el, e);
   });
   document.addEventListener('change', async e => {
@@ -1225,7 +1295,11 @@
     net();
     const lien = !!Sync.lireLienEmail(location.hash); // retour d'un e-mail d'invitation : pas d'affichage de page avant
     if (!lien) render();
-    Sync.demarrer({ etat: voyantSynchro, reception: quandRecu });
+    Sync.demarrer({ etat: voyantSynchro, reception: quandRecu, refus: liste => {
+      if (!liste.length) return;
+      alertBox('Modification refusée par le serveur', [...liste.slice(0, 5).map(r => `• ${L.entite[r.type] || r.type} ${refDe(r.type, r.id)} : ${r.motif}`), 'La version du serveur a été rétablie sur cet appareil.']);
+      if (!enSaisie()) render();
+    } });
     if (lien) await traiterLienEmail();
   }).catch(err => {
     $('#view').innerHTML = `<p class="warn">Stockage local indisponible : ${esc(err.message)}. Vérifiez que le navigateur n’est pas en navigation privée.</p>`;

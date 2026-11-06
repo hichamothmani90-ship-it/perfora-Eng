@@ -15,6 +15,25 @@ Durée : 15 minutes environ. Offre gratuite suffisante pour le prototype.
 2. Coller tout le contenu de [`schema.sql`](schema.sql) → **Run**.
 3. Résultat attendu : « Success. No rows returned ».
 
+## 2 bis. Rôles et droits
+Toujours dans **SQL Editor** : coller [`roles.sql`](roles.sql) → **Run**, puis désigner le premier responsable :
+`update public.profils set role = 'responsable' where email = 'votre.email@exemple.com';`
+(Fait le 6 nov. 2026 pour othmanihicham99@gmail.com.)
+
+Ensuite, les rôles se gèrent dans l'appli : **Réglages → Équipe et droits** (visible du responsable).
+Tout nouveau compte arrive en **Technicien**.
+
+| Rôle | Peut écrire |
+|---|---|
+| Responsable | tout, y compris configuration et correction d'une intervention clôturée |
+| Technicien / Prestataire | demandes, interventions non clôturées, photos, sorties de pièces sur intervention |
+| Magasinier | demandes, photos, articles, tous mouvements de stock |
+| Exploitation | demandes et photos |
+| Pilote | rien (consultation) |
+
+Le serveur applique ces règles (fonction `push_fiches`) ; une modification interdite est refusée,
+l'appareil reprend la version du serveur et affiche le motif.
+
 ## 3. Fermer les inscriptions publiques
 **Authentication** → **Sign In / Providers** (ou *Settings*) → désactiver **Allow new users to sign up**.
 Seul le responsable crée les comptes.
@@ -46,7 +65,8 @@ la clé publique, l'e-mail et le mot de passe de la personne.
 - Le voyant ☁ en haut indique : *À jour*, *n à envoyer*, *Erreur* ou *Reconnexion*.
 
 ## Limites du prototype
-- Toute personne connectée voit et modifie tout (un seul site). Rôles et périmètres : étape suivante.
+- Un seul site : toute personne connectée voit tout (les droits portent sur l'écriture).
+- Ajouter un membre se fait encore dans Supabase (invitation) ; son rôle se règle dans l'appli.
 - Les photos voyagent dans la base (≈150 Ko chacune) ; passage au stockage de fichiers prévu.
 - Offre gratuite : mise en pause après 7 jours sans activité, pas de sauvegarde automatique.
   Pour la production : offre payante ou export quotidien.

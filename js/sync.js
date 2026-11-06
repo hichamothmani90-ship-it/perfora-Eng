@@ -6,7 +6,7 @@ const Sync = (() => {
   const { data } = Store;
   const LOT_ENVOI = 100, LOT_RECEPTION = 100, RECOUVREMENT = 200;
   let enCours = false, minuteur = null;
-  let surEtat = () => {}, surReception = () => {};
+  let surEtat = () => {}, surReception = () => {}, surRefus = () => {};
 
   const DELAI_MAX = 20000; // réseau faible : on abandonne et on réessaiera plus tard
   /** Projet Supabase du site : adresse et clé publique, publiques par conception (accès protégé par RLS). */
@@ -121,11 +121,39 @@ const Sync = (() => {
     for (;;) {
       const lot = Store.fileEnvoi().slice(0, LOT_ENVOI);
       if (!lot.length) return n;
-      await api('/rest/v1/rpc/push_fiches', { method: 'POST', body: JSON.stringify({ lot: lot.map(s => ({ id: s.rid, type: s.type, patch: s.patch })) }) });
+      const rep = await api('/rest/v1/rpc/push_fiches', { method: 'POST', body: JSON.stringify({ lot: lot.map(s => ({ id: s.rid, type: s.type, patch: s.patch })) }) });
       await Store.retirerEnvoyes(lot.map(s => s.id));
+      const refus = Array.isArray(rep?.refuses) ? rep.refuses : [];
+      if (refus.length) await traiterRefus(refus);
       n += lot.length;
       notifier();
     }
+  }
+
+  /** Modifications refusées par le serveur (droits) : on reprend la version du serveur et on prévient. */
+  async function traiterRefus(refus) {
+    const ids = [...new Set(refus.filter(r => r.type !== 'journal').map(r => r.id))];
+    if (ids.length) {
+      const liste = ids.map(i => '"' + String(i).replace(/"/g, '') + '"').join(',');
+      const rows = await api(`/rest/v1/fiches?select=id,type,data,seq&id=in.(${encodeURIComponent(liste)})`);
+      if (rows?.length) await Store.appliquerDistant(rows, { remplacer: true });
+    }
+    const le = Store.now();
+    await majCfg({ refus: [...refus.map(r => ({ ...r, le })), ...(cfg().refus || [])].slice(0, 20) });
+    surRefus(refus.filter(r => r.type !== 'journal'));
+  }
+
+  // ---------- profil et équipe (rôles contrôlés par le serveur) ----------
+  async function chargerProfil() {
+    const p = await api('/rest/v1/rpc/mon_profil', { method: 'POST', body: '{}' });
+    await majCfg({ profil: p, profilLe: Date.now() });
+    if (p?.personneId && Store.device().personneId !== p.personneId) await Store.persistMeta({ ...Store.device(), personneId: p.personneId });
+    return p;
+  }
+  const profil = () => (cfg()?.refresh ? cfg()?.profil : null) || null;
+  const equipe = () => api('/rest/v1/profils?select=user_id,email,nom,role,actif,personne_id&order=email.asc');
+  async function definirProfil(cible, role, nom, actif) {
+    await api('/rest/v1/rpc/definir_profil', { method: 'POST', body: JSON.stringify({ cible, nouveau_role: role, nouveau_nom: nom, est_actif: actif }) });
   }
 
   async function recevoir() {
@@ -151,6 +179,7 @@ const Sync = (() => {
     if (!navigator.onLine) { notifier(); return; }
     enCours = true; notifier();
     try {
+      if (!c.profil || Date.now() - (c.profilLe || 0) > 10 * 60000) await chargerProfil(); // rôle à jour
       await envoyer();               // d'abord nos patchs (le serveur fusionne)…
       const recus = await recevoir(); // …puis tout ce qui a changé ailleurs
       await majCfg({ dernier: Store.now(), erreur: null });
@@ -164,9 +193,10 @@ const Sync = (() => {
 
   function planifier(delai = 1500) { clearTimeout(minuteur); minuteur = setTimeout(synchroniser, delai); }
 
-  function demarrer({ etat, reception } = {}) {
+  function demarrer({ etat, reception, refus } = {}) {
     if (etat) surEtat = etat;
     if (reception) surReception = reception;
+    if (refus) surRefus = refus;
     Store.surEcriture(() => { notifier(); planifier(); });
     addEventListener('online', () => planifier(300));
     addEventListener('offline', notifier);
@@ -179,9 +209,10 @@ const Sync = (() => {
   function etatCourant() {
     const c = cfg();
     return { configure: !!c?.url, connecte: !!c?.refresh, attente: data.sortie.size, enCours, erreur: c?.erreur || null,
-      dernier: c?.dernier || null, email: c?.email || null, url: c?.url || null, enLigne: navigator.onLine };
+      dernier: c?.dernier || null, email: c?.email || null, url: c?.url || null, enLigne: navigator.onLine,
+      profil: profil(), refus: c?.refus || [] };
   }
   function notifier() { try { surEtat(etatCourant()); } catch { /* affichage */ } }
 
-  return { PROJET, connecter, deconnecter, synchroniser, planifier, demarrer, etatCourant, lireLienEmail, sessionDepuisLien, changerMotDePasse, demanderLien };
+  return { PROJET, profil, chargerProfil, equipe, definirProfil, connecter, deconnecter, synchroniser, planifier, demarrer, etatCourant, lireLienEmail, sessionDepuisLien, changerMotDePasse, demanderLien };
 })();

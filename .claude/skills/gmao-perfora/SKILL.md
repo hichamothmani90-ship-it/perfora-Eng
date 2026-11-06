@@ -84,6 +84,17 @@ Chaque indicateur affiche périmètre, période, convention, couverture et effec
   Premier branchement = envoi complet automatique de l'appareil. Test local : `tests/serveur_factice.py`
   (mêmes appels et même fusion que `supabase/schema.sql`), deux « appareils » = `localhost:8080`
   et `127.0.0.1:8080` (IndexedDB séparées).
+- **Rôles et droits** (`supabase/roles.sql`) : table `profils` (rôle, actif, personne liée), écriture
+  **uniquement** via `push_fiches` (SECURITY DEFINER) qui applique `peut_ecrire(rôle, type)` + règles
+  métier (OT clôturée = responsable ; sortie de stock sans OT = magasin ; journal d'une modification
+  refusée = refusé). Réponse `{acceptes, refuses[]}` ; l'appli reprend alors la version serveur
+  (`appliquerDistant(rows, {remplacer:true})`) et affiche le motif. `mon_profil()` crée la fiche
+  « personne » du compte ; `definir_profil()` réservé au responsable. Côté appli, `autorise(act)` et
+  `peutModifierOT()` dans `app.js` sont un **miroir** pour masquer les boutons : toute nouvelle action
+  doit être classée dans `DROITS`, et toute nouvelle règle serveur reportée dans les deux + dans
+  `tests/serveur_factice.py`. Sans compte cloud : aucune restriction (usage local).
+  Tester une règle serveur : fonction plpgsql temporaire qui fixe `request.jwt.claims`, appelle
+  `push_fiches`, puis nettoie ses données (le SQL Editor ne garde pas un `begin … rollback`).
 - **Sans cloud** : export/import JSON ; par fiche, la plus récente (`modifieLe`) gagne ;
   rien n'est supprimé par absence.
 - **Service worker** : cache d'abord, **une version = un cache complet installé d'un bloc** (jamais de

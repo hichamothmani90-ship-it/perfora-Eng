@@ -155,7 +155,7 @@ const Store = (() => {
   }
   /** Applique des fiches reçues du serveur, sans journal ni renvoi.
       Les modifications locales pas encore envoyées restent prioritaires sur ce qui arrive. */
-  async function appliquerDistant(rows) {
+  async function appliquerDistant(rows, { remplacer = false } = {}) {
     const enAttente = new Map();
     for (const s of data.sortie.values()) enAttente.set(s.rid, { ...(enAttente.get(s.rid) || {}), ...s.patch });
     const parType = new Map();
@@ -163,7 +163,8 @@ const Store = (() => {
       if (!METIER.includes(r.type) || !r.data || typeof r.data.id !== 'string') continue;
       // Fusion : local < serveur < modifications locales non envoyées. Un champ absent côté
       // serveur ne fait jamais disparaître la valeur locale.
-      const obj = APPEND_ONLY.includes(r.type) ? r.data : { ...(data[r.type].get(r.id) || {}), ...r.data, ...(enAttente.get(r.id) || {}) };
+      // remplacer : version serveur telle quelle (annule une modification locale refusée).
+      const obj = APPEND_ONLY.includes(r.type) || remplacer ? r.data : { ...(data[r.type].get(r.id) || {}), ...r.data, ...(enAttente.get(r.id) || {}) };
       data[r.type].set(obj.id, obj);
       if (!parType.has(r.type)) parType.set(r.type, []);
       parType.get(r.type).push(obj);

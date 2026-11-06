@@ -52,6 +52,10 @@ champ côté serveur ; les modifications locales non envoyées restent prioritai
 Test local sans compte : `python tests/serveur_factice.py` (faux Supabase, compte test@gmao.test / test-gmao,
 clé `cle-factice`, adresse `http://localhost:8099`).
 
+**Rôles** ([`supabase/roles.sql`](supabase/roles.sql)) : responsable, technicien, prestataire, magasinier,
+exploitation, pilote. Le serveur vérifie chaque écriture ; l'appli masque les actions non autorisées et
+rétablit la version du serveur en cas de refus. Équipe gérée dans Réglages → Équipe et droits.
+
 Sans cloud : Réglages → Exporter (JSON) puis Importer sur l'autre appareil (fusion, la plus récente gagne).
 
 ## Limite connue : hors ligne sur téléphone
