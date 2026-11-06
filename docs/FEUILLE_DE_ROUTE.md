@@ -13,7 +13,7 @@
 | Lot 1 · étape 2 | Rôles contrôlés par le serveur (responsable, technicien, prestataire, magasinier, exploitation, pilote), équipe gérée dans l'appli | En ligne (v14) |
 | Volet A · A1 | Serveur multi-entreprise : entreprises, sites, packs, abonnements, lecture et écriture limitées à l'entreprise et aux sites autorisés, modules du pack, abonnement suspendu = lecture seule. Données actuelles = « Perfora Démo » / « Site Tanger » (pack Pro) | En place sur Supabase, testé (12 tests d'étanchéité) |
 | Volet A · A2 | Appli multi-site : site actif et sélecteur (« tous mes sites »), créations rattachées au site du parent ou au site actif, appareil vidé au changement d'entreprise (refusé si saisies en attente), resynchronisation complète au premier passage, menus selon les modules du pack, abonnement suspendu = consultation seule | v15, testé avec le faux serveur (2 entreprises, 2 sites, 2 appareils) |
-| Volet A · A3 | Quotas par déclencheurs (utilisateurs par entreprise et par site, sites), invitation depuis l'appli par la fonction serveur `inviter` (seule détentrice de la clé secrète), affectation des sites, compteur de places | v16 ; quotas testés sur Supabase (12 tests), fonction déployée, écran testé avec le faux serveur |
+| Volet A · A3 | Quotas par déclencheurs (utilisateurs par entreprise et par site, sites), invitation depuis l'appli par la fonction serveur `inviter` (seule détentrice de la clé secrète), affectation des sites, compteur de places | v17 en ligne ; quotas testés sur Supabase (12 tests) ; invitation réelle validée de bout en bout le 6 nov. 2026 |
 
 Adresses : appli <https://hichamothmani90-ship-it.github.io/perfora-Eng/> · code <https://github.com/hichamothmani90-ship-it/perfora-Eng> ·
 Supabase projet `gmao-terrain` (réf. `oihaqzkqhvyjybijsonc`, Frankfurt).
@@ -89,6 +89,9 @@ Objectif : plusieurs clients isolés sur la même plateforme, chacun avec ses si
 Classeur modèle (sites, équipements, articles, compteurs, programmes) ; prévisualisation, conflits, aucune suppression par absence.
 
 ### Volet G — Industrialisation (en continu, avant tout client payant)
+- **E-mails d'invitation par un service d'envoi dédié** (Brevo, Resend…) avec l'adresse d'expéditeur de la marque :
+  l'envoi par défaut de Supabase est limité (quelques e-mails par heure) et classé en indésirable par Outlook
+  (constaté le 6 nov. 2026 ; l'invitation réelle a fonctionné une fois l'e-mail retrouvé).
 - Photos dans Supabase Storage (et non dans la base).
 - Environnements séparés : **recette** (projet `Perfora-recette` existant) et **production** ; migrations SQL numérotées.
 - Base de production propre (sans données de démo) ; sauvegarde quotidienne ; offre Supabase payante.
