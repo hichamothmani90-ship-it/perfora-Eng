@@ -4,6 +4,8 @@
    une durée n'est affichée que si les deux bornes existent. */
 (() => {
   const { data } = Store;
+  /** Version affichée dans Réglages : à incrémenter avec VERSION dans sw.js. */
+  const APP_VERSION = 'v17';
   const $ = s => document.querySelector(s);
   // Multi-site : les listes de fiches de site ne montrent que le site actif (« tous » possible).
   // Les fiches sans site (anciennes ou pas encore synchronisées) restent visibles.
@@ -614,7 +616,7 @@
     return `<h1>Réglages</h1>
       <h2>Cet appareil</h2><div class="card">${Sync.profil() ? `<p style="margin-top:0">Connecté : <b>${esc(Store.currentUser()?.nom || Sync.profil().nom || Sync.profil().email)}</b> · ${badge(L.role[Sync.profil().role] || Sync.profil().role, 'blue')}<br><span class="small muted">${esc(Sync.profil().email)} — identité et droits fixés par le compte.</span></p>` : `<label class="f" style="margin-top:0">Qui utilise cet appareil ?</label>
         <select data-bind="meta|device|personneId"><option value="">— Choisir —</option>${list('personnes').filter(p => p.actif !== false).map(p => `<option value="${p.id}" ${dev.personneId === p.id ? 'selected' : ''}>${esc(p.nom)} (${esc(L.role[p.role])})</option>`).join('')}</select>`}
-        <p class="small muted">Code appareil : <b>${esc(dev.code)}</b> (dans les références, évite les doublons entre appareils).<br>Hors ligne : ${esc(swState)}</p></div>
+        <p class="small muted">Version de l’appli : <b>${APP_VERSION}</b> · ${Sync.etatCourant().configure ? (Sync.etatCourant().connecte ? 'connectée au cloud' : 'cloud configuré, non connectée') : '<b>non connectée au cloud</b> (données sur cet appareil uniquement)'}<br>Code appareil : <b>${esc(dev.code)}</b> (dans les références, évite les doublons entre appareils).<br>Hors ligne : ${esc(swState)}</p></div>
       ${blocEntreprise()}
       ${blocSynchro()}
       ${Sync.profil()?.role === 'responsable' ? `<h2>Équipe et droits</h2><div class="card" id="equipe"><p class="muted small" style="margin:0">Chargement de l’équipe…</p></div>` : ''}

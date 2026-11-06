@@ -125,8 +125,8 @@ Chaque indicateur affiche périmètre, période, convention, couverture et effec
 - **Sans cloud** : export/import JSON ; par fiche, la plus récente (`modifieLe`) gagne ;
   rien n'est supprimé par absence.
 - **Service worker** : cache d'abord, **une version = un cache complet installé d'un bloc** (jamais de
-  mise à jour fichier par fichier : cela mélangerait les versions). **Incrémenter `VERSION` dans `sw.js`
-  à chaque livraison** et ajouter toute nouvelle ressource à `FILES`. L'appli affiche alors
+  mise à jour fichier par fichier : cela mélangerait les versions). **Incrémenter `VERSION` dans `sw.js` (et `APP_VERSION`
+  dans `app.js`, affichée dans Réglages) à chaque livraison** et ajouter toute nouvelle ressource à `FILES`. L'appli affiche alors
   « Nouvelle version disponible — Recharger » (pas de rechargement forcé en pleine saisie).
 - **Évolution du schéma** : incrémenter `DB_VER` dans `store.js`, créer les nouveaux object stores dans
   `onupgradeneeded`, migrer les fiches existantes sans perte (valeurs par défaut lues avec `??`).
