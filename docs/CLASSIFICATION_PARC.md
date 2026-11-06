@@ -1,6 +1,8 @@
 # Classification du parc : proposition à relire
 
-Statut : **à relire** (6 nov. 2026). Rien n'est codé. Inspirée de l'ISO 14224 (taxonomie des équipements) et du
+Statut : **validé le 6 nov. 2026** (réponses par défaut au §8 : pas d'ajout de secteur pour l'instant, INF gardée,
+règle A / B / C et conversion 1 → A, 2 → B, 3-4 → C acceptées). Rien n'est encore codé dans l'appli ; le kit Excel
+de démarrage utilise déjà ces codes. Inspirée de l'ISO 14224 (taxonomie des équipements) et du
 vocabulaire EN 13306, simplifiée pour l'industrie et les sites tertiaires. Les **codes sont stables** : un libellé peut
 changer, un code jamais (un code retiré est désactivé, pas effacé).
 

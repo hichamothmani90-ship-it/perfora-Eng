@@ -58,3 +58,32 @@ Aujourd'hui, le préventif est seulement **calendaire** (tous les N jours, éch�
 
 Mise en œuvre prévue : D2 bis (serveur : module selon l'usage, usage figé) regroupé avec les éventuels changements
 magasin / achats pour une seule mise à jour de Supabase ; calculs (échéance, estimation, alerte) testés ; écrans avec D3.
+
+## 4. Décisions magasin et achats (6 nov. 2026)
+
+Magasin :
+1. **Emplacement** : champ texte par article et par site (ex. « A3-02 »), affiché à la remise et à l'inventaire.
+2. **Un magasin par site** (voir §1, évolution sans reprise).
+3. **Conditionnement** : unité d'achat + contenu (ex. carton de 10) sur la ligne d'achat ; conversion en unités de stock
+   à la réception.
+4. **Inventaire** (prioritaire) : comptage par lots, écart calculé, ajustement motivé, validation du responsable au-delà
+   d'un seuil.
+5. **Suivi unitaire** (numéro de série, pièces réparables) : plus tard.
+6. **Valorisation** : coût moyen pondéré (CUMP) par site ; entrées sans prix exclues et signalées.
+
+Achats :
+1. **Fournisseurs** : liste simple (nom, contact, téléphone, e-mail, délai habituel) ; texte libre toujours possible.
+2. **Achats non stockés** (prestation, sous-traitance, location) liés à une intervention ; coût ajouté à l'intervention
+   (lecture restreinte).
+3. **Budgets / centres de coût** : volet E.
+4. **Factures fournisseurs** : hors périmètre ; pièce jointe possible à la réception.
+
+Mise en œuvre : étape « C bis » après le volet D (inventaire avant si un premier client en a besoin).
+
+## 5. Démarrage d'un client (6 nov. 2026)
+
+Kit Excel standard (`kit/Kit_demarrage_Perfora.xlsx`, généré par `scripts/kit_demarrage.py`) rempli par le client ou
+avec lui ; import par l'administrateur de la plateforme depuis une page « Mise en service » de la console (vérification
+à blanc avec rapport ligne par ligne, import en lot annulable, stock de départ en inventaire initial). En attendant la
+page : import par script depuis le poste de l'administrateur. Plus tard : import en libre-service (module imports, pack
+Entreprise).
