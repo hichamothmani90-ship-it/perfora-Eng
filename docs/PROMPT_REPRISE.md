@@ -44,7 +44,8 @@ multi-entreprise) et concepteur d'interfaces terrain mobile-first. Langue : fran
      schema.sql → roles.sql → multitenant.sql → quotas.sql → plateforme.sql → durcissement.sql → magasin.sql → achats.sql → demo.sql ; tests : tests_etancheite, tests_quotas, tests_plateforme, tests_magasin, tests_demo, tests_achats ;
      Edge Function supabase/functions/inviter. Entreprises : DEMO « Perfora Démo » (Site Tanger, pack Pro ;
      othmanihicham99@gmail.com responsable + administrateur plateforme ; hothmani36@outlook.fr magasinier)
-     et VITRINE « Vitrine Perfora » (démo réinitialisable ; hicham.othmani90@gmail.com responsable).
+     et VITRINE « Vitrine Perfora » (démo réinitialisable, **pack Entreprise** depuis le 6 nov. 2026 pour montrer les achats,
+     réinitialisée avec la démo du volet C ; hicham.othmani90@gmail.com responsable). DEMO reste en pack Pro.
    - Tests : node --test tests/*.test.js (35) ; supabase/tests_*.sql (à rejouer dans le SQL Editor).
      Faux serveur : python tests/serveur_factice.py 8094 (comptes test@ responsable, tech2@ technicien,
      mag@ magasinier, achat@ achats, autre@ autre entreprise ; mot de passe test-gmao ; pack de DEMO modifiable par

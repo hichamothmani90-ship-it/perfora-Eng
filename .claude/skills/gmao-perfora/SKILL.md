@@ -267,7 +267,8 @@ Pièges opérationnels déjà rencontrés :
   supprimer ; la grille de résultats est virtualisée → agréger en une ligne (`jsonb_object_agg`).
   Panneau masqué : la grille ne s'affiche pas du tout → lire le résultat via
   `do $x$ begin raise exception 'RESULTAT %', (select …)::text; end $x$;` (message d'erreur lisible ; tout est annulé,
-  pratique aussi pour un test qui ne doit rien laisser).
+  pratique aussi pour un test qui ne doit rien laisser). **Jamais dans la même exécution qu'une écriture** : l'exception
+  annule aussi l'écriture (piège rencontré) → écrire, puis relire dans une exécution séparée.
 - Fenêtres de saisie de l'appli dans un onglet masqué : fermeture retardée par le navigateur. Contournement fiable :
   remplir le formulaire, `form.requestSubmit()` puis `dialog.dispatchEvent(new Event('close'))` (le vrai code de
   l'action s'exécute : contrôles, enregistrements, synchro).
