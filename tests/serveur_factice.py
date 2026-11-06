@@ -10,6 +10,7 @@ Comptes (mot de passe test-gmao), clé publique cle-factice :
   autre@gmao.test  responsable, entreprise AUTRE (pack Essentiel), site Rabat
 Aide aux tests : GET /etat ; POST /test/abonnement {"entreprise":"AUTRE","statut":"suspendu"}
 Quotas (comme supabase/quotas.sql) : rpc/utilisation, rpc/affecter_sites, functions/v1/inviter.
+Console plateforme (comme supabase/plateforme.sql) : rpc/pf_* ; test@gmao.test est administrateur plateforme.
 Lancer : python tests/serveur_factice.py [port]   (8099 par défaut). Données en mémoire."""
 import json, secrets, sys, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -24,6 +25,7 @@ COMMUNS = {"personnes", "articles"}
 PACKS = {
     "essentiel": {"nom": "Essentiel", "modules": ["base", "preventif"], "maxSites": 1, "maxUtilisateursSite": 2, "maxUtilisateursTotal": 2},  # limites basses pour les tests
     "pro": {"nom": "Pro", "modules": ["base", "preventif", "magasin", "rapports"], "maxSites": 3, "maxUtilisateursSite": 15, "maxUtilisateursTotal": 45},
+    "entreprise": {"nom": "Entreprise", "modules": ["base", "preventif", "magasin", "rapports", "achats", "energie", "imports"], "maxSites": None, "maxUtilisateursSite": None, "maxUtilisateursTotal": None},
 }
 ENTREPRISES = {
     "DEMO": {"id": "e-demo", "code": "DEMO", "nom": "Perfora Démo", "pack": "pro", "statut": "actif"},
@@ -79,11 +81,19 @@ def mes_sites(email):
     return list(p["sites"])
 
 
+ADMINS = {"test@gmao.test"}
+
+
 def droits(code):
     e = ENTREPRISES[code]
-    pk = PACKS[e["pack"]]
-    return {"pack": e["pack"], "packNom": pk["nom"], "statut": e["statut"], "fin": None, "ecriture": e["statut"] in ("essai", "actif"),
-            "modules": pk["modules"], "maxSites": pk["maxSites"], "maxUtilisateursSite": pk["maxUtilisateursSite"], "maxUtilisateursTotal": pk["maxUtilisateursTotal"]}
+    pk, d = PACKS[e["pack"]], e.get("derog", {})
+    lim = lambda k: d.get(k) if d.get(k) is not None else pk[k]
+    return {"pack": e["pack"], "packNom": pk["nom"], "statut": e["statut"], "fin": e.get("fin"), "ecriture": e["statut"] in ("essai", "actif"),
+            "modules": pk["modules"], "maxSites": lim("maxSites"), "maxUtilisateursSite": lim("maxUtilisateursSite"), "maxUtilisateursTotal": lim("maxUtilisateursTotal")}
+
+
+def code_de(ent_id):
+    return next((c for c, e in ENTREPRISES.items() if e["id"] == ent_id), None)
 
 
 def actifs_entreprise(code, sauf=None):
@@ -183,6 +193,8 @@ class H(BaseHTTPRequestHandler):
             return self.mon_profil(email)
         if u.path == "/rest/v1/rpc/definir_profil":
             return self.definir_profil(email)
+        if u.path.startswith("/rest/v1/rpc/pf_"):
+            return self.plateforme(email, u.path.removeprefix("/rest/v1/rpc/"))
         moi = PROFILS[email]
         if u.path in ("/rest/v1/rpc/utilisation", "/rest/v1/rpc/affecter_sites", "/functions/v1/inviter") and role_de(email) != "responsable":
             return self.repondre(403, {"message": "Réservé au responsable"})
@@ -213,6 +225,11 @@ class H(BaseHTTPRequestHandler):
         if u.path == "/functions/v1/inviter":
             b = self.corps()
             em, role, liste = (b.get("email") or "").strip().lower(), b.get("role"), b.get("sites") or []
+            if b.get("entrepriseId"):   # invitation par l'administrateur plateforme pour un client
+                if email not in ADMINS:
+                    return self.repondre(400, {"erreur": "Réservé à l'administrateur plateforme"})
+                ent = code_de(b["entrepriseId"])
+                sites_ent = [k for k, v in SITES.items() if v["entreprise"] == ent]
             if "@" not in em or "." not in em.split("@")[-1]:
                 return self.repondre(400, {"erreur": "Adresse e-mail invalide"})
             if not liste or any(x not in sites_ent for x in liste):
@@ -282,6 +299,65 @@ class H(BaseHTTPRequestHandler):
                 fiches[f["id"]] = {"id": f["id"], "type": t, "data": data, "seq": seq[0], "entreprise": ent, "site": s}
         return self.repondre(200, {"acceptes": acceptes, "refuses": refus})
 
+    def plateforme(self, email, nom):
+        if email not in ADMINS:
+            return self.repondre(400, {"message": "Réservé à l'administrateur plateforme"})
+        b = self.corps()
+        if nom == "pf_entreprises":
+            out = []
+            for c, e in sorted(ENTREPRISES.items(), key=lambda x: x[1]["nom"]):
+                d = droits(c)
+                out.append({"id": e["id"], "code": c, "nom": e["nom"], "statut": e["statut"], "demo": e.get("demo", False), "reinitLe": e.get("reinitLe"),
+                            "abonnement": d, "derogations": e.get("derog", {}), "actifs": actifs_entreprise(c),
+                            "sites": [{"id": k, "code": v["code"], "nom": v["nom"], "actif": True, "actifs": actifs_site(k)} for k, v in SITES.items() if v["entreprise"] == c],
+                            "responsables": sorted(m for m, pp in PROFILS.items() if pp["entreprise"] == c and pp["role"] == "responsable" and pp["actif"]),
+                            "fiches": sum(1 for f in fiches.values() if f["entreprise"] == c), "photos": sum(1 for f in fiches.values() if f["entreprise"] == c and f["type"] == "photos"),
+                            "derniereActivite": None})
+            return self.repondre(200, out)
+        if nom == "pf_creer_entreprise":
+            code = (b.get("p_code") or "").strip().upper()
+            if not code or code in ENTREPRISES:
+                return self.repondre(400, {"message": "Ce code entreprise existe déjà" if code else "Code obligatoire"})
+            eid, sid = "e-" + code.lower(), "s-" + code.lower() + "-1"
+            ENTREPRISES[code] = {"id": eid, "code": code, "nom": b["p_nom"], "pack": b["p_pack"], "statut": b.get("p_statut") or "essai", "demo": bool(b.get("p_demo")), "derog": {}}
+            SITES[sid] = {"id": sid, "entreprise": code, "code": (b.get("p_site_code") or "S1").upper(), "nom": b["p_site_nom"]}
+            return self.repondre(200, {"entrepriseId": eid, "siteId": sid})
+        code = code_de(b.get("p_entreprise"))
+        if not code:
+            return self.repondre(400, {"message": "Entreprise inconnue"})
+        e = ENTREPRISES[code]
+        if nom == "pf_modifier_abonnement":
+            e.update({"pack": b["p_pack"], "statut": b["p_statut"], "fin": b.get("p_fin"),
+                      "derog": {"maxSites": b.get("p_max_sites"), "maxUtilisateursSite": b.get("p_max_utilisateurs_site"), "maxUtilisateursTotal": b.get("p_max_utilisateurs_total")}})
+            return self.repondre(200, None)
+        if nom == "pf_ajouter_site":
+            d = droits(code)
+            n = sum(1 for v in SITES.values() if v["entreprise"] == code)
+            if d["maxSites"] is not None and n + 1 > d["maxSites"]:
+                return self.repondre(400, {"message": f"Quota atteint : {d['maxSites']} site(s) maximum (pack {d['packNom']})"})
+            sid = f"s-{code.lower()}-{n + 1}"
+            SITES[sid] = {"id": sid, "entreprise": code, "code": b["p_code"].upper(), "nom": b["p_nom"]}
+            return self.repondre(200, sid)
+        if nom == "pf_reinitialiser_demo":
+            if not e.get("demo"):
+                return self.repondre(400, {"message": "Seule une entreprise de démonstration peut être réinitialisée"})
+            site = next(k for k, v in SITES.items() if v["entreprise"] == code)
+            k = secrets.token_hex(4)
+            with verrou:
+                for i in [i for i, f in fiches.items() if f["entreprise"] == code]:
+                    del fiches[i]
+                seed = [("localisations", {"code": "AT", "nom": "Atelier démo", "parentId": None}),
+                        ("equipements", {"code": "PRESSE-01", "designation": "Presse hydraulique 200 t", "localisationId": k + "-0", "criticite": "4", "actif": True}),
+                        ("demandes", {"ref": "DEM-DEMO-0001", "equipementId": k + "-1", "besoin": "verifier", "constat": "Bruit anormal", "etat": "degrade", "impact": "aucun_constate", "statut": "a_examiner", "creeLe": "2026-11-06T08:00"})]
+                for n_, (t, d) in enumerate(seed):
+                    seq[0] += 1
+                    fid = f"{k}-{n_}"
+                    fiches[fid] = {"id": fid, "type": t, "seq": seq[0], "entreprise": code, "site": site,
+                                   "data": {**d, "id": fid, "siteId": site, "creeLe": d.get("creeLe", "2026-11-06T08:00"), "modifieLe": "2026-11-06T08:00"}}
+            e["reinitLe"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+            return self.repondre(200, {"fiches": len(seed), "reinitLe": e["reinitLe"]})
+        return self.repondre(404, {"message": "inconnu"})
+
     def mon_profil(self, email):
         p = PROFILS.get(email)
         if not p:
@@ -295,9 +371,9 @@ class H(BaseHTTPRequestHandler):
         e = ENTREPRISES[p["entreprise"]]
         sites = sorted((SITES[s] for s in mes_sites(email)), key=lambda x: x["nom"])
         return self.repondre(200, {"userId": "u-" + email, "email": email, "nom": p["nom"], "role": p["role"], "personneId": pid, "actif": p["actif"],
-                                   "entreprise": {"id": e["id"], "code": e["code"], "nom": e["nom"], "statut": e["statut"]},
+                                   "entreprise": {"id": e["id"], "code": e["code"], "nom": e["nom"], "statut": e["statut"], "demo": e.get("demo", False), "reinitLe": e.get("reinitLe")},
                                    "sites": [{"id": s["id"], "code": s["code"], "nom": s["nom"]} for s in sites],
-                                   "siteDefaut": p["defaut"], "abonnement": droits(p["entreprise"]), "adminPlateforme": False})
+                                   "siteDefaut": p["defaut"], "abonnement": droits(p["entreprise"]), "adminPlateforme": email in ADMINS})
 
     def definir_profil(self, email):
         if role_de(email) != "responsable":

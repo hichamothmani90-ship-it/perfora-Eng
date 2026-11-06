@@ -5,7 +5,7 @@
 (() => {
   const { data } = Store;
   /** Version affichée dans Réglages : à incrémenter avec VERSION dans sw.js. */
-  const APP_VERSION = 'v17';
+  const APP_VERSION = 'v18';
   const $ = s => document.querySelector(s);
   // Multi-site : les listes de fiches de site ne montrent que le site actif (« tous » possible).
   // Les fiches sans site (anciennes ou pas encore synchronisées) restent visibles.
@@ -604,7 +604,14 @@
       <div class="qr-grid">${eqs.map(e => `<div class="qr-label">${QR.svg(lienSignaler(e), 132)}<div><b>${esc(e.designation)}</b><div class="small">${esc(e.code)}</div><div class="small muted">${esc(locPath(e.localisationId))}</div><div class="small">Scanner pour signaler</div></div></div>`).join('') || empty('Aucun équipement.')}</div>`;
   };
 
+  V.plateforme = () => Sync.profil()?.adminPlateforme
+    ? `<h1>Console plateforme</h1><p class="small muted">Réservée à l’administrateur plateforme. Chaque action est vérifiée par le serveur.</p>
+       <div class="actions"><button class="btn primary" type="button" id="pf-creer">+ Nouvelle entreprise</button><button class="btn" type="button" id="pf-actualiser">Actualiser</button></div>
+       <div id="pf-liste"><p class="muted">Chargement…</p></div>`
+    : empty('Réservé à l’administrateur plateforme.');
+
   V.plus = () => `<h1>Plus</h1>${[['#/preventif', '↻ Préventif', 'Programmes et échéances'], ['#/qr', '▣ QR codes', 'Planche imprimable des équipements'], ['#/magasin', '▤ Magasin', 'Articles, stock, mouvements'], ['#/indicateurs', '▥ Indicateurs', 'Pilotage par équipement'], ['#/journal', '☰ Journal d’audit', 'Toutes les modifications'], ['#/reglages', '⚙ Réglages', 'Utilisateur, personnes, sauvegarde']]
+    .concat(Sync.profil()?.adminPlateforme ? [['#/plateforme', '◆ Console plateforme', 'Clients, abonnements, démo commerciale']] : [])
     .filter(([h]) => !(h === '#/magasin' && !aModule('magasin')) && !(h === '#/preventif' && !aModule('preventif')))
     .map(([h, t, s]) => `<a class="card" href="${h}"><div class="t">${t}</div><div class="s">${s}</div></a>`).join('')}`;
 
@@ -749,6 +756,91 @@
         AFTER.reglages();
       });
     } catch (e) { box.innerHTML = `<p class="warn" style="margin:0">Équipe indisponible : ${esc(e.message)}</p>`; }
+  };
+  const PACKS = { essentiel: 'Essentiel', pro: 'Pro', entreprise: 'Entreprise' };
+  const STATUTS_ABO = { essai: 'Essai', actif: 'Actif', suspendu: 'Suspendu', resilie: 'Résilié' };
+  AFTER.plateforme = async () => {
+    const box = $('#pf-liste');
+    if (!box) return;
+    const recharger = () => AFTER.plateforme();
+    $('#pf-actualiser').onclick = recharger;
+    $('#pf-creer').onclick = async () => {
+      const v = await askForm({ title: 'Nouvelle entreprise cliente', ok: 'Créer', values: { pack: 'essentiel', statut: 'essai', siteCode: 'S1' }, fields: [
+        { name: 'nom', label: 'Nom de l’entreprise', type: 'text', required: true },
+        { name: 'code', label: 'Code (majuscules, ex. ACME)', type: 'text', required: true },
+        { name: 'pack', label: 'Pack', type: 'chips', options: PACKS, required: true },
+        { name: 'statut', label: 'Statut', type: 'chips', options: { essai: 'Essai', actif: 'Actif' }, required: true },
+        { name: 'siteNom', label: 'Premier site', type: 'text', required: true, placeholder: 'ex. Usine de Tanger' },
+        { name: 'siteCode', label: 'Code du site', type: 'text', required: true },
+        { name: 'email', label: 'E-mail du responsable à inviter', type: 'email' },
+        { name: 'demo', label: 'Entreprise de démonstration (réinitialisable)', type: 'checkbox' }] });
+      if (!v) return;
+      try {
+        const r = await Sync.pf.creer(v);
+        let msg = `Entreprise « ${v.nom} » créée avec le site « ${v.siteNom} ».`;
+        if (v.demo) { await Sync.pf.reinitialiserDemo(r.entrepriseId); msg += ' Données de démonstration chargées.'; }
+        if (v.email) {
+          try { await Sync.inviter({ email: v.email, role: 'responsable', sites: [r.siteId], entrepriseId: r.entrepriseId, redirectTo: adressePublique() }); msg += ` Invitation envoyée à ${v.email}.`; }
+          catch (e) { msg += ` Invitation non envoyée : ${e.message}`; }
+        }
+        await alertBox('Nouvelle entreprise', [msg]);
+      } catch (e) { await alertBox('Création refusée', [e.message]); }
+      recharger();
+    };
+    try {
+      const liste = await Sync.pf.entreprises();
+      const lim = v => v == null ? '∞' : v;
+      box.innerHTML = liste.map(e => {
+        const a = e.abonnement || {};
+        const badgeStatut = badge(STATUTS_ABO[a.statut] || a.statut || '—', { actif: 'green', essai: 'blue', suspendu: 'red', resilie: 'red' }[a.statut] || '');
+        return `<div class="card"><div class="row"><span class="t grow">${esc(e.nom)} <span class="muted small">${esc(e.code)}</span></span>${e.demo ? badge('démo', 'amber') : ''}${badge(a.packNom || a.pack || '—', 'blue')}${badgeStatut}</div>
+          <dl class="kv small" style="margin-top:8px">
+            <dt>Utilisateurs</dt><dd>${e.actifs} / ${lim(a.maxUtilisateursTotal)} actifs · responsables : ${esc((e.responsables || []).join(', ') || 'aucun')}</dd>
+            <dt>Sites</dt><dd>${(e.sites || []).map(s => `${esc(s.nom)} (${s.actifs} / ${lim(a.maxUtilisateursSite)})`).join(' · ') || '—'} — max ${lim(a.maxSites)}</dd>
+            <dt>Données</dt><dd>${e.fiches} fiches · ${e.photos} photos · dernière activité ${e.derniereActivite ? fmtY(String(e.derniereActivite).slice(0, 16).replace(' ', 'T')) : '—'}</dd>
+            ${a.fin ? `<dt>Échéance</dt><dd>${fmtY(a.fin)}</dd>` : ''}
+            ${Object.values(e.derogations || {}).some(x => x != null) ? `<dt>Dérogations</dt><dd>${esc(JSON.stringify(e.derogations))}</dd>` : ''}
+          </dl>
+          <div class="actions" style="margin-bottom:0">
+            <button class="btn sm" data-pf="abo" data-id="${e.id}">Abonnement</button>
+            <button class="btn sm" data-pf="site" data-id="${e.id}">+ Site</button>
+            <button class="btn sm" data-pf="inviter" data-id="${e.id}">Inviter un responsable</button>
+            ${e.demo ? `<button class="btn sm danger" data-pf="reinit" data-id="${e.id}">Réinitialiser la démo</button>` : ''}</div></div>`;
+      }).join('') || empty('Aucune entreprise.');
+      box.querySelectorAll('[data-pf]').forEach(b => b.onclick = async () => {
+        const e = liste.find(x => x.id === b.dataset.id), a = e.abonnement || {}, d = e.derogations || {};
+        try {
+          if (b.dataset.pf === 'abo') {
+            const v = await askForm({ title: `Abonnement — ${e.nom}`, values: { pack: a.pack, statut: a.statut, fin: a.fin, ...d }, fields: [
+              { name: 'pack', label: 'Pack', type: 'chips', options: PACKS, required: true },
+              { name: 'statut', label: 'Statut', type: 'chips', options: STATUTS_ABO, required: true },
+              { name: 'fin', label: 'Échéance', type: 'date' },
+              { type: 'info', text: 'Dérogations : laisser vide pour appliquer les limites du pack.' },
+              { name: 'maxSites', label: 'Sites maximum', type: 'number' },
+              { name: 'maxUtilisateursSite', label: 'Utilisateurs maximum par site', type: 'number' },
+              { name: 'maxUtilisateursTotal', label: 'Utilisateurs maximum au total', type: 'number' }] });
+            if (!v) return;
+            await Sync.pf.abonnement(e.id, v); toast('Abonnement mis à jour');
+          } else if (b.dataset.pf === 'site') {
+            const v = await askForm({ title: `Nouveau site — ${e.nom}`, fields: [{ name: 'nom', label: 'Nom', type: 'text', required: true }, { name: 'code', label: 'Code', type: 'text', required: true }] });
+            if (!v) return;
+            await Sync.pf.ajouterSite(e.id, v.code, v.nom); toast('Site ajouté');
+          } else if (b.dataset.pf === 'inviter') {
+            const v = await askForm({ title: `Inviter un responsable — ${e.nom}`, ok: 'Envoyer l’invitation', fields: [
+              { name: 'email', label: 'E-mail', type: 'email', required: true }, { name: 'nom', label: 'Nom affiché', type: 'text' },
+              { name: 'sites', label: 'Sites', type: 'chipsMulti', options: Object.fromEntries((e.sites || []).filter(s => s.actif).map(s => [s.id, s.nom])) }] });
+            if (!v) return;
+            if (!v.sites.length) { toast('Choisissez au moins un site'); return; }
+            const r = await Sync.inviter({ ...v, role: 'responsable', entrepriseId: e.id, redirectTo: adressePublique() });
+            await alertBox('Invitation', [r.emailEnvoye ? `E-mail envoyé à ${v.email}.` : `${v.email} est rattaché comme responsable.`]);
+          } else if (b.dataset.pf === 'reinit') {
+            if (!(await askConfirm('Réinitialiser la démo', `Toutes les données de « ${e.nom} » seront remplacées par le jeu de démonstration. Les appareils connectés à cette démo se resynchroniseront d’eux-mêmes.`, 'Réinitialiser'))) return;
+            const r = await Sync.pf.reinitialiserDemo(e.id); toast(`Démo réinitialisée (${r.fiches} fiches)`);
+          }
+        } catch (err) { await alertBox('Action refusée', [err.message]); }
+        recharger();
+      });
+    } catch (e) { box.innerHTML = `<p class="warn">Console indisponible : ${esc(e.message)}</p>`; }
   };
   AFTER.signaler = r => {
     const form = $('#sig');
@@ -1239,7 +1331,7 @@
     return true;
   }
 
-  A['sync-maintenant'] = async () => { await Sync.synchroniser(); render(); const s = Sync.etatCourant(); toast(s.erreur ? 'Erreur : ' + s.erreur : 'Synchronisation terminée'); };
+  A['sync-maintenant'] = async () => { try { await Sync.chargerProfil(); } catch (e) { toast(e.message); } await Sync.synchroniser(); render(); const s = Sync.etatCourant(); toast(s.erreur ? 'Erreur : ' + s.erreur : 'Synchronisation terminée'); };
   A['sync-tout'] = async () => {
     if (!(await askConfirm('Tout envoyer', 'Toutes les fiches de cet appareil seront envoyées au serveur (fusion, rien n’est supprimé). Utile au premier branchement ou après l’import d’une sauvegarde.', 'Envoyer'))) return;
     const n = await Store.toutEnvoyer(); toast(`${n} fiche(s) mises en file d’envoi`); await Sync.synchroniser(); render();
@@ -1314,7 +1406,7 @@
     const [name, id] = path.split('/');
     return { name, id: id ? decodeURIComponent(id) : null, q: new URLSearchParams(qs || '') };
   }
-  const TAB_OF = { demande: 'demandes', ot: 'ots', eq: 'parc', article: 'magasin', signaler: '', qr: 'parc' };
+  const TAB_OF = { demande: 'demandes', ot: 'ots', eq: 'parc', article: 'magasin', signaler: '', qr: 'parc', plateforme: 'plus' };
   const MOBILE_PLUS = ['preventif', 'magasin', 'article', 'indicateurs', 'journal', 'reglages', 'plus'];
   function render() {
     cacheEtat = null;

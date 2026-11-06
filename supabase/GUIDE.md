@@ -47,6 +47,11 @@ Fonction serveur : **Edge Functions → Deploy a new function → Via Editor**, 
 [`functions/inviter/index.ts`](functions/inviter/index.ts), « Verify JWT » activé (fait le 6 nov. 2026).
 Les membres s'invitent ensuite depuis l'appli : **Réglages → Équipe et droits → + Inviter un membre**.
 
+## 2 quinquies. Console plateforme (volet A4)
+Coller [`plateforme.sql`](plateforme.sql) → **Run** (fait le 6 nov. 2026) ; tests : [`tests_plateforme.sql`](tests_plateforme.sql).
+La fonction `inviter` accepte `entrepriseId` (administrateur plateforme uniquement) — redéployée le 6 nov. 2026.
+Dans l'appli : **Plus → Console plateforme** (visible seulement de l'administrateur).
+
 ## 3. Fermer les inscriptions publiques
 **Authentication** → **Sign In / Providers** (ou *Settings*) → désactiver **Allow new users to sign up**.
 Seul le responsable crée les comptes.

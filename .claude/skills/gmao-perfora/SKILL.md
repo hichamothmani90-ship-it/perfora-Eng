@@ -122,6 +122,12 @@ Chaque indicateur affiche périmètre, période, convention, couverture et effec
   uniquement) → `finaliser_invitation` (réservée au service_role ; quotas revérifiés) ; échec = compte
   invité supprimé. Ne jamais mettre la clé secrète dans l'appli. Messages d'erreur serveur remontés tels
   quels par `api()` (champ `message` / `erreur`).
+- **Console plateforme** (A4, `supabase/plateforme.sql`, vue `#/plateforme`, `Sync.pf`) : fonctions `pf_*`
+  réservées à `admins_plateforme` (`exiger_admin()`), contrôle d'invitation commun `controle_invitation`
+  (responsable ou plateforme), Edge Function `inviter` avec `entrepriseId` pour inviter le responsable d'un
+  client. Démo commerciale : `entreprises.demo = true` seulement ; `pf_reinitialiser_demo` est le **seul**
+  endroit où des fiches sont supprimées ; `entreprises.reinit_le` renvoyé par `mon_profil` → l'appareil vide
+  et resynchronise (`chargerProfil`). « Synchroniser maintenant » recharge le profil.
 - **Sans cloud** : export/import JSON ; par fiche, la plus récente (`modifieLe`) gagne ;
   rien n'est supprimé par absence.
 - **Service worker** : cache d'abord, **une version = un cache complet installé d'un bloc** (jamais de

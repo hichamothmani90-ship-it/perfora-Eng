@@ -1,7 +1,8 @@
 // Fonction serveur « inviter » (Supabase Edge Function) — volet A3.
 // Seul endroit qui utilise la clé secrète (SUPABASE_SERVICE_ROLE_KEY, fournie par Supabase,
 // jamais présente dans l'appli). Étapes :
-//  1. contrôle au nom du responsable connecté : rôle, sites, places libres (preparer_invitation)
+//  1. contrôle au nom de l'appelant : responsable de son entreprise (preparer_invitation) ou, avec
+//     entrepriseId, administrateur plateforme pour un client (pf_preparer_invitation)
 //  2. envoi de l'e-mail d'invitation (sauf compte existant non rattaché)
 //  3. rattachement du compte : entreprise, rôle, sites (finaliser_invitation ; quotas revérifiés
 //     par les déclencheurs). En cas d'échec, le compte tout juste invité est supprimé.
@@ -24,12 +25,14 @@ Deno.serve(async (req) => {
     const url = Deno.env.get('SUPABASE_URL')!;
     const anon = Deno.env.get('SUPABASE_ANON_KEY')!;
     const secrete = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const { email, role, nom, sites, redirectTo } = await req.json();
+    const { email, role, nom, sites, redirectTo, entrepriseId } = await req.json();
     if (!email || !role || !Array.isArray(sites) || !sites.length) return repondre({ erreur: 'E-mail, rôle et au moins un site sont requis' }, 400);
 
     // 1. Contrôle au nom de l'appelant (son jeton : auth.uid() = le responsable).
     const appelant = createClient(url, anon, { global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } } });
-    const { data: ctrl, error: e1 } = await appelant.rpc('preparer_invitation', { p_email: email, p_role: role, p_sites: sites });
+    const { data: ctrl, error: e1 } = entrepriseId
+      ? await appelant.rpc('pf_preparer_invitation', { p_entreprise: entrepriseId, p_email: email, p_role: role, p_sites: sites })
+      : await appelant.rpc('preparer_invitation', { p_email: email, p_role: role, p_sites: sites });
     if (e1) return repondre({ erreur: e1.message }, 400);
 
     // 2. Invitation (clé secrète, côté serveur uniquement).

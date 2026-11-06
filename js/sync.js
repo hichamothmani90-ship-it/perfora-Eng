@@ -166,6 +166,12 @@ const Sync = (() => {
       await majCfg({ curseur: 0 });
     }
     if (ent && Store.device().entrepriseId !== ent) await Store.persistMeta({ ...Store.device(), entrepriseId: ent, siteActif: null });
+    // Démo commerciale réinitialisée sur le serveur : on repart de zéro (données de démo uniquement).
+    const ri = p?.entreprise?.reinitLe || null;
+    if (p?.entreprise?.demo && ri && Store.device().reinitLe !== ri) {
+      if (Store.device().reinitLe) { await Store.viderMetier(); await majCfg({ curseur: 0 }); }
+      await Store.persistMeta({ ...Store.device(), reinitLe: ri });
+    }
     await majCfg({ profil: p, profilLe: Date.now() });
     if (p?.personneId && Store.device().personneId !== p.personneId) await Store.persistMeta({ ...Store.device(), personneId: p.personneId });
     return p;
@@ -175,11 +181,21 @@ const Sync = (() => {
   const utilisation = () => api('/rest/v1/rpc/utilisation', { method: 'POST', body: '{}' });
   const affecterSites = (cible, liste) => api('/rest/v1/rpc/affecter_sites', { method: 'POST', body: JSON.stringify({ cible, liste }) });
   /** Invitation via la fonction serveur « inviter » (seule détentrice de la clé secrète). */
-  async function inviter({ email, role, nom, sites, redirectTo }) {
-    const rep = await api('/functions/v1/inviter', { method: 'POST', body: JSON.stringify({ email, role, nom, sites, redirectTo }) });
+  async function inviter({ email, role, nom, sites, redirectTo, entrepriseId }) {
+    const rep = await api('/functions/v1/inviter', { method: 'POST', body: JSON.stringify({ email, role, nom, sites, redirectTo, entrepriseId }) });
     if (rep?.erreur) throw new Error(rep.erreur);
     return rep;
   }
+  // ---------- console plateforme (administrateur plateforme) ----------
+  const rpc = (nom, corps = {}) => api('/rest/v1/rpc/' + nom, { method: 'POST', body: JSON.stringify(corps) });
+  const pf = {
+    entreprises: () => rpc('pf_entreprises'),
+    creer: v => rpc('pf_creer_entreprise', { p_code: v.code, p_nom: v.nom, p_pack: v.pack, p_statut: v.statut, p_site_code: v.siteCode, p_site_nom: v.siteNom, p_demo: !!v.demo }),
+    abonnement: (ent, v) => rpc('pf_modifier_abonnement', { p_entreprise: ent, p_pack: v.pack, p_statut: v.statut, p_fin: v.fin || null,
+      p_max_sites: v.maxSites ?? null, p_max_utilisateurs_site: v.maxUtilisateursSite ?? null, p_max_utilisateurs_total: v.maxUtilisateursTotal ?? null }),
+    ajouterSite: (ent, code, nom) => rpc('pf_ajouter_site', { p_entreprise: ent, p_code: code, p_nom: nom }),
+    reinitialiserDemo: ent => rpc('pf_reinitialiser_demo', { p_entreprise: ent }),
+  };
   async function definirProfil(cible, role, nom, actif) {
     await api('/rest/v1/rpc/definir_profil', { method: 'POST', body: JSON.stringify({ cible, nouveau_role: role, nouveau_nom: nom, est_actif: actif }) });
   }
@@ -242,5 +258,5 @@ const Sync = (() => {
   }
   function notifier() { try { surEtat(etatCourant()); } catch { /* affichage */ } }
 
-  return { PROJET, profil, chargerProfil, equipe, definirProfil, utilisation, affecterSites, inviter, connecter, deconnecter, synchroniser, planifier, demarrer, etatCourant, lireLienEmail, sessionDepuisLien, changerMotDePasse, demanderLien };
+  return { PROJET, pf, profil, chargerProfil, equipe, definirProfil, utilisation, affecterSites, inviter, connecter, deconnecter, synchroniser, planifier, demarrer, etatCourant, lireLienEmail, sessionDepuisLien, changerMotDePasse, demanderLien };
 })();
