@@ -10,7 +10,8 @@
 | Socle | PWA mobile-first, hors ligne, sans dépendance : signalement < 30 s, interventions sans chronomètre, préventif, magasin simple, indicateurs par équipement, journal d'audit append-only | En ligne |
 | Lot 0 | Règles et indicateurs testés (S01–S08, 25 tests), QR codes hors ligne + planche imprimable, photos, rappel de sauvegarde | En ligne |
 | Lot 1 | Synchronisation cloud offline-first (Supabase), fusion champ par champ, invitations et mot de passe par e-mail | En ligne, validé sur 2 appareils |
-| Lot 1 · étape 2 | Rôles contrôlés par le serveur (responsable, technicien, prestataire, magasinier, exploitation, pilote), équipe gérée dans l'appli | v14 (publication à vérifier) |
+| Lot 1 · étape 2 | Rôles contrôlés par le serveur (responsable, technicien, prestataire, magasinier, exploitation, pilote), équipe gérée dans l'appli | En ligne (v14) |
+| Volet A · A1 | Serveur multi-entreprise : entreprises, sites, packs, abonnements, lecture et écriture limitées à l'entreprise et aux sites autorisés, modules du pack, abonnement suspendu = lecture seule. Données actuelles = « Perfora Démo » / « Site Tanger » (pack Pro) | En place sur Supabase, testé (12 tests d'étanchéité) |
 
 Adresses : appli <https://hichamothmani90-ship-it.github.io/perfora-Eng/> · code <https://github.com/hichamothmani90-ship-it/perfora-Eng> ·
 Supabase projet `gmao-terrain` (réf. `oihaqzkqhvyjybijsonc`, Frankfurt).

@@ -34,6 +34,13 @@ Tout nouveau compte arrive en **Technicien**.
 Le serveur applique ces règles (fonction `push_fiches`) ; une modification interdite est refusée,
 l'appareil reprend la version du serveur et affiche le motif.
 
+## 2 ter. Multi-entreprise (volet A)
+Coller [`multitenant.sql`](multitenant.sql) → **Run** (fait le 6 nov. 2026), puis l'administrateur plateforme
+(ligne en fin de script). Vérification : [`tests_etancheite.sql`](tests_etancheite.sql) (une ligne de résultats, puis
+supprimer la fonction de test). Tant que l'étape A3 n'est pas livrée, un compte invité doit être rattaché à son
+entreprise par SQL : `update profils set entreprise_id = …, site_defaut = … where email = …;` +
+`insert into profil_sites …`.
+
 ## 3. Fermer les inscriptions publiques
 **Authentication** → **Sign In / Providers** (ou *Settings*) → désactiver **Allow new users to sign up**.
 Seul le responsable crée les comptes.

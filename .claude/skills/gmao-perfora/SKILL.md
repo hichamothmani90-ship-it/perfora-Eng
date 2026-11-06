@@ -95,6 +95,16 @@ Chaque indicateur affiche périmètre, période, convention, couverture et effec
   `tests/serveur_factice.py`. Sans compte cloud : aucune restriction (usage local).
   Tester une règle serveur : fonction plpgsql temporaire qui fixe `request.jwt.claims`, appelle
   `push_fiches`, puis nettoie ses données (le SQL Editor ne garde pas un `begin … rollback`).
+- **Multi-entreprise** (`supabase/multitenant.sql`, volet A) : `entreprises`, `sites`, `packs` (modules :
+  base, preventif, magasin, rapports, achats, energie, imports), `abonnements` (dérogations), `profil_sites`,
+  `admins_plateforme`. `fiches.entreprise_id` (obligatoire, posé par le serveur) et `fiches.site_id` (nul pour
+  personnes et articles). Lecture : `mon_entreprise()` + `mes_sites()`. `push_fiches` refuse dans l'ordre :
+  type inconnu, abonnement non écrivable, fiche d'une autre entreprise, journal lié refusé, module hors pack
+  (`module_de`), rôle (`peut_ecrire`), règles métier, puis site (envoyé › existant › hérité du parent pour
+  journal / photos › site par défaut du compte) non autorisé ou changé par un non-responsable ; il recopie
+  `siteId` dans `data`. `mon_profil()` renvoie entreprise, sites, siteDefaut, abonnement, adminPlateforme.
+  Toute nouvelle table de données doit porter entreprise_id (+ site_id) et une politique RLS équivalente ;
+  rejouer `supabase/tests_etancheite.sql` après chaque changement de règle.
 - **Sans cloud** : export/import JSON ; par fiche, la plus récente (`modifieLe`) gagne ;
   rien n'est supprimé par absence.
 - **Service worker** : cache d'abord, **une version = un cache complet installé d'un bloc** (jamais de
