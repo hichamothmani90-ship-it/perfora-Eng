@@ -59,7 +59,9 @@ ne déclare pas perfora.ma ; l'ancien dépôt n'a plus d'effet une fois les DNS 
     collée n'était pas la vraie : Resend n'affiche la clé complète qu'une fois, à la création (ensuite `re_xxxx...`
     tronqué), et le copier-coller ne sort pas du panneau navigateur de Claude. Clé créée et collée depuis le navigateur
     habituel de Hicham : OK. Clés inutilisées « Supabase Perfora » / « Supabase Perfora 2 » à supprimer dans Resend.
-  - À faire : modèles d'e-mails Supabase en français (invitation, mot de passe, lien de connexion), aux couleurs Perfora.
+  - Modèles d'e-mails en français aux couleurs Perfora (6 : invitation, mot de passe, lien de connexion, confirmation,
+    changement d'adresse, code) : sources dans `supabase/emails/` (README = correspondance modèle / sujet), appliqués dans
+    Supabase → Authentication → Emails → Templates le 6 nov. 2026 (chargés depuis GitHub dans l'éditeur, sujets saisis).
   - Restes facultatifs : redirection www → perfora.ma ; supprimer l'ancien `default._domainkey` (hérité de Nindohost) ;
     durcir DMARC (`p=quarantine`) après quelques semaines d'envois sans problème.
 

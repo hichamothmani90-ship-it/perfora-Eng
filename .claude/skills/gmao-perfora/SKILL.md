@@ -285,3 +285,5 @@ Pièges opérationnels déjà rencontrés :
   Secrets (clés Resend, etc.) : c'est l'utilisateur qui les crée et les colle, **depuis son navigateur habituel** — le
   copier-coller ne sort pas du panneau navigateur de Claude, et une clé Resend n'est visible en entier qu'à sa création.
   Diagnostic d'envoi : Supabase → Logs → Auth (erreur 535 = clé refusée) puis Resend → Emails (statut Delivered).
+  Modèles d'e-mails : sources `supabase/emails/*.html` ; garder `{{ .ConfirmationURL }}` (l'appli lit la session dans
+  l'adresse au retour). Les modifier = éditer le fichier, pousser, recharger dans l'éditeur Supabase depuis GitHub.
