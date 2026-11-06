@@ -325,6 +325,17 @@
     return { quantite: qv + qnv, quantiteValorisee: qv, quantiteNonValorisee: qnv, valeur, cump: cump(), incomplet: qnv > 0, provisoire, couts };
   }
 
+  /** Consommation moyenne par semaine sur une période (remises et sorties, retours déduits) : aide à proposer un seuil.
+      V3 §14 : 2 filtres / semaine × 3 semaines de délai + 2 de sécurité = seuil indicatif de 8. */
+  function consommationHebdo(mouvements, articleId, siteId, today, jours = 90) {
+    const debut = addDays(today, -jours);
+    const m = mouvements.filter(x => surArticleSite(x, articleId, siteId) && (x.le || '').slice(0, 10) > debut && (x.le || '').slice(0, 10) <= today);
+    const sorti = m.filter(x => ['remise', 'sortie'].includes(x.type)).reduce((s, x) => s + abs(x.qte), 0)
+      - m.filter(x => x.type === 'retour').reduce((s, x) => s + abs(x.qte), 0);
+    return Math.max(0, sorti) / (jours / 7);
+  }
+  const seuilIndicatif = (consoHebdo, delaiJours, securite) => Math.ceil(consoHebdo * (num(delaiJours) / 7) + num(securite));
+
   /** Coût consommé par un besoin : quantité utilisée × coût figé de ses remises (moyenne pondérée), null si inconnu. */
   function coutConsomme(besoin, mouvements, pieces, couts) {
     const rem = remisesDuBesoin(mouvements, besoin.id);
@@ -334,6 +345,6 @@
     return rapprochementBesoin(besoin, mouvements, pieces).utilise * cu;
   }
 
-  const Calculs = { seuilActif, besoinsNonCouverts, receptionLigne, etatAchat, qteEnCommande, qteIsolee, situationArticle, aReapprovisionner, prixMAD, valorisation, coutConsomme, besoinsAServir, attentesALever, piecesDetenues, stockPhysique, qteReservee, stockDisponible, etatBesoin, rapprochementBesoin, retraitsAVerifier, qteRemise, addDays, daysBetween, minutesBetween, dureeUnion, mediane, NATURE_DU_BESOIN, ETAT_RANK, otOuvert, demandeOuverte, indexOtsParDemande, etatEquipement, verifierCloture, echeanceSuivante, indicateurs };
+  const Calculs = { consommationHebdo, seuilIndicatif, seuilActif, besoinsNonCouverts, receptionLigne, etatAchat, qteEnCommande, qteIsolee, situationArticle, aReapprovisionner, prixMAD, valorisation, coutConsomme, besoinsAServir, attentesALever, piecesDetenues, stockPhysique, qteReservee, stockDisponible, etatBesoin, rapprochementBesoin, retraitsAVerifier, qteRemise, addDays, daysBetween, minutesBetween, dureeUnion, mediane, NATURE_DU_BESOIN, ETAT_RANK, otOuvert, demandeOuverte, indexOtsParDemande, etatEquipement, verifierCloture, echeanceSuivante, indicateurs };
   if (typeof module === 'object' && module.exports) module.exports = Calculs; else root.Calculs = Calculs;
 })(this);

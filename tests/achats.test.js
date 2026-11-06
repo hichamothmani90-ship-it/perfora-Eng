@@ -134,3 +134,13 @@ test('valorisation par site : le stock d’un site ne valorise pas l’autre ; p
   assert.equal(C.valorisation([e1, e2, iso, lib], V, A.id, S1).quantite, 5);
   assert.equal(C.valorisation([e1, e2], V, A.id, S2).cump, 80);
 });
+
+test('V3 §14 : aide au seuil — 2 par semaine × 3 semaines de délai + 2 de sécurité = 8 (indicatif)', () => {
+  const m = [];
+  for (let s = 0; s < 12; s++) m.push(mv({ type: 'remise', qte: -2, le: C.addDays('2026-11-06', -7 * s - 1) + 'T09:00' }));
+  m.push(mv({ type: 'retour', qte: 1, le: '2026-11-05T09:00' }), mv({ type: 'remise', qte: -50, le: '2026-01-01T09:00' }));
+  const c = C.consommationHebdo(m, A.id, S1, '2026-11-06', 84);
+  assert.equal(Math.round(c * 100) / 100, Math.round(23 / 12 * 100) / 100, 'retours déduits, hors période exclue');
+  assert.equal(C.seuilIndicatif(2, 21, 2), 8);
+  assert.equal(C.consommationHebdo([], A.id, S1, '2026-11-06'), 0);
+});

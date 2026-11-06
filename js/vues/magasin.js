@@ -42,18 +42,25 @@
       <div class="actions" style="margin:8px 0 0"><button class="btn sm primary" data-act="mag-verifier" data-id="${m.id}">Vérifié</button>${a ? `<a class="btn sm ghost" href="#/article/${a.id}">Voir l’article</a>` : ''}</div></div>`;
   }
   function carteArticle(a) {
-    const p = physique(a.id), r = reserve(a.id);
-    return `<a class="card" href="#/article/${a.id}"><div class="row"><span class="t grow">${esc(a.designation)}</span>${sousMini(a) ? badge('Sous le mini', 'red') : ''}<b>${p - r} ${esc(a.unite)}</b></div>
+    const p = physique(a.id), r = reserve(a.id), sit = App.situation ? App.situation(a) : null;
+    const alerte = sit ? (sit.alerte ? badge(sit.rupture ? 'Rupture' : 'À réapprovisionner', sit.rupture ? 'red' : 'amber') : '') : sousMini(a) ? badge('Sous le mini', 'red') : '';
+    return `<a class="card" href="#/article/${a.id}"><div class="row"><span class="t grow">${esc(a.designation)}</span>${alerte}<b>${p - r} ${esc(a.unite)}</b></div>
       <div class="s">${esc(a.ref)} · physique ${p} · réservé ${r} · disponible ${p - r} · mini ${esc(a.stockMin || 0)}</div></a>`;
   }
 
   // ---------- écrans ----------
+  /** En-tête commun aux onglets du magasin (le récapitulatif « À réapprovisionner » vient de reappro.js). */
+  function enteteMagasin(t, nServ = aServir().length, nVerif = aVerifier().length) {
+    const s = siteActif(), nRea = App.reappro ? App.reappro().length : null;
+    return `<h1>Magasin${s === 'tous' ? ' <span class="muted small" style="font-weight:400">· tous les sites</span>' : s ? ` <span class="muted small" style="font-weight:400">· ${esc(nomSite(s))}</span>` : ''}</h1>
+      ${seg([['#/magasin?t=servir', `À servir (${nServ})`, 'servir'], ['#/magasin?t=verifier', `À vérifier (${nVerif})`, 'verifier'],
+        ...(nRea === null ? [] : [['#/reappro', `À réapprovisionner (${nRea})`, 'reappro']]), ['#/magasin?t=stock', 'Stock', 'stock']], t)}`;
+  }
+  App.enteteMagasin = enteteMagasin;
   V.magasin = r => {
     const serv = aServir(), verif = aVerifier();
     const t = r.q.get('t') || (serv.length ? 'servir' : verif.length ? 'verifier' : 'stock');
-    const s = siteActif();
-    const entete = `<h1>Magasin${s === 'tous' ? ' <span class="muted small" style="font-weight:400">· tous les sites</span>' : s ? ` <span class="muted small" style="font-weight:400">· ${esc(nomSite(s))}</span>` : ''}</h1>
-      ${seg([['#/magasin?t=servir', `À servir (${serv.length})`, 'servir'], ['#/magasin?t=verifier', `À vérifier (${verif.length})`, 'verifier'], ['#/magasin?t=stock', 'Stock', 'stock']], t)}`;
+    const entete = enteteMagasin(t, serv.length, verif.length);
     if (t === 'servir') return entete + `<p class="small muted">Une demande ne retire rien du stock. Réserver bloque la quantité ; Remettre la sort du magasin.</p>
       ${serv.length ? serv.map(carteBesoin).join('') : empty('Aucune demande de pièce en attente.')}`;
     if (t === 'verifier') return entete + `<p class="small muted">Pièces prises en urgence par les techniciens : le stock est déjà débité. En cas d’écart, faites un inventaire de l’article.</p>
@@ -72,23 +79,24 @@
         <dt>Réservé</dt><dd>${res}</dd><dt>Disponible</dt><dd><b>${p - res}</b></dd><dt>Mini</dt><dd>${esc(a.stockMin || 0)}</dd>${siteActif() === 'tous' ? '<dt>Site</dt><dd>tous les sites</dd>' : ''}</dl></div>
       <div class="actions"><button class="btn primary" data-act="mvt" data-id="${a.id}" data-sub="entree">Réception</button><button class="btn" data-act="mvt" data-id="${a.id}" data-sub="sortie">Sortie hors OT</button><button class="btn" data-act="mvt" data-id="${a.id}" data-sub="ajustement">Inventaire</button></div>
       <p class="small muted">Les mouvements ne sont jamais modifiés : une erreur se corrige par un mouvement inverse.</p>
+      ${App.blocSeuils ? App.blocSeuils(a) : ''}
       <h2>Mouvements</h2><div class="card"><ul class="lines">${mv.map(m => `<li><span class="grow">${esc(L.mvt[m.type] || m.type)}${m.urgent ? ' ' + badge(m.verifieLe ? 'Vérifié' : 'À vérifier', m.verifieLe ? 'green' : 'amber') : ''}${m.otId ? ` · <a href="#/ot/${m.otId}">${esc(refDe('ots', m.otId))}</a>` : ''}${m.motif ? ' · ' + esc(m.motif) : ''}<br><span class="small muted">${fmtY(m.le)} · ${esc(m.creePar)}${siteActif() === 'tous' && m.siteId ? ' · ' + esc(nomSite(m.siteId)) : ''}</span></span><b>${m.qte > 0 ? '+' : ''}${m.qte}</b></li>`).join('') || '<li class="muted">Aucun mouvement.</li>'}</ul></div>`;
   };
 
   /** Accueil du magasinier : ce qui demande une action aujourd'hui. */
   V.accueilMagasin = () => {
-    const serv = aServir(), verif = aVerifier(), mini = articles().filter(sousMini);
+    const serv = aServir(), verif = aVerifier(), mini = App.reappro ? App.reappro().map(x => x.article) : articles().filter(sousMini);
     const urg = serv.filter(x => x.b.urgent && x.etat !== 'indisponible');
     return `<h1>Magasin <span class="muted small" style="font-weight:400">${esc(fmtY(Store.now().slice(0, 10)))}</span></h1>
       <div class="tiles">
         <a class="tile red" href="#/magasin?t=servir"><b>${urg.length}</b><span>Demandes urgentes</span></a>
         <a class="tile amber" href="#/magasin?t=servir"><b>${serv.length}</b><span>Demandes à servir</span></a>
         <a class="tile blue" href="#/magasin?t=verifier"><b>${verif.length}</b><span>Retraits à vérifier</span></a>
-        <a class="tile" href="#/magasin?t=stock"><b>${mini.length}</b><span>Articles sous le mini</span></a>
+        <a class="tile" href="${App.reappro ? '#/reappro' : '#/magasin?t=stock'}"><b>${mini.length}</b><span>${App.reappro ? 'À réapprovisionner' : 'Articles sous le mini'}</span></a>
       </div>
       <h2>À servir</h2>${serv.length ? serv.slice(0, 6).map(carteBesoin).join('') + (serv.length > 6 ? `<a class="btn ghost" href="#/magasin?t=servir">Voir les ${serv.length}</a>` : '') : empty('Aucune demande en attente.')}
       ${verif.length ? `<h2>Retraits à vérifier</h2>${verif.slice(0, 4).map(carteRetrait).join('')}` : ''}
-      ${mini.length ? `<h2>Sous le mini</h2>${mini.slice(0, 6).map(carteArticle).join('')}` : ''}`;
+      ${mini.length ? `<h2>${App.reappro ? 'À réapprovisionner' : 'Sous le mini'}</h2>${mini.slice(0, 6).map(carteArticle).join('')}` : ''}`;
   };
 
   // ---------- actions ----------

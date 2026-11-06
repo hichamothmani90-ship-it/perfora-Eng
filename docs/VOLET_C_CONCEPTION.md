@@ -15,6 +15,20 @@ Règles ajoutées : un seuil validé ne se modifie pas (nouvelle version propos�
 une demande d'achat, ne la valide pas, et après validation ne peut que la clore une fois commandée ; le rôle achats
 ne crée pas de demande et ne renseigne que la commande (statuts transmise / commandee) d'une demande validée ;
 un prix se rattache à une entrée de stock (site hérité) et sa correction est réservée au responsable.
+**C3 fait** (v20 locale) : `js/vues/reappro.js` — bloc « Seuils » de la fiche article (repère provisoire, proposition,
+valider / refuser, historique, consommation hebdomadaire et seuil indicatif V3), onglet **À réapprovisionner** (par
+site ; en « tous les sites », un récapitulatif par site), export CSV (nombres réels, texte protégé), création d'une
+demande d'achat en brouillon depuis les lignes cochées (une par site, aucun prix), consultation / modification des
+quantités / soumission / annulation de la demande. Stockage local v5. Faux serveur aligné sur `achats.sql` (compte
+`achat@` rôle achats ; `POST /test/abonnement {"entreprise":"DEMO","pack":"entreprise"}`).
+
+## 5 quater. Décisions prises en C3
+
+- Le récapitulatif reste visible des techniciens (aucun prix) ; les demandes d'achat ne leur parviennent jamais.
+- Un seuil se définit sur un site précis ; le responsable peut « Valider maintenant » sa propre saisie ; contrôle
+  sécurité ≤ point de commande ≤ cible ; justification obligatoire (motif de révision V3 §14).
+- Seuil indicatif = consommation hebdomadaire (90 j, retours déduits) × délai + sécurité, simple aide (V3 §14).
+- Correction en passant : charger la démo sur un appareil connecté ne change plus la signature (elle reste celle du compte).
 Références V3 : §14 (seuils proposés et validés), §15-16 (stock explicable, réception partielle, pièces isolées),
 §17 (besoins achats : circuit et états), §18 (CUMP, prix manquant, coûts distincts), §24 (rôle Achats facultatif,
 prix masqués aux techniciens), §33 (compatibilités et seuils), §37 (scénarios de vérification).
