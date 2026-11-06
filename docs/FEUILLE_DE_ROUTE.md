@@ -1,0 +1,106 @@
+# GMAO terrain (Perfora) — feuille de route
+
+État au 6 novembre 2026. Référence métier : *Perfora V3 — Procédure terrain, SaaS et modèle de données*
+(PR MAINT 01 V3, 3 nov. 2026). Règles de conception : [`.claude/skills/gmao-perfora/SKILL.md`](../.claude/skills/gmao-perfora/SKILL.md).
+
+## 1. Ce qui est fait
+
+| Lot | Contenu | État |
+|---|---|---|
+| Socle | PWA mobile-first, hors ligne, sans dépendance : signalement < 30 s, interventions sans chronomètre, préventif, magasin simple, indicateurs par équipement, journal d'audit append-only | En ligne |
+| Lot 0 | Règles et indicateurs testés (S01–S08, 25 tests), QR codes hors ligne + planche imprimable, photos, rappel de sauvegarde | En ligne |
+| Lot 1 | Synchronisation cloud offline-first (Supabase), fusion champ par champ, invitations et mot de passe par e-mail | En ligne, validé sur 2 appareils |
+| Lot 1 · étape 2 | Rôles contrôlés par le serveur (responsable, technicien, prestataire, magasinier, exploitation, pilote), équipe gérée dans l'appli | v14 (publication à vérifier) |
+
+Adresses : appli <https://hichamothmani90-ship-it.github.io/perfora-Eng/> · code <https://github.com/hichamothmani90-ship-it/perfora-Eng> ·
+Supabase projet `gmao-terrain` (réf. `oihaqzkqhvyjybijsonc`, Frankfurt).
+
+## 2. Volets à venir
+
+Ordre recommandé : **A → B → C → D → E**, le volet **H** (démo et commercial) avance en parallèle.
+Raison : le multi-entreprise touche toutes les données ; l'ajouter après le magasin et l'énergie
+coûterait une reprise de chaque table et de chaque règle.
+
+### Volet A — Socle SaaS multi-entreprise (multitenant), packs et quotas  · ~3 semaines
+Objectif : plusieurs clients isolés sur la même plateforme, chacun avec ses sites, ses utilisateurs et son pack.
+
+- **Modèle** : `entreprises` (client), `sites`, `abonnements` (pack, dates, état), `profils` rattachés à une
+  entreprise + sites autorisés. Chaque fiche porte `entreprise_id` et `site_id` (colonnes, posées par le serveur).
+- **Isolation** : règles RLS par entreprise et par site ; `push_fiches` refuse toute écriture hors périmètre.
+  Tests d'étanchéité automatiques (un utilisateur de A ne voit jamais B, même par l'API).
+- **Packs et quotas** (contrôlés côté serveur, jamais seulement à l'écran) :
+  - nombre d'utilisateurs actifs **par site** et **par entreprise** selon le pack ;
+  - nombre de sites ; modules activés (magasin, achats, énergie) ; volume de photos.
+  - Invitation depuis l'appli via une fonction serveur (Edge Function) qui vérifie le quota avant d'envoyer l'e-mail.
+  - Dépassement : invitation refusée avec message clair ; désactiver un compte libère une place.
+- **Rôles à deux niveaux** : administrateur plateforme (vous) / administrateur client (responsable) / rôles terrain.
+- **Sélecteur de site** dans l'appli pour les personnes multi-sites ; données hors ligne limitées aux sites autorisés.
+- Proposition de packs (à valider commercialement) :
+
+  | Pack | Sites | Utilisateurs / site | Modules |
+  |---|---|---|---|
+  | Essentiel | 1 | 5 | Demandes, interventions, préventif, QR |
+  | Pro | 3 | 15 | + magasin, photos étendues, rapports |
+  | Entreprise | sur devis | sur devis | + achats, énergie et eau, imports, API |
+
+- Décision à prendre : garder la table unique `fiches` (jsonb, simple pour la synchro) **ou** passer à des tables
+  typées pour le magasin, les achats et l'énergie (requêtes et rapports plus solides). Recommandation : tables
+  typées pour ces nouveaux volets, synchronisées par le même mécanisme.
+
+### Volet B — Magasin en lien avec le terrain  · ~2-3 semaines  (V3 §6, §15 demander / remettre / utiliser / retourner, §16 réceptionner / isoler / inventorier, §35)
+- **Besoin matériel** depuis l'intervention (article ou description libre, quantité, unité) : la demande ne consomme pas le stock.
+- **Réservation** par le magasinier, **remise** physique, **utilisation**, **retour**, rebut : cinq faits distincts, un seul mouvement par fait.
+- **Retrait urgent** par une personne autorisée, marqué « à vérifier » puis vérifié par le magasinier.
+- Lien avec l'attente : une intervention « en attente de pièce » pointe vers le besoin ; levée automatique quand la pièce est remise.
+- Stock par magasin et emplacement, états utilisable / isolé / à réparer ; compatibilité article ↔ équipement.
+- Inventaire tournant avec écart justifié ; pièces consommées par équipement (déjà en indicateur).
+- Prix masqués aux techniciens.
+
+### Volet C — Magasin et achats : définition des stocks et réapprovisionnement  · ~2 semaines  (V3 §14 articles et seuils, §17 besoins achats, §18 valorisation, §35)
+- **Définition des stocks** par article et magasin : stock de sécurité, point de commande (seuil), stock cible (maxi),
+  délai de réapprovisionnement de référence, article critique (lié aux équipements critiques), justification et validateur.
+- **Récapitulatif « à réapprovisionner »** : `disponible = physique utilisable − réservé` ; alerte quand
+  `disponible + en commande < point de commande` ; quantité proposée = `cible − (disponible + en commande)`.
+  Tri par criticité et rupture ; export Excel pour l'acheteur.
+- **Circuit achat limité** : demande d'achat → validation (délégation) → commande externe (fournisseur, référence,
+  délai, quantités) → réceptions partielles → contrôle / isolement → mise en stock.
+- **Valorisation** : coût moyen pondéré (CUMP), coût inconnu signalé (jamais zéro), historique figé sur les mouvements.
+- Profil « Achats » facultatif (V3 §24).
+
+### Volet D — Énergie et eau  · ~3 semaines  (V3 §19 mesures énergie et eau, §20 rapprochements, §36)
+- **Compteurs** : ressource (électricité, gaz, eau, air, fioul…), mode (cumulatif, par période, instantané), unité,
+  coefficient, périmètre, compteur parent / sous-compteurs, fréquence de relevé, photo obligatoire ou non.
+- **Relevés terrain** hors ligne, par QR code du compteur, avec photo ; tournée de relevés à faire.
+- **Contrôles automatiques** : baisse d'index, variation anormale, doublon, unité, relevé manquant ; un relevé suspect
+  est isolé des calculs jusqu'à décision (jamais supprimé ni interpolé en silence).
+- **Ruptures** : remplacement ou remise à zéro du compteur (ancien index final / nouvel index initial).
+- **Consommations** par période, usage et site ; jamais d'addition entre unités différentes ; sous-compteurs ≠ total site.
+- **Factures** et rapprochement facturé / mesuré ; coûts ; ratios facultatifs (kWh par tonne produite) si donnée de production fournie.
+- Tableau de bord énergie ; lien avec actions (fuite d'air → intervention).
+
+### Volet E — Pilotage avancé et rapports  · ~2 semaines  (V3 §10-11, §26, §29)
+- Calendriers de temps requis ; disponibilité sur requis ; MTTR « délai de rétablissement calendaire » ; MTBF seulement avec heures de marche.
+- Objectifs par équipement ; rapport mensuel PDF + export Excel détaillé ; qualité des données.
+
+### Volet F — Imports Excel contrôlés  · ~1-2 semaines  (V3 §27-28)
+Classeur modèle (sites, équipements, articles, compteurs, programmes) ; prévisualisation, conflits, aucune suppression par absence.
+
+### Volet G — Industrialisation (en continu, avant tout client payant)
+- Photos dans Supabase Storage (et non dans la base).
+- Environnements séparés : **recette** (projet `Perfora-recette` existant) et **production** ; migrations SQL numérotées.
+- Base de production propre (sans données de démo) ; sauvegarde quotidienne ; offre Supabase payante.
+- Conformité : formalités CNDP (loi 09-08) pour l'hébergement des données personnelles ; mentions et contrat.
+- Tests de bout en bout automatisés (deux appareils, hors ligne, droits) ; supervision des erreurs.
+
+### Volet H — Démonstration et commercialisation (en parallèle)
+- **Entreprise de démonstration** isolée (volet A) avec un jeu de données crédible et réinitialisable.
+- Script de démo de 10 minutes : voir [`GUIDE_FONCTIONNEMENT.md`](GUIDE_FONCTIONNEMENT.md).
+- Page de présentation (bénéfices, packs, contact), fiche PDF, vidéo courte téléphone + PC.
+- Pilote terrain gratuit de 4 à 6 semaines chez un premier site, avec indicateurs avant / après.
+
+## 3. Décisions à prendre (vous)
+1. Packs, limites et prix (tableau du volet A à confirmer).
+2. Tables typées pour magasin / achats / énergie (recommandé) ou maintien du modèle jsonb unique.
+3. Hébergement de production (Supabase payant en Europe) et validation CNDP.
+4. Nom commercial (Perfora ?) et domaine propre (ex. app.perfora.ma) à la place de github.io.
+5. Premier site pilote et interlocuteurs (maintenance, exploitation, magasin).

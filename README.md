@@ -4,6 +4,12 @@ Application de maintenance locale, mobile d'abord, hors ligne d'abord.
 Aucune installation : Python (déjà présent) sert seulement les fichiers ; les données
 restent dans le navigateur de chaque appareil (IndexedDB).
 
+## Documents
+- [Guide de fonctionnement et scénario de démo](docs/GUIDE_FONCTIONNEMENT.md)
+- [Feuille de route par volets](docs/FEUILLE_DE_ROUTE.md)
+- [Prompt de reprise pour Claude Code](docs/PROMPT_REPRISE.md)
+- [Brancher Supabase](supabase/GUIDE.md) · [Skill expert du projet](.claude/skills/gmao-perfora/SKILL.md)
+
 ## Lancer
 Double-cliquer sur `Lancer GMAO.bat` (ou `python serveur.py`), puis http://localhost:8080
 → « Charger la démo » pour voir un exemple.
