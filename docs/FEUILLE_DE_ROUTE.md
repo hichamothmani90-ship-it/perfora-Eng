@@ -14,7 +14,8 @@
 | Volet A · A1 | Serveur multi-entreprise : entreprises, sites, packs, abonnements, lecture et écriture limitées à l'entreprise et aux sites autorisés, modules du pack, abonnement suspendu = lecture seule. Données actuelles = « Perfora Démo » / « Site Tanger » (pack Pro) | En place sur Supabase, testé (12 tests d'étanchéité) |
 | Volet A · A2 | Appli multi-site : site actif et sélecteur (« tous mes sites »), créations rattachées au site du parent ou au site actif, appareil vidé au changement d'entreprise (refusé si saisies en attente), resynchronisation complète au premier passage, menus selon les modules du pack, abonnement suspendu = consultation seule | v15, testé avec le faux serveur (2 entreprises, 2 sites, 2 appareils) |
 | Volet A · A3 | Quotas par déclencheurs (utilisateurs par entreprise et par site, sites), invitation depuis l'appli par la fonction serveur `inviter` (seule détentrice de la clé secrète), affectation des sites, compteur de places | v17 en ligne ; quotas testés sur Supabase (12 tests) ; invitation réelle validée de bout en bout le 6 nov. 2026 |
-| Volet A · A4 | Console plateforme (administrateur) : clients avec usage, création d'entreprise + premier site + invitation du responsable, abonnement / statut / échéance / dérogations, ajout de site, démo commerciale réinitialisable (appareils resynchronisés d'eux-mêmes) | v18 ; 11 tests sur Supabase ; console testée avec le faux serveur |
+| Volet A · A4 | Console plateforme (administrateur) : clients avec usage, création d'entreprise + premier site + invitation du responsable, abonnement / statut / échéance / dérogations, ajout de site, démo commerciale réinitialisable (appareils resynchronisés d'eux-mêmes) | v18 ; 11 tests sur Supabase ; console testée avec le faux serveur ; démo « Vitrine Perfora » créée et ouverte |
+| Volet A · A5 | Recette complète : 25 + 35 tests conformes, accès sans compte entièrement fermé, durcissement (`supabase/durcissement.sql`), conseiller sécurité 0 erreur — voir [`RECETTE_VOLET_A.md`](RECETTE_VOLET_A.md) | ✅ Volet A terminé |
 
 Adresses : appli <https://hichamothmani90-ship-it.github.io/perfora-Eng/> · code <https://github.com/hichamothmani90-ship-it/perfora-Eng> ·
 Supabase projet `gmao-terrain` (réf. `oihaqzkqhvyjybijsonc`, Frankfurt).
@@ -104,6 +105,9 @@ Classeur modèle (sites, équipements, articles, compteurs, programmes) ; prévi
 - Script de démo de 10 minutes : voir [`GUIDE_FONCTIONNEMENT.md`](GUIDE_FONCTIONNEMENT.md).
 - Page de présentation (bénéfices, packs, contact), fiche PDF, vidéo courte téléphone + PC.
 - Pilote terrain gratuit de 4 à 6 semaines chez un premier site, avec indicateurs avant / après.
+
+## 2 bis. Avant le premier client payant
+Liste de contrôle détaillée : [`RECETTE_VOLET_A.md` §4](RECETTE_VOLET_A.md) — e-mails dédiés, Supabase payant, projet de production séparé, photos en stockage de fichiers, nom de domaine, CNDP, exports, pilote.
 
 ## 3. Décisions à prendre (vous)
 1. Packs, limites et prix (tableau du volet A à confirmer).

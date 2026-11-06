@@ -85,13 +85,22 @@ la veille ; avoir un deuxième téléphone en secours.
 - **Suivez-vous le temps des techniciens ?** Non, volontairement : on suit les machines, pas la productivité individuelle.
 - **Et le magasin, les achats, l'énergie ?** Magasin simple disponible ; lien terrain ↔ magasin, réapprovisionnement et énergie / eau sont les prochains volets.
 
+## 8 bis. Préparer et réinitialiser la démo commerciale
+
+- Entreprise de démonstration : **Vitrine Perfora**, compte de présentation **hicham.othmani90@gmail.com**
+  (responsable, site « Usine de démonstration »).
+- **Avant** la présentation : sur votre compte principal, **Plus → Console plateforme → Vitrine Perfora →
+  Réinitialiser la démo** ; sur l'appareil de présentation, **Réglages → Synchroniser maintenant**.
+- Pour montrer le multi-site ou un client : la console permet aussi de créer une entreprise d'essai
+  (pack, premier site, invitation du responsable) en une minute, devant le prospect.
+
 ## 9. Ce qui est disponible / ce qui arrive
 
 | Disponible aujourd'hui | Prochains volets |
 |---|---|
-| Demandes, interventions, préventif, QR codes, photos | Multi-entreprise, packs et limites d'utilisateurs |
-| Hors ligne + synchronisation, rôles et droits | Magasin relié au terrain (réservation, remise, retour) |
-| Indicateurs par équipement, journal d'audit, export CSV | Réapprovisionnement et achats, énergie et eau |
+| Demandes, interventions, préventif, QR codes, photos | Magasin relié au terrain (réservation, remise, retour) |
+| Hors ligne + synchronisation, rôles et droits, multi-entreprise et multi-site, packs et quotas, invitations, console plateforme | Réapprovisionnement et achats |
+| Indicateurs par équipement, journal d'audit, export CSV | Énergie et eau |
 | Magasin simple (stock, sorties sur intervention) | Rapports mensuels, imports Excel |
 
 Feuille de route détaillée : [`FEUILLE_DE_ROUTE.md`](FEUILLE_DE_ROUTE.md).
