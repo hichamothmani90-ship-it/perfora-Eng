@@ -74,3 +74,40 @@ test('pièces anciennes (sans besoin) : stock inchangé, compatibles', () => {
   const m = [entree(3), mv({ type: 'sortie', qte: -1, otId: 'ot-ancien' })];
   assert.equal(C.stockPhysique(m, A, S1), 2);
 });
+
+test('attente « pièce » levée à la date de la remise complète, pas avant', () => {
+  const b = { id: 'b8', articleId: A, siteId: S1, qte: 2, statut: 'reserve', qteReservee: 2 };
+  const ot = { attentes: [{ id: 'a1', motif: 'piece', besoinId: 'b8', depuis: '2026-11-06T08:00', fin: null }, { id: 'a2', motif: 'acces_exploitation', depuis: '2026-11-06T08:00', fin: null }] };
+  let m = [entree(5), mv({ type: 'remise', qte: -1, besoinId: 'b8', le: '2026-11-06T09:00' })];
+  assert.equal(C.attentesALever(ot, [b], m).length, 0, 'remise partielle : attente maintenue');
+  m = [...m, mv({ type: 'remise', qte: -1, besoinId: 'b8', le: '2026-11-06T10:30' })];
+  const l = C.attentesALever(ot, [b], m);
+  assert.equal(l.length, 1, 'seule l’attente liée au besoin est levée');
+  assert.equal(l[0].fin, '2026-11-06T10:30');
+});
+
+test('pièces détenues : remises ni utilisées ni rendues', () => {
+  const b = { id: 'b9', articleId: A, siteId: S1, qte: 3, statut: 'reserve', qteReservee: 3 };
+  const m = [entree(5), mv({ type: 'remise', qte: -3, besoinId: 'b9' }), mv({ type: 'retour', qte: 1, besoinId: 'b9' })];
+  assert.equal(C.piecesDetenues([b], m, [{ besoinId: 'b9', qte: 1 }])[0].detenu, 1);
+  assert.equal(C.piecesDetenues([b], m, [{ besoinId: 'b9', qte: 2 }]).length, 0);
+});
+
+test('besoin indisponible puis remis : la remise réelle l’emporte (l’attente pourra être levée)', () => {
+  const b = { id: 'b10', articleId: A, siteId: S1, qte: 1, statut: 'indisponible', delai: '2026-11-10' };
+  assert.equal(C.etatBesoin(b, [entree(1)]), 'indisponible');
+  assert.equal(C.etatBesoin(b, [entree(1), mv({ type: 'remise', qte: -1, besoinId: 'b10' })]), 'remis');
+});
+
+test('à servir : urgents d’abord, puis les plus anciens ; indisponibles en dernier ; remis et annulés exclus', () => {
+  const B = [
+    { id: 'x1', qte: 1, statut: 'demande', demandeLe: '2026-11-06T08:00' },
+    { id: 'x2', qte: 1, statut: 'demande', urgent: true, demandeLe: '2026-11-06T10:00' },
+    { id: 'x3', qte: 1, statut: 'indisponible', urgent: true, demandeLe: '2026-11-05T10:00' },
+    { id: 'x4', qte: 1, statut: 'reserve', qteReservee: 1, demandeLe: '2026-11-05T09:00' },
+    { id: 'x5', qte: 1, statut: 'annule', demandeLe: '2026-11-01T09:00' },
+    { id: 'x6', qte: 1, statut: 'demande', demandeLe: '2026-11-01T09:00' },
+  ];
+  const m = [mv({ type: 'remise', qte: -1, besoinId: 'x6' })];
+  assert.deepEqual(C.besoinsAServir(B, m).map(x => x.b.id), ['x2', 'x4', 'x1', 'x3']);
+});

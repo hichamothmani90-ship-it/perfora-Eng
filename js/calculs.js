@@ -154,12 +154,21 @@
 
   /** État d'un besoin, déduit des faits (remises réelles), pas d'un statut saisi à la main. */
   function etatBesoin(b, mouvements) {
-    if (['annule', 'indisponible'].includes(b.statut)) return b.statut;
+    if (b.statut === 'annule') return 'annule';
     const remis = qteRemise(mouvements, b.id), q = abs(b.qte);
-    if (q && remis >= q) return 'remis';
+    if (q && remis >= q) return 'remis';          // une remise réelle l'emporte sur « indisponible »
     if (remis > 0) return 'partiellement_remis';
+    if (b.statut === 'indisponible') return 'indisponible';
     if (abs(b.qteReservee) > 0) return 'reserve';
     return 'demande';
+  }
+
+  /** Besoins que le magasin doit traiter : urgents d'abord, puis les plus anciens ; « indisponible » en dernier. */
+  function besoinsAServir(besoins, mouvements) {
+    return besoins.map(b => ({ b, etat: etatBesoin(b, mouvements) }))
+      .filter(x => ['demande', 'reserve', 'partiellement_remis', 'indisponible'].includes(x.etat))
+      .sort((x, y) => (x.etat === 'indisponible') - (y.etat === 'indisponible') || !!y.b.urgent - !!x.b.urgent
+        || (x.b.demandeLe || x.b.creeLe || '').localeCompare(y.b.demandeLe || y.b.creeLe || ''));
   }
 
   /** Contrôle d'une remise : remis = utilisé + retourné + détenu. Un détenu négatif est un écart à expliquer. */
@@ -173,6 +182,19 @@
   /** Retraits urgents faits par un technicien et pas encore vérifiés par le magasin. */
   const retraitsAVerifier = mouvements => mouvements.filter(m => m.type === 'remise' && m.urgent && !m.verifieLe);
 
-  const Calculs = { stockPhysique, qteReservee, stockDisponible, etatBesoin, rapprochementBesoin, retraitsAVerifier, qteRemise, addDays, daysBetween, minutesBetween, dureeUnion, mediane, NATURE_DU_BESOIN, ETAT_RANK, otOuvert, demandeOuverte, indexOtsParDemande, etatEquipement, verifierCloture, echeanceSuivante, indicateurs };
+  /** Attentes « pièce » d'une intervention à lever : besoin lié entièrement remis.
+      Date de fin = date de la dernière remise (le fait), pas l'heure à laquelle l'appareil s'en aperçoit. */
+  function attentesALever(ot, besoins, mouvements) {
+    const parId = new Map(besoins.map(b => [b.id, b]));
+    return (ot.attentes || []).filter(a => !a.fin && a.besoinId && parId.has(a.besoinId) && etatBesoin(parId.get(a.besoinId), mouvements) === 'remis')
+      .map(a => ({ ...a, fin: remisesDuBesoin(mouvements, a.besoinId).map(m => m.le || '').sort().pop() || null, leveePar: 'remise' }));
+  }
+
+  /** Pièces remises pour une intervention ni utilisées ni rendues (à déclarer avant clôture). */
+  function piecesDetenues(besoinsDeLOT, mouvements, pieces) {
+    return besoinsDeLOT.map(b => ({ besoin: b, ...rapprochementBesoin(b, mouvements, pieces) })).filter(r => r.detenu > 0);
+  }
+
+  const Calculs = { besoinsAServir, attentesALever, piecesDetenues, stockPhysique, qteReservee, stockDisponible, etatBesoin, rapprochementBesoin, retraitsAVerifier, qteRemise, addDays, daysBetween, minutesBetween, dureeUnion, mediane, NATURE_DU_BESOIN, ETAT_RANK, otOuvert, demandeOuverte, indexOtsParDemande, etatEquipement, verifierCloture, echeanceSuivante, indicateurs };
   if (typeof module === 'object' && module.exports) module.exports = Calculs; else root.Calculs = Calculs;
 })(this);

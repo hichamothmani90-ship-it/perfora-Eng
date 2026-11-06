@@ -1,0 +1,170 @@
+/* GMAO terrain — écrans du magasin (volet B, V3 §6, §15, §16, §35).
+   Cinq faits distincts : besoin, réservation, remise (ou retrait urgent), utilisation, retour.
+   Le stock est par site : physique = somme des mouvements ; disponible = physique − réservé.
+   Script classique chargé après app.js : il utilise les aides exposées sur window.App. */
+(() => {
+  const { V, A, L, esc, badge, empty, seg, search, askForm, askConfirm, toast, list, render, fmtY, refDe, role, siteActif, nomSite, desigBesoin, CLS_BESOIN } = App;
+  const { data } = Store;
+
+  // Site de calcul : le site affiché (« tous » = tous les sites additionnés).
+  const siteCalc = () => { const s = siteActif(); return s && s !== 'tous' ? s : undefined; };
+  const mvts = () => list('mouvements');
+  const physique = (id, s = siteCalc()) => Calculs.stockPhysique(mvts(), id, s);
+  const reserve = (id, s = siteCalc()) => Calculs.qteReservee(list('besoins'), mvts(), id, s);
+  const sousMini = a => physique(a.id) <= (Number(a.stockMin) || 0);
+  const articles = () => list('articles').filter(a => a.actif !== false).sort((a, b) => a.designation.localeCompare(b.designation));
+  const aServir = () => Calculs.besoinsAServir(list('besoins'), mvts());
+  const aVerifier = () => Calculs.retraitsAVerifier(mvts()).sort((a, b) => (a.le || '').localeCompare(b.le || ''));
+  const otDe = b => data.ots.get(b.otId);
+  const eqDe = b => data.equipements.get(b.equipementId || otDe(b)?.equipementId);
+
+  // ---------- cartes ----------
+  function carteBesoin({ b, etat }) {
+    const r = Calculs.rapprochementBesoin(b, mvts(), otDe(b)?.pieces), reste = Math.max(0, Number(b.qte) - r.remis);
+    const k = `data-id="${b.id}"`;
+    const stockTxt = b.articleId ? `stock ${Calculs.stockPhysique(mvts(), b.articleId, b.siteId)} · disponible ${Calculs.stockDisponible(list('besoins'), mvts(), b.articleId, b.siteId)}` : 'hors catalogue';
+    const btn = b.articleId
+      ? [etat !== 'reserve' && etat !== 'partiellement_remis' ? `<button class="btn sm" data-act="mag-reserver" ${k}>Réserver</button>` : '',
+        `<button class="btn sm primary" data-act="mag-remettre" ${k}>Remettre</button>`,
+        etat !== 'indisponible' ? `<button class="btn sm ghost" data-act="mag-indispo" ${k}>Indisponible</button>` : ''].join('')
+      : `<button class="btn sm primary" data-act="mag-rattacher" ${k}>Rattacher à un article</button><button class="btn sm ghost" data-act="mag-indispo" ${k}>Indisponible</button>`;
+    const o = otDe(b), e = eqDe(b);
+    return `<div class="card"><div class="row"><span class="t grow">${esc(reste || b.qte)} × ${esc(desigBesoin(b))}</span>${b.urgent ? badge('Urgent', 'red') : ''}${badge(L.etatBesoin[etat], CLS_BESOIN[etat] || '')}</div>
+      <div class="s">${o ? `<a href="#/ot/${o.id}">${esc(o.ref)}</a>` : ''}${e ? ' · ' + esc(e.designation) : ''}${siteActif() === 'tous' && b.siteId ? ' · ' + esc(nomSite(b.siteId)) : ''}</div>
+      <div class="s">Demandée ${esc(fmtY(b.demandeLe || b.creeLe))} par ${esc(b.demandeur || b.creePar)} · ${esc(stockTxt)}${b.qteReservee ? ` · réservé ${esc(b.qteReservee)}` : ''}${r.remis ? ` · remis ${r.remis}` : ''}${b.delai ? ` · délai ${esc(fmtY(b.delai))}` : ''}</div>
+      ${b.note ? `<div class="s">« ${esc(b.note)} »</div>` : ''}
+      <div class="actions" style="margin:8px 0 0">${btn}</div></div>`;
+  }
+  function carteRetrait(m) {
+    const a = data.articles.get(m.articleId);
+    return `<div class="card"><div class="row"><span class="t grow">${esc(Math.abs(m.qte))} × ${esc(a?.designation || 'Article')}</span>${badge('À vérifier', 'amber')}</div>
+      <div class="s">Retrait urgent par ${esc(m.creePar)} le ${esc(fmtY(m.le))}${m.otId ? ` · <a href="#/ot/${m.otId}">${esc(refDe('ots', m.otId))}</a>` : ''}</div>
+      <div class="actions" style="margin:8px 0 0"><button class="btn sm primary" data-act="mag-verifier" data-id="${m.id}">Vérifié</button>${a ? `<a class="btn sm ghost" href="#/article/${a.id}">Voir l’article</a>` : ''}</div></div>`;
+  }
+  function carteArticle(a) {
+    const p = physique(a.id), r = reserve(a.id);
+    return `<a class="card" href="#/article/${a.id}"><div class="row"><span class="t grow">${esc(a.designation)}</span>${sousMini(a) ? badge('Sous le mini', 'red') : ''}<b>${p - r} ${esc(a.unite)}</b></div>
+      <div class="s">${esc(a.ref)} · physique ${p} · réservé ${r} · disponible ${p - r} · mini ${esc(a.stockMin || 0)}</div></a>`;
+  }
+
+  // ---------- écrans ----------
+  V.magasin = r => {
+    const serv = aServir(), verif = aVerifier();
+    const t = r.q.get('t') || (serv.length ? 'servir' : verif.length ? 'verifier' : 'stock');
+    const s = siteActif();
+    const entete = `<h1>Magasin${s === 'tous' ? ' <span class="muted small" style="font-weight:400">· tous les sites</span>' : s ? ` <span class="muted small" style="font-weight:400">· ${esc(nomSite(s))}</span>` : ''}</h1>
+      ${seg([['#/magasin?t=servir', `À servir (${serv.length})`, 'servir'], ['#/magasin?t=verifier', `À vérifier (${verif.length})`, 'verifier'], ['#/magasin?t=stock', 'Stock', 'stock']], t)}`;
+    if (t === 'servir') return entete + `<p class="small muted">Une demande ne retire rien du stock. Réserver bloque la quantité ; Remettre la sort du magasin.</p>
+      ${serv.length ? serv.map(carteBesoin).join('') : empty('Aucune demande de pièce en attente.')}`;
+    if (t === 'verifier') return entete + `<p class="small muted">Pièces prises en urgence par les techniciens : le stock est déjà débité. En cas d’écart, faites un inventaire de l’article.</p>
+      ${verif.length ? verif.map(carteRetrait).join('') : empty('Aucun retrait urgent à vérifier.')}`;
+    const arts = articles();
+    return entete + `${search('#lst', 'Rechercher un article')}<div id="lst">${arts.length ? arts.map(carteArticle).join('') : empty('Aucun article.')}</div>
+      <div class="actions"><button class="btn" data-act="art-new">+ Article</button></div>`;
+  };
+
+  V.article = r => {
+    const a = data.articles.get(r.id);
+    if (!a) return empty('Article introuvable.');
+    const mv = mvts().filter(m => m.articleId === a.id).sort((x, y) => (y.le || '').localeCompare(x.le || ''));
+    const p = physique(a.id), res = reserve(a.id);
+    return `<h1>${esc(a.designation)}</h1><div class="card"><dl class="kv"><dt>Référence</dt><dd>${esc(a.ref)}</dd><dt>Stock physique</dt><dd><b>${p} ${esc(a.unite)}</b></dd>
+        <dt>Réservé</dt><dd>${res}</dd><dt>Disponible</dt><dd><b>${p - res}</b></dd><dt>Mini</dt><dd>${esc(a.stockMin || 0)}</dd>${siteActif() === 'tous' ? '<dt>Site</dt><dd>tous les sites</dd>' : ''}</dl></div>
+      <div class="actions"><button class="btn primary" data-act="mvt" data-id="${a.id}" data-sub="entree">Réception</button><button class="btn" data-act="mvt" data-id="${a.id}" data-sub="sortie">Sortie hors OT</button><button class="btn" data-act="mvt" data-id="${a.id}" data-sub="ajustement">Inventaire</button></div>
+      <p class="small muted">Les mouvements ne sont jamais modifiés : une erreur se corrige par un mouvement inverse.</p>
+      <h2>Mouvements</h2><div class="card"><ul class="lines">${mv.map(m => `<li><span class="grow">${esc(L.mvt[m.type] || m.type)}${m.urgent ? ' ' + badge(m.verifieLe ? 'Vérifié' : 'À vérifier', m.verifieLe ? 'green' : 'amber') : ''}${m.otId ? ` · <a href="#/ot/${m.otId}">${esc(refDe('ots', m.otId))}</a>` : ''}${m.motif ? ' · ' + esc(m.motif) : ''}<br><span class="small muted">${fmtY(m.le)} · ${esc(m.creePar)}${siteActif() === 'tous' && m.siteId ? ' · ' + esc(nomSite(m.siteId)) : ''}</span></span><b>${m.qte > 0 ? '+' : ''}${m.qte}</b></li>`).join('') || '<li class="muted">Aucun mouvement.</li>'}</ul></div>`;
+  };
+
+  /** Accueil du magasinier : ce qui demande une action aujourd'hui. */
+  V.accueilMagasin = () => {
+    const serv = aServir(), verif = aVerifier(), mini = articles().filter(sousMini);
+    const urg = serv.filter(x => x.b.urgent && x.etat !== 'indisponible');
+    return `<h1>Magasin <span class="muted small" style="font-weight:400">${esc(fmtY(Store.now().slice(0, 10)))}</span></h1>
+      <div class="tiles">
+        <a class="tile red" href="#/magasin?t=servir"><b>${urg.length}</b><span>Demandes urgentes</span></a>
+        <a class="tile amber" href="#/magasin?t=servir"><b>${serv.length}</b><span>Demandes à servir</span></a>
+        <a class="tile blue" href="#/magasin?t=verifier"><b>${verif.length}</b><span>Retraits à vérifier</span></a>
+        <a class="tile" href="#/magasin?t=stock"><b>${mini.length}</b><span>Articles sous le mini</span></a>
+      </div>
+      <h2>À servir</h2>${serv.length ? serv.slice(0, 6).map(carteBesoin).join('') + (serv.length > 6 ? `<a class="btn ghost" href="#/magasin?t=servir">Voir les ${serv.length}</a>` : '') : empty('Aucune demande en attente.')}
+      ${verif.length ? `<h2>Retraits à vérifier</h2>${verif.slice(0, 4).map(carteRetrait).join('')}` : ''}
+      ${mini.length ? `<h2>Sous le mini</h2>${mini.slice(0, 6).map(carteArticle).join('')}` : ''}`;
+  };
+
+  // ---------- actions ----------
+  const qteRemise = b => Calculs.qteRemise(mvts(), b.id);
+  A['mag-reserver'] = async el => {
+    const b = data.besoins.get(el.dataset.id);
+    const dispo = Calculs.stockDisponible(list('besoins'), mvts(), b.articleId, b.siteId) + Math.max(0, (Number(b.qteReservee) || 0) - qteRemise(b));
+    const reste = Math.max(0, Number(b.qte) - qteRemise(b));
+    const v = await askForm({ title: 'Réserver', ok: 'Réserver', values: { qte: Math.max(0, Math.min(reste, dispo)) || reste }, fields: [
+      { type: 'info', text: `${desigBesoin(b)} · demandé ${reste} · disponible ${dispo}` },
+      { name: 'qte', label: 'Quantité réservée', type: 'number', required: true }] });
+    if (!v || !(v.qte > 0)) return;
+    if (v.qte > dispo && !(await askConfirm('Réserver plus que le disponible ?', `Disponible : ${dispo}. Une réservation au-delà rendra le disponible négatif.`, 'Réserver quand même'))) return;
+    await Store.update('besoins', b.id, { qteReservee: qteRemise(b) + v.qte, statut: 'reserve', delai: null, reserveLe: Store.now(), reservePar: Store.currentUserName() }, { action: 'reservation' });
+    toast('Réservé'); render();
+  };
+  A['mag-remettre'] = async el => {
+    const b = data.besoins.get(el.dataset.id);
+    const reste = Math.max(0, Number(b.qte) - qteRemise(b)), phys = Calculs.stockPhysique(mvts(), b.articleId, b.siteId);
+    const o = otDe(b);
+    const v = await askForm({ title: 'Remettre au technicien', ok: 'Remettre', values: { qte: reste || 1 }, fields: [
+      { type: 'info', text: `${desigBesoin(b)} · reste à remettre ${reste} · stock ${phys}${o ? ' · ' + o.ref : ''}` },
+      { name: 'qte', label: 'Quantité remise', type: 'number', required: true },
+      { name: 'a', label: 'Remise à', type: 'text', placeholder: b.demandeur || '' }] });
+    if (!v || !(v.qte > 0)) return;
+    if (v.qte > phys && !(await askConfirm('Stock insuffisant ?', `Stock enregistré : ${phys}. Remettre ${v.qte} rendra le stock négatif : faites ensuite un inventaire.`, 'Remettre quand même'))) return;
+    await Store.save('mouvements', { id: Store.uid(), articleId: b.articleId, type: 'remise', qte: -v.qte, besoinId: b.id, otId: b.otId || null, siteId: b.siteId, le: Store.now(), motif: 'Remise magasin' + (v.a ? ' à ' + v.a : '') }, { action: 'remise' });
+    toast('Remise enregistrée');
+    await App.leverAttentesPieces(); // responsable ou usage local : l'attente se lève tout de suite
+    render();
+  };
+  A['mag-indispo'] = async el => {
+    const b = data.besoins.get(el.dataset.id);
+    const v = await askForm({ title: 'Pièce indisponible', ok: 'Enregistrer', values: { delai: b.delai }, fields: [
+      { type: 'info', text: `${desigBesoin(b)} : le technicien verra « Indisponible » et le délai annoncé.` },
+      { name: 'delai', label: 'Délai annoncé (date prévue)', type: 'date' },
+      { name: 'motif', label: 'Précision', type: 'text', placeholder: 'ex. commandé chez le fournisseur' }] });
+    if (!v) return;
+    await Store.update('besoins', b.id, { statut: 'indisponible', delai: v.delai, motifIndispo: v.motif }, { action: 'indisponible', motif: v.motif });
+    toast('Indisponibilité signalée'); render();
+  };
+  A['mag-rattacher'] = async el => {
+    const b = data.besoins.get(el.dataset.id);
+    const v = await askForm({ title: 'Rattacher à un article', ok: 'Rattacher', fields: [
+      { type: 'info', text: `Demande : « ${b.description} »` },
+      { name: 'articleId', label: 'Article', type: 'select', required: true, empty: '— Choisir —', options: articles().map(a => [a.id, `${a.designation} (${a.ref}) · stock ${Calculs.stockPhysique(mvts(), a.id, b.siteId)}`]) }] });
+    if (!v?.articleId) return;
+    await Store.update('besoins', b.id, { articleId: v.articleId, unite: data.articles.get(v.articleId)?.unite || null }, { action: 'rattachement' });
+    render();
+  };
+  A['mag-verifier'] = async el => {
+    const m = data.mouvements.get(el.dataset.id);
+    if (!(await askConfirm('Retrait vérifié', `${Math.abs(m.qte)} × ${data.articles.get(m.articleId)?.designation || ''} pris par ${m.creePar}. La quantité n’est pas modifiée ; en cas d’écart, faites un inventaire.`, 'Vérifié'))) return;
+    await Store.save('mouvements', { ...m, aVerifier: false, verifieLe: Store.now(), verifiePar: Store.currentUserName() }, { action: 'verification' });
+    toast('Retrait vérifié'); render();
+  };
+
+  A['art-new'] = async () => {
+    const v = await askForm({ title: 'Nouvel article', values: { unite: 'u', stockMin: 0 }, fields: [
+      { name: 'ref', label: 'Référence', type: 'text', required: true }, { name: 'designation', label: 'Désignation', type: 'text', required: true },
+      { name: 'unite', label: 'Unité', type: 'text', required: true }, { name: 'stockMin', label: 'Stock mini', type: 'number' }] });
+    if (!v) return;
+    if (list('articles').some(a => a.ref.toLowerCase() === v.ref.toLowerCase())) { toast('Référence déjà utilisée'); return; }
+    await Store.save('articles', { id: Store.uid(), ...v, actif: true }); render();
+  };
+  /** Réception, sortie hors intervention, inventaire : toujours sur un site précis (stock par site). */
+  A.mvt = async el => {
+    if (siteActif() === 'tous') { toast('Choisissez d’abord un site (📍 en haut) : le stock est tenu par site'); return; }
+    const a = data.articles.get(el.dataset.id), type = el.dataset.sub, p = physique(a.id);
+    const v = await askForm({ title: L.mvt[type], fields: type === 'ajustement'
+      ? [{ type: 'info', text: `Stock enregistré : ${p} ${a.unite}` }, { name: 'compte', label: 'Quantité comptée', type: 'number', required: true }, { name: 'motif', label: 'Motif', type: 'text', required: true }]
+      : [{ name: 'qte', label: 'Quantité', type: 'number', required: true }, { name: 'motif', label: type === 'entree' ? 'Bon de livraison / fournisseur' : 'Motif', type: 'text', required: type !== 'entree' }] });
+    if (!v) return;
+    const qte = type === 'ajustement' ? v.compte - p : type === 'sortie' ? -Math.abs(v.qte) : Math.abs(v.qte);
+    if (!qte) { toast('Aucun écart'); return; }
+    await Store.save('mouvements', { id: Store.uid(), articleId: a.id, type, qte, otId: null, le: Store.now(), motif: v.motif });
+    render();
+  };
+})();

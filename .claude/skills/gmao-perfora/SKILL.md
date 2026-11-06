@@ -60,7 +60,7 @@ Chaque indicateur affiche périmètre, période, convention, couverture et effec
 
 - **PWA statique, sans build, sans dépendance** : `index.html`, `css/app.css`, `js/store.js` (stockage,
   journal), `js/calculs.js` (règles et indicateurs, fonctions pures), `js/qr.js` (QR hors ligne),
-  `js/app.js` (écrans), `sw.js`.
+  `js/app.js` (écrans), `js/vues/*.js` (écrans par domaine), `sw.js`.
 - **Toute règle métier ou tout calcul d'indicateur va dans `js/calculs.js`** (testable sous Node),
   jamais directement dans une vue. Chaque nouvelle règle = un test dans `tests/`.
   Scripts classiques (pas de modules) pour rester ouvrable partout. Hébergée sur GitHub Pages
@@ -150,13 +150,14 @@ Implémenté (object stores) :
 | `ots` | ref, demandeIds[], programmeId, echeance, equipementId, nature, priorite, statut, creneau, intervenants[{personneId,role,depuis,fin}], activites[], travaux, resultat, cause, certitudeCause, familleDefaut, avecArret, arretDebut, arretFin, pieces[], reserves[], attentes[{motif,detail,depuis,fin,responsableId}], clotureLe/Par |
 | `programmes` | equipementId, libelle, modele, periodiciteJours, prochaineEcheance, regle (fixe / apres_realisation), instruction, actif |
 | `articles` | ref, designation, unite, stockMin, actif |
-| `mouvements` | articleId, type (entree, sortie, retour, ajustement), qte signée, otId, motif, le — immuables |
+| `mouvements` | articleId, type (entree, sortie, remise, retour, rebut, ajustement), qte signée, otId, besoinId, urgent / aVerifier / verifieLe / verifiePar, motif, le — immuables (sauf vérification) |
+| `besoins` | ref BES-, otId, equipementId, articleId **ou** description, qte, unite, urgent, note, statut (demande, reserve, indisponible, annule ; « remis » est déduit des remises), qteReservee et delai (magasin seulement), demandeur, demandeLe — depuis DB v4 |
 | `journal` | entite, entiteId, action, champ, avant, apres, motif, auteur, le — append-only |
 | `photos` | parentType (demandes / ots), parentId, dataUrl JPEG ≤ 1280 px, le — depuis DB v2 |
 | `sortie` | file d'envoi cloud : {type, rid, patch} triés par id chronologique — propre à l'appareil |
 | `meta` | `device` {code, personneId}, `compteurs`, `sauvegarde` {le}, `adresse` {url des QR}, `cloud` {url, cle, session, curseur, dernier, erreur} |
 
-Version actuelle du stockage : **DB_VER = 3**. Côté serveur : table unique `fiches` (id, type, data jsonb,
+Version actuelle du stockage : **DB_VER = 4**. Pièces d'une intervention : `o.pieces[]` = déclarations d'**utilisation** (`besoinId` si la pièce vient du magasin) ; une attente `motif: 'piece'` peut porter `besoinId` (levée automatique, `Calculs.attentesALever`). Côté serveur : table unique `fiches` (id, type, data jsonb,
 seq, recu_le, auteur), RLS « authenticated », aucune règle DELETE.
 
 Listes de choix : reprendre **exactement** les codes de la V3 (sections 32-33) déjà dans l'objet `L`
@@ -189,7 +190,10 @@ lots d'import, notifications.
 - État vide qui explique quoi faire ; un chiffre indisponible dit quelle donnée manque.
 - Retour visible après chaque action (`toast`) : « enregistré sur l'appareil ».
 - Performance : rendu par chaîne HTML + délégation d'événements (`data-act`, `data-bind`), pas de framework.
-  Si `app.js` dépasse ~1 500 lignes, découper par domaine (`js/vues/*.js`) en scripts classiques.
+  Écrans par domaine dans `js/vues/*.js` (scripts classiques chargés après `app.js`) : ils lisent les aides
+  communes sur `window.App` (esc, askForm, edit, list, render, role…) et enregistrent `V.*` / `A.*`. `app.js` démarre
+  sur `DOMContentLoaded` pour que ces écrans soient enregistrés avant le premier affichage. Ajouter tout nouveau
+  fichier à `index.html` et à `FILES` dans `sw.js`. Déjà sorti : `js/vues/magasin.js`. Prochains candidats : réglages, console.
 
 ## 7. Conduite de projet
 
