@@ -38,7 +38,7 @@ multi-entreprise) et concepteur d'interfaces terrain mobile-first. Langue : fran
      démo réinitialisable, recette + durcissement). Prochain : volet B (magasin ↔ terrain) ou mise
      en production (liste : docs/RECETTE_VOLET_A.md §4).
    - Supabase « gmao-terrain » (réf. oihaqzkqhvyjybijsonc, Frankfurt). Scripts dans l'ordre :
-     schema.sql → roles.sql → multitenant.sql → quotas.sql → plateforme.sql → durcissement.sql ;
+     schema.sql → roles.sql → multitenant.sql → quotas.sql → plateforme.sql → durcissement.sql → magasin.sql ;
      Edge Function supabase/functions/inviter. Entreprises : DEMO « Perfora Démo » (Site Tanger, pack Pro ;
      othmanihicham99@gmail.com responsable + administrateur plateforme ; hothmani36@outlook.fr magasinier)
      et VITRINE « Vitrine Perfora » (démo réinitialisable ; hicham.othmani90@gmail.com responsable).

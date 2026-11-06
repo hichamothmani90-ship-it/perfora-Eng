@@ -1,6 +1,6 @@
 # Volet B — Magasin relié au terrain : proposition de conception
 
-Statut : choix 1 à 5 **validés** le 6 nov. 2026. **B1 fait** : `calculs.js` (stockPhysique, qteReservee, stockDisponible, etatBesoin, rapprochementBesoin, retraitsAVerifier) + `tests/magasin.test.js` (8 tests, dont les 3 scénarios §37). B2 à B5 à venir.
+Statut : choix 1 à 5 **validés** le 6 nov. 2026. **B1 fait** : `calculs.js` (stockPhysique, qteReservee, stockDisponible, etatBesoin, rapprochementBesoin, retraitsAVerifier) + `tests/magasin.test.js` (8 tests, dont les 3 scénarios §37). **B2 fait** : `supabase/magasin.sql` exécuté sur Supabase (type `besoins`, module magasin, droits terrain / magasin, mouvements non modifiables sauf vérification, site hérité) + `supabase/tests_magasin.sql` (15 tests conformes). B3 à B5 à venir — en B5, rejouer aussi `tests_etancheite.sql` (push_fiches réécrite).
 Références V3 : §6 (demande de matériel, attente, une demande ne consomme pas le stock), §15 (demander,
 remettre, utiliser, retourner ; retrait urgent), §16 (réceptionner, isoler, inventorier), §35 (besoin,
 réservation, mouvement, rapprochement de remise), §37 (scénarios « deux pièces remises, une utilisée et une

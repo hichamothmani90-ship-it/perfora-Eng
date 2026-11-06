@@ -17,6 +17,7 @@
 | Volet A · A4 | Console plateforme (administrateur) : clients avec usage, création d'entreprise + premier site + invitation du responsable, abonnement / statut / échéance / dérogations, ajout de site, démo commerciale réinitialisable (appareils resynchronisés d'eux-mêmes) | v18 ; 11 tests sur Supabase ; console testée avec le faux serveur ; démo « Vitrine Perfora » créée et ouverte |
 | Volet A · A5 | Recette complète : 25 + 35 tests conformes, accès sans compte entièrement fermé, durcissement (`supabase/durcissement.sql`), conseiller sécurité 0 erreur — voir [`RECETTE_VOLET_A.md`](RECETTE_VOLET_A.md) | ✅ Volet A terminé |
 | Volet B · B1 | Calculs du magasin relié au terrain (stock physique / réservé / disponible par site, état du besoin déduit des remises, contrôle remis = utilisé + retourné + détenu, retraits urgents à vérifier) | 33 tests verts (25 + 8) ; pas encore branché à l'interface |
+| Volet B · B2 | Serveur : type « besoins », réservation réservée au magasin, terrain limité au retrait urgent et au retour, mouvements non modifiables (sauf vérification), site hérité de l'intervention | En place sur Supabase, 15 tests conformes ; appli v18 inchangée et compatible |
 
 Adresses : appli <https://hichamothmani90-ship-it.github.io/perfora-Eng/> · code <https://github.com/hichamothmani90-ship-it/perfora-Eng> ·
 Supabase projet `gmao-terrain` (réf. `oihaqzkqhvyjybijsonc`, Frankfurt).
