@@ -1,6 +1,6 @@
 # Volet B — Magasin relié au terrain : proposition de conception
 
-Statut : **proposition à valider** (6 nov. 2026). Rien n'est modifié.
+Statut : choix 1 à 5 **validés** le 6 nov. 2026. **B1 fait** : `calculs.js` (stockPhysique, qteReservee, stockDisponible, etatBesoin, rapprochementBesoin, retraitsAVerifier) + `tests/magasin.test.js` (8 tests, dont les 3 scénarios §37). B2 à B5 à venir.
 Références V3 : §6 (demande de matériel, attente, une demande ne consomme pas le stock), §15 (demander,
 remettre, utiliser, retourner ; retrait urgent), §16 (réceptionner, isoler, inventorier), §35 (besoin,
 réservation, mouvement, rapprochement de remise), §37 (scénarios « deux pièces remises, une utilisée et une

@@ -128,6 +128,51 @@
     };
   }
 
-  const Calculs = { addDays, daysBetween, minutesBetween, dureeUnion, mediane, NATURE_DU_BESOIN, ETAT_RANK, otOuvert, demandeOuverte, indexOtsParDemande, etatEquipement, verifierCloture, echeanceSuivante, indicateurs };
+  // ---------- magasin relié au terrain (volet B, V3 §6, §15, §35) ----------
+  // Cinq faits distincts : besoin (aucun effet stock), réservation (diminue le disponible),
+  // remise / retrait urgent (− physique), utilisation (aucun effet : déjà sortie), retour (+ physique).
+  // Les mouvements portent une quantité signée ; un rebut a qte = 0 (traçabilité sans retour en stock).
+  const surSite = (o, siteId) => !siteId || !o.siteId || o.siteId === siteId;
+  const abs = n => Math.abs(Number(n) || 0);
+
+  /** Stock physique d'un article (sur un site si précisé) : somme des mouvements, jamais recalculée autrement. */
+  function stockPhysique(mouvements, articleId, siteId) {
+    return mouvements.filter(m => m.articleId === articleId && surSite(m, siteId)).reduce((s, m) => s + (Number(m.qte) || 0), 0);
+  }
+  const remisesDuBesoin = (mouvements, besoinId) => mouvements.filter(m => m.besoinId === besoinId && m.type === 'remise');
+  const qteRemise = (mouvements, besoinId) => remisesDuBesoin(mouvements, besoinId).reduce((s, m) => s + abs(m.qte), 0);
+  const qteRetournee = (mouvements, besoinId) => mouvements.filter(m => m.besoinId === besoinId && m.type === 'retour').reduce((s, m) => s + abs(m.qte), 0);
+
+  /** Quantité réservée et pas encore remise (les besoins annulés ou indisponibles ne réservent rien). */
+  function qteReservee(besoins, mouvements, articleId, siteId) {
+    return besoins.filter(b => b.articleId === articleId && surSite(b, siteId) && !['annule', 'indisponible'].includes(b.statut))
+      .reduce((s, b) => s + Math.max(0, abs(b.qteReservee) - qteRemise(mouvements, b.id)), 0);
+  }
+  function stockDisponible(besoins, mouvements, articleId, siteId) {
+    return stockPhysique(mouvements, articleId, siteId) - qteReservee(besoins, mouvements, articleId, siteId);
+  }
+
+  /** État d'un besoin, déduit des faits (remises réelles), pas d'un statut saisi à la main. */
+  function etatBesoin(b, mouvements) {
+    if (['annule', 'indisponible'].includes(b.statut)) return b.statut;
+    const remis = qteRemise(mouvements, b.id), q = abs(b.qte);
+    if (q && remis >= q) return 'remis';
+    if (remis > 0) return 'partiellement_remis';
+    if (abs(b.qteReservee) > 0) return 'reserve';
+    return 'demande';
+  }
+
+  /** Contrôle d'une remise : remis = utilisé + retourné + détenu. Un détenu négatif est un écart à expliquer. */
+  function rapprochementBesoin(b, mouvements, pieces) {
+    const remis = qteRemise(mouvements, b.id), retourne = qteRetournee(mouvements, b.id);
+    const utilise = (pieces || []).filter(p => p.besoinId === b.id && !p.annulee).reduce((s, p) => s + abs(p.qte), 0);
+    const detenu = remis - retourne - utilise;
+    return { remis, utilise, retourne, detenu, ecart: detenu < 0 };
+  }
+
+  /** Retraits urgents faits par un technicien et pas encore vérifiés par le magasin. */
+  const retraitsAVerifier = mouvements => mouvements.filter(m => m.type === 'remise' && m.urgent && !m.verifieLe);
+
+  const Calculs = { stockPhysique, qteReservee, stockDisponible, etatBesoin, rapprochementBesoin, retraitsAVerifier, qteRemise, addDays, daysBetween, minutesBetween, dureeUnion, mediane, NATURE_DU_BESOIN, ETAT_RANK, otOuvert, demandeOuverte, indexOtsParDemande, etatEquipement, verifierCloture, echeanceSuivante, indicateurs };
   if (typeof module === 'object' && module.exports) module.exports = Calculs; else root.Calculs = Calculs;
 })(this);
