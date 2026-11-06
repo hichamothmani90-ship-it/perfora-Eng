@@ -3,9 +3,10 @@
    la mémoire (instantané) et chaque écriture est persistée sur l'appareil. */
 const Store = (() => {
   const DB_NAME = 'gmao-terrain';
-  const DB_VER = 1;
+  // v2 (lot 0) : ajout du store « photos ». Les stores existants sont conservés tels quels.
+  const DB_VER = 2;
   const TYPES = ['localisations', 'equipements', 'personnes', 'demandes', 'ots',
-    'programmes', 'articles', 'mouvements', 'journal', 'meta'];
+    'programmes', 'articles', 'mouvements', 'journal', 'meta', 'photos'];
   const data = {};
   let db;
 

@@ -189,3 +189,22 @@ dialog.sheet .sheet-actions .btn { flex: 1; }
 #toast.show { opacity: 1; }
 
 video.scan { width: 100%; border-radius: 10px; background: #000; }
+
+/* photos */
+.thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.thumbs:empty { display: none; }
+.thumbs button { position: relative; padding: 0; border: 0; background: none; cursor: pointer; }
+.thumbs img { width: 76px; height: 76px; object-fit: cover; border-radius: 10px; display: block; border: 1px solid var(--line); }
+.thumbs .rm { position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; border-radius: 50%; background: var(--ink); color: #fff; font-size: 14px; line-height: 22px; text-align: center; }
+
+/* planche de QR codes */
+.qr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; margin-top: 14px; }
+.qr-label { display: flex; gap: 10px; align-items: center; background: #fff; border: 1px dashed #bbb; border-radius: 10px; padding: 8px; break-inside: avoid; }
+.qr-label svg { flex: none; }
+@media print {
+  body { padding: 0 !important; background: #fff; }
+  .top, .tabs, .fab, #toast, .no-print { display: none !important; }
+  main { max-width: none; padding: 0; }
+  .qr-grid { grid-template-columns: repeat(3, 1fr); gap: 4mm; margin: 0; }
+  .qr-label { border-color: #999; page-break-inside: avoid; }
+}

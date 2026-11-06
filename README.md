@@ -31,6 +31,17 @@ Interventions par nature, délai médian de clôture, préventif réalisé à é
 pièces consommées par équipement, pannes répétitives (1 demande = 1 fait),
 arrêts : durée cumulée uniquement sur bornes connues, chevauchements fusionnés.
 
+## QR codes et photos
+- Parc → « Planche de QR codes » : un QR par équipement, à imprimer **depuis l'adresse en ligne**
+  (sinon les QR pointent vers le PC local). Scanné avec l'appareil photo, il ouvre « Signaler ».
+- Photos au signalement et sur les demandes / interventions : réduites à 1280 px (~150 Ko) sur l'appareil.
+- L'accueil rappelle d'exporter une sauvegarde après 7 jours ou 100 modifications.
+
+## Tests
+    node --test "tests/*.test.js"
+Règles de calcul et scénarios de recette S01–S08 (`tests/recette.test.js`),
+générateur de QR contre les vecteurs de la norme (`tests/qr.test.js`).
+
 ## Plusieurs appareils
 Chaque appareil a son code (dans les références : `DEM-K3-0007`).
 Réglages → Exporter (JSON) puis Importer sur l'autre appareil : fusion, la version la plus récente gagne.
@@ -42,5 +53,6 @@ ne s'ouvrira pas sans le PC. Solutions : héberger ces fichiers statiques en HTT
 (GitHub Pages, Netlify… — les données restent sur l'appareil), ou certificat local.
 
 ## Fichiers
-`index.html`, `css/app.css`, `js/store.js` (stockage + journal), `js/app.js` (écrans),
+`index.html`, `css/app.css`, `js/store.js` (stockage + journal), `js/calculs.js` (règles et
+indicateurs, testés), `js/qr.js` (QR codes hors ligne), `js/app.js` (écrans),
 `sw.js` (cache hors ligne — changer `VERSION` à chaque livraison), `serveur.py`.

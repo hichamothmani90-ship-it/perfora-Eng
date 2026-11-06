@@ -1,7 +1,7 @@
 /* Hors ligne : l'application est mise en cache et s'ouvre sans réseau.
    Changer VERSION à chaque livraison pour forcer la mise à jour. */
-const VERSION = 'gmao-terrain-v1';
-const FILES = ['./', './index.html', './css/app.css', './js/store.js', './js/app.js', './manifest.webmanifest', './icon.svg'];
+const VERSION = 'gmao-terrain-v2';
+const FILES = ['./', './index.html', './css/app.css', './js/store.js', './js/calculs.js', './js/qr.js', './js/app.js', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));

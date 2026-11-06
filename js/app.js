@@ -36,15 +36,12 @@
   };
   const opts = d => Object.entries(d);
   const PRIO_ORDER = ['urgence_securite', 'critique_service', 'rapide', 'a_qualifier', 'planifiable'];
-  const ETAT_RANK = { indisponible: 0, degrade: 1, anomalie: 2, inconnu: 3, normal: 4 };
+  const { ETAT_RANK, addDays, daysBetween, minutesBetween, otOuvert } = Calculs;
 
   // ---------- dates ----------
   const today = () => Store.now().slice(0, 10);
   const fmt = iso => iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}${iso.length > 10 ? ' ' + iso.slice(11, 16) : ''}` : '—';
   const fmtY = iso => iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}${iso.length > 10 ? ' ' + iso.slice(11, 16) : ''}` : '—';
-  function addDays(s, n) { const [y, m, d] = s.slice(0, 10).split('-').map(Number); return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10); }
-  const daysBetween = (a, b) => Math.round((Date.parse(b.slice(0, 10)) - Date.parse(a.slice(0, 10))) / 864e5);
-  const minutesBetween = (a, b) => (Date.parse(b) - Date.parse(a)) / 6e4;
   function fmtDuree(min) {
     if (min == null || isNaN(min)) return '—';
     if (min < 60) return `${Math.round(min)} min`;
@@ -58,16 +55,15 @@
   const persNom = id => pers(id)?.nom || '—';
   function locPath(id) { const p = []; let l = data.localisations.get(id), n = 0; while (l && n++ < 10) { p.unshift(l.nom); l = data.localisations.get(l.parentId); } return p.join(' › '); }
   const otsDeDemande = d => list('ots').filter(o => (o.demandeIds || []).includes(d.id));
-  const otOuvert = o => !['cloturee', 'annulee'].includes(o.statut);
-  function demandeOuverte(d) {
-    if (['a_examiner', 'prise_en_charge'].includes(d.statut)) return true;
-    if (d.statut === 'traitement_organise') { const o = otsDeDemande(d); return !o.length || o.some(otOuvert); }
-    return false;
-  }
+  const demandeOuverte = d => Calculs.demandeOuverte(d, otsDeDemande(d));
+  // Cache recalculé à chaque affichage (le parc trie par état : évite de tout reparcourir).
+  let cacheEtat = null;
   function etatEquipement(id) {
-    let w = 'normal';
-    for (const d of data.demandes.values()) if (d.equipementId === id && demandeOuverte(d) && ETAT_RANK[d.etat] < ETAT_RANK[w]) w = d.etat;
-    return w;
+    if (!cacheEtat) {
+      const dem = list('demandes'), ots = list('ots'), idx = Calculs.indexOtsParDemande(ots);
+      cacheEtat = new Map(list('equipements').map(e => [e.id, Calculs.etatEquipement(e.id, dem, ots, idx)]));
+    }
+    return cacheEtat.get(id) || 'normal';
   }
   const actifs = o => (o.intervenants || []).filter(i => !i.fin);
   const stock = articleId => list('mouvements').filter(m => m.articleId === articleId).reduce((s, m) => s + m.qte, 0);
@@ -182,7 +178,7 @@
   }
 
   // ---------- objets métier ----------
-  const NATURE_DU_BESOIN = { corriger: 'corrective', verifier: 'a_qualifier', entretien: 'preventive', serie: 'assistance_production', demarrage: 'assistance_production', derive: 'a_qualifier', travaux: 'travaux_techniques', autre: 'a_qualifier' };
+  const { NATURE_DU_BESOIN } = Calculs;
   function moiIntervenant(role = 'intervenant') {
     const me = Store.currentUser();
     return me ? [{ id: Store.uid(), personneId: me.id, role, depuis: Store.now(), fin: null, par: me.nom }] : [];
@@ -226,8 +222,9 @@
     const mine = me ? otsO.filter(o => actifs(o).some(i => i.personneId === me.id)) : [];
     const susp = otsO.filter(o => o.statut === 'suspendue');
     const prev = preventifsSansOT(7);
-    return `<h1>${me ? 'Bonjour ' + esc(me.nom.split(' ')[0]) : 'Accueil'}</h1>
+    return `<h1>Aujourd’hui <span class="muted small" style="font-weight:400">${fmtY(today())}</span></h1>
       ${!me ? `<p class="warn">Indiquez qui utilise cet appareil pour signer vos saisies. <a href="#" data-act="who">Choisir</a></p>` : ''}
+      ${rappelSauvegarde()}
       <div class="tiles">
         <a class="tile red" href="#/parc?f=indisponible"><b>${indispo.length}</b><span>Équipements indisponibles</span></a>
         <a class="tile amber" href="#/demandes?f=a_examiner"><b>${aEx.length}</b><span>Demandes à examiner</span></a>
@@ -240,6 +237,37 @@
       ${susp.length ? `<h2>Travaux en attente</h2>${susp.map(otCard).join('')}` : ''}
       ${prev.length ? `<h2>Préventif à lancer</h2>${prev.map(progCard).join('')}` : ''}`;
   };
+
+  /** Les données n'existent que sur l'appareil : rappeler l'export au-delà de 7 jours ou 100 modifications. */
+  function etatSauvegarde() {
+    const depuis = data.meta.get('sauvegarde')?.le || null;
+    const modifs = list('journal').filter(j => !depuis || j.le > depuis).length;
+    return { depuis, modifs, jours: depuis ? daysBetween(depuis, today()) : null };
+  }
+  function rappelSauvegarde() {
+    const s = etatSauvegarde();
+    if (!s.modifs || (s.depuis && s.jours < 7 && s.modifs < 100)) return '';
+    return `<p class="warn">💾 ${s.depuis ? `Dernière sauvegarde il y a ${s.jours} j` : 'Aucune sauvegarde exportée'} · ${s.modifs} modification(s) présentes uniquement sur cet appareil. <a href="#" data-act="export">Exporter maintenant</a></p>`;
+  }
+
+  // ---------- photos (compressées sur l'appareil, ~150 Ko) ----------
+  async function compresserPhoto(file, max = 1280, qualite = 0.72) {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+      const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      return c.toDataURL('image/jpeg', qualite);
+    } finally { URL.revokeObjectURL(url); }
+  }
+  const photosDe = id => list('photos').filter(p => p.parentId === id).sort((a, b) => a.le.localeCompare(b.le));
+  function blocPhotos(type, id) {
+    const ph = photosDe(id);
+    return `<h2>Photos</h2><div class="card"><div class="thumbs">${ph.map(p => `<button type="button" data-act="photo-voir" data-id="${p.id}"><img src="${p.dataUrl}" alt="Photo du ${esc(fmt(p.le))}"></button>`).join('')}</div>
+      ${ph.length ? '' : '<p class="muted small" style="margin-top:0">Aucune photo.</p>'}<button class="btn sm" data-act="photo-ajout" data-type="${type}" data-id="${id}">📷 Ajouter une photo</button></div>`;
+  }
 
   V.demandes = r => {
     const f = r.q.get('f') || 'ouvertes';
@@ -278,6 +306,7 @@
         <button class="btn ghost" data-act="dem-edit" data-id="${d.id}">Compléter / corriger</button>
         ${ouverte ? `<button class="btn ghost danger" data-act="dem-annuler" data-id="${d.id}">Annuler</button>` : ''}
       </div>
+      ${blocPhotos('demandes', d.id)}
       <h2>Interventions liées</h2>${ots.length ? ots.map(otCard).join('') : empty('Aucune intervention.')}
       ${historique(d.id)}`;
   };
@@ -348,6 +377,7 @@
 
       <h2>Réserves et suites</h2><div class="card"><ul class="lines">${(o.reserves || []).map(s => `<li class="${s.statut !== 'ouverte' ? 'off' : ''}"><span class="grow">${s.bloquante ? badge('Bloquante', 'red') + ' ' : ''}${esc(L.typeSuite[s.type] || '')} : ${esc(s.texte)}<span class="muted small">${s.responsableId ? ' · ' + esc(persNom(s.responsableId)) : ''}${s.echeance ? ' · avant ' + fmt(s.echeance) : ''}</span></span>${s.statut === 'ouverte' ? `<button class="btn sm" data-act="ot-lever" data-id="${o.id}" data-sub="${s.id}">Lever</button>` : `<span class="small">levée ${fmt(s.leveeLe)}</span>`}</li>`).join('') || '<li class="muted">Aucune.</li>'}</ul>
         <button class="btn sm" data-act="ot-ajout-suite" data-id="${o.id}">+ Réserve / suite</button></div>
+      ${blocPhotos('ots', o.id)}
 
       <h2>Qualification</h2><div class="card">
         <label class="f" style="margin-top:0">Nature</label>${chipGroup('nature', L.nature, o.nature, { bind: b + 'nature' })}
@@ -376,7 +406,7 @@
     items.sort((a, b) => (ETAT_RANK[etatEquipement(a.id)] - ETAT_RANK[etatEquipement(b.id)]) || a.designation.localeCompare(b.designation));
     return `<h1>Parc</h1>${seg([['#/parc', 'Tous', 'tous'], ['#/parc?f=alerte', 'Avec anomalie', 'alerte'], ['#/parc?f=indisponible', 'Indisponibles', 'indisponible']], f)}
       ${search('#lst', 'Rechercher (code, nom, lieu)')}<div id="lst">${items.length ? items.map(eqCard).join('') : empty('Aucun équipement.')}</div>
-      <div class="actions"><button class="btn" data-act="eq-new">+ Équipement</button><button class="btn" data-act="loc-new">+ Lieu</button></div>`;
+      <div class="actions"><button class="btn" data-act="eq-new">+ Équipement</button><button class="btn" data-act="loc-new">+ Lieu</button><a class="btn" href="#/qr">Planche de QR codes</a></div>`;
   };
 
   V.eq = r => {
@@ -393,7 +423,7 @@
     return `<div class="row"><h1 class="grow">${esc(e.designation)}</h1>${badgeEtat(et)}</div>
       <div class="card"><dl class="kv"><dt>Code</dt><dd>${esc(e.code)}</dd><dt>Lieu</dt><dd>${esc(locPath(e.localisationId))}</dd>
         ${e.famille ? `<dt>Famille</dt><dd>${esc(e.famille)}</dd>` : ''}<dt>Criticité</dt><dd>${esc(e.criticite || '—')} / 4</dd></dl>
-        <p class="small muted" style="margin-bottom:0">Lien QR : <span style="word-break:break-all">${esc(lien)}</span> <button class="btn sm ghost" data-act="copy" data-v="${esc(lien)}">Copier</button></p></div>
+        <div class="row" style="margin-top:12px;align-items:flex-start">${QR.svg(lien, 104)}<p class="small muted grow" style="margin:0">Scanner ce code ouvre « Signaler » sur cet équipement.<br><span style="word-break:break-all">${esc(lien)}</span><br><button class="btn sm ghost" data-act="copy" data-v="${esc(lien)}">Copier le lien</button> <a class="btn sm ghost" href="#/qr?eq=${e.id}">Imprimer</a></p></div></div>
       <div class="actions"><a class="btn primary" href="#/signaler?eq=${encodeURIComponent(e.code)}">Signaler sur cet équipement</a><button class="btn ghost" data-act="eq-edit" data-id="${e.id}">Modifier</button></div>
       <h2>En cours</h2>${ouverts.length ? ouverts.map(([k, x]) => k === 'd' ? demCard(x) : otCard(x)).join('') : empty('Rien en cours.')}
       ${progs.length ? `<h2>Préventif</h2>${progs.map(progCard).join('')}` : ''}
@@ -451,52 +481,21 @@
   V.indicateurs = r => {
     const p = Number(r.q.get('p') || 90);
     const from = addDays(today(), -p);
-    const all = list('ots');
-    const ots = all.filter(o => o.statut !== 'annulee' && o.creeLe.slice(0, 10) >= from);
-    // 1. interventions par nature
-    const parNature = {}; for (const o of ots) parNature[o.nature] = (parNature[o.nature] || 0) + 1;
-    const maxN = Math.max(1, ...Object.values(parNature));
-    // 2. délai de clôture (création → clôture)
-    const clos = all.filter(o => o.statut === 'cloturee' && o.clotureLe && o.clotureLe.slice(0, 10) >= from);
-    const del = clos.map(o => minutesBetween(o.creeLe, o.clotureLe)).filter(x => x >= 0).sort((a, b) => a - b);
-    const med = del.length ? (del.length % 2 ? del[(del.length - 1) / 2] : (del[del.length / 2 - 1] + del[del.length / 2]) / 2) : null;
-    // 3. préventif réalisé à échéance
-    const dus = all.filter(o => o.programmeId && o.echeance && o.echeance >= from && o.echeance < today() && o.statut !== 'annulee');
-    const aTemps = dus.filter(o => o.statut === 'cloturee' && o.clotureLe.slice(0, 10) <= o.echeance).length;
-    const nonLances = list('programmes').filter(pg => pg.actif !== false && pg.prochaineEcheance >= from && pg.prochaineEcheance < today() &&
-      !all.some(o => o.programmeId === pg.id && o.echeance === pg.prochaineEcheance && o.statut !== 'annulee')).length;
-    const totalDus = dus.length + nonLances;
-    // 4. pièces par équipement
-    const piecesEq = new Map();
-    for (const o of ots) { const n = (o.pieces || []).filter(x => !x.annulee).reduce((s, x) => s + Number(x.qte || 0), 0); if (n) piecesEq.set(o.equipementId, (piecesEq.get(o.equipementId) || 0) + n); }
-    // 5. pannes répétitives : faits signalés (une demande = un fait, quel que soit le nombre d'OT)
-    const faits = new Map();
-    for (const d of list('demandes')) if (d.creeLe.slice(0, 10) >= from && !['annulee', 'close_sans_travail'].includes(d.statut) && ['indisponible', 'degrade', 'anomalie'].includes(d.etat)) faits.set(d.equipementId, (faits.get(d.equipementId) || 0) + 1);
-    for (const o of ots) if (o.nature === 'corrective' && !(o.demandeIds || []).length) faits.set(o.equipementId, (faits.get(o.equipementId) || 0) + 1);
-    const rep = [...faits.entries()].filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1]);
-    // 6. arrêts : un même fait n'est compté qu'une fois ; durées uniquement si bornes connues (union par équipement)
-    const arr = ots.filter(o => o.avecArret === 'oui');
-    const faitsArret = new Set(arr.map(o => (o.demandeIds || [])[0] || o.id));
-    const parEq = new Map();
-    for (const o of arr) if (o.arretDebut && o.arretFin && o.arretFin > o.arretDebut) { if (!parEq.has(o.equipementId)) parEq.set(o.equipementId, []); parEq.get(o.equipementId).push([o.arretDebut, o.arretFin]); }
-    let totArr = 0, faitsConnus = new Set();
-    for (const o of arr) if (o.arretDebut && o.arretFin && o.arretFin > o.arretDebut) faitsConnus.add((o.demandeIds || [])[0] || o.id);
-    for (const iv of parEq.values()) { iv.sort((a, b) => a[0].localeCompare(b[0])); let [cd, cf] = iv[0]; for (const [d, f] of iv.slice(1)) { if (d <= cf) { if (f > cf) cf = f; } else { totArr += minutesBetween(cd, cf); [cd, cf] = [d, f]; } } totArr += minutesBetween(cd, cf); }
-    // 7. demandes ouvertes
-    const ouv = list('demandes').filter(demandeOuverte);
-    const plusVieille = ouv.length ? Math.max(...ouv.map(d => daysBetween(d.creeLe, today()))) : 0;
-
+    const I = Calculs.indicateurs({ demandes: list('demandes'), ots: list('ots'), programmes: list('programmes') }, { from, today: today() });
+    const parNature = I.parNature, maxN = Math.max(1, ...Object.values(parNature));
+    const med = I.delaiCloture.mediane, totalDus = I.preventif.dus, aTemps = I.preventif.aTemps;
+    const rep = I.repetitives, A = I.arrets, ouv = I.demandesOuvertes;
     return `<h1>Indicateurs</h1>${seg([['#/indicateurs?p=30', '30 jours', 30], ['#/indicateurs?p=90', '90 jours', 90], ['#/indicateurs?p=365', '12 mois', 365]], p)}
       <div class="tiles">
-        <div class="tile blue"><b>${ots.length}</b><span>Interventions créées</span></div>
-        <div class="tile"><b>${med == null ? '—' : fmtDuree(med)}</b><span>Délai médian de clôture (${del.length})</span></div>
+        <div class="tile blue"><b>${I.interventions}</b><span>Interventions créées</span></div>
+        <div class="tile"><b>${med == null ? '—' : fmtDuree(med)}</b><span>Délai médian de clôture (${I.delaiCloture.n})</span></div>
         <div class="tile ${totalDus && aTemps / totalDus < .8 ? 'amber' : ''}"><b>${totalDus ? Math.round(100 * aTemps / totalDus) + ' %' : '—'}</b><span>Préventif à échéance (${aTemps}/${totalDus})</span></div>
-        <div class="tile ${ouv.length ? 'amber' : ''}"><b>${ouv.length}</b><span>Demandes ouvertes${ouv.length ? ` · la plus ancienne ${plusVieille} j` : ''}</span></div>
+        <div class="tile ${ouv.n ? 'amber' : ''}"><b>${ouv.n}</b><span>Demandes ouvertes${ouv.n ? ` · la plus ancienne ${ouv.plusAncienneJours} j` : ''}</span></div>
       </div>
       <h2>Interventions par nature</h2><div class="card">${opts(L.nature).filter(([k]) => parNature[k]).map(([k, l]) => `<div class="barrow"><span>${esc(l)}</span><div class="bar" style="width:${100 * parNature[k] / maxN}%"></div><b>${parNature[k]}</b></div>`).join('') || '<p class="muted">Aucune intervention sur la période.</p>'}</div>
       <h2>Pannes répétitives</h2><div class="card">${rep.length ? `<ul class="lines">${rep.map(([id, n]) => `<li><a class="grow" href="#/eq/${id}">${esc(eq(id)?.designation)}</a>${n >= 3 ? badge('À analyser', 'red') : ''}<b>${n} faits</b></li>`).join('')}</ul>` : '<p class="muted" style="margin:0">Aucun équipement avec 2 faits ou plus.</p>'}<p class="small muted">Un fait = une demande (anomalie, dégradé, indisponible), quel que soit le nombre d’interventions.</p></div>
-      <h2>Pièces consommées par équipement</h2><div class="card">${piecesEq.size ? `<ul class="lines">${[...piecesEq.entries()].sort((a, b) => b[1] - a[1]).map(([id, n]) => `<li><a class="grow" href="#/eq/${id}">${esc(eq(id)?.designation)}</a><b>${n}</b></li>`).join('')}</ul>` : '<p class="muted" style="margin:0">Aucune pièce consommée.</p>'}</div>
-      <h2>Arrêts de production</h2><div class="card"><dl class="kv"><dt>Faits avec arrêt</dt><dd>${faitsArret.size}</dd><dt>Bornes connues</dt><dd>${faitsConnus.size} sur ${faitsArret.size}</dd><dt>Durée cumulée connue</dt><dd>${faitsConnus.size ? fmtDuree(totArr) : '—'}</dd></dl>
+      <h2>Pièces consommées par équipement</h2><div class="card">${I.piecesParEquipement.length ? `<ul class="lines">${I.piecesParEquipement.map(([id, n]) => `<li><a class="grow" href="#/eq/${id}">${esc(eq(id)?.designation)}</a><b>${n}</b></li>`).join('')}</ul>` : '<p class="muted" style="margin:0">Aucune pièce consommée.</p>'}</div>
+      <h2>Arrêts de production</h2><div class="card"><dl class="kv"><dt>Faits avec arrêt</dt><dd>${A.faits}</dd><dt>Bornes connues</dt><dd>${A.faitsBornes} sur ${A.faits}</dd><dt>Durée cumulée connue</dt><dd>${A.dureeConnue == null ? '—' : fmtDuree(A.dureeConnue)}</dd></dl>
         <p class="small muted">Durée calculée uniquement quand début et fin sont renseignés ; les plages qui se chevauchent sur un même équipement ne sont comptées qu’une fois.</p></div>
       <p class="small muted">Aucun classement individuel : les indicateurs portent sur les équipements.</p>`;
   };
@@ -510,7 +509,23 @@
       <div class="card">${j.slice(0, 300).map(x => `<div class="journal-item"><b>${esc(L.entite[x.entite] || x.entite)} ${esc(refDe(x.entite, x.entiteId))}</b><br>${journalLine(x).replace('<div class="journal-item">', '').replace(/<\/div>$/, '')}</div>`).join('') || '<p class="muted">Journal vide.</p>'}</div>`;
   };
 
-  V.plus = () => `<h1>Plus</h1>${[['#/preventif', '↻ Préventif', 'Programmes et échéances'], ['#/magasin', '▤ Magasin', 'Articles, stock, mouvements'], ['#/indicateurs', '▥ Indicateurs', 'Pilotage par équipement'], ['#/journal', '☰ Journal d’audit', 'Toutes les modifications'], ['#/reglages', '⚙ Réglages', 'Utilisateur, personnes, sauvegarde']]
+  const lienSignaler = e => `${location.origin}${location.pathname}#/signaler?eq=${encodeURIComponent(e.code)}`;
+  V.qr = r => {
+    const lieu = r.q.get('lieu') || '', un = r.q.get('eq');
+    let eqs = list('equipements').filter(e => e.actif !== false);
+    if (un) eqs = eqs.filter(e => e.id === un);
+    else if (lieu) eqs = eqs.filter(e => locPath(e.localisationId).startsWith(locPath(lieu)));
+    eqs.sort((a, b) => locPath(a.localisationId).localeCompare(locPath(b.localisationId)) || a.designation.localeCompare(b.designation));
+    const local = /^(localhost|127\.|192\.168\.|10\.)/.test(location.hostname);
+    return `<div class="no-print"><h1>Planche de QR codes</h1>
+      <p class="small muted">Un QR par équipement : scanné avec l’appareil photo du téléphone, il ouvre « Signaler » sur cet équipement. Imprimez sur étiquettes ou papier, puis plastifiez.</p>
+      ${local ? '<p class="warn">Vous êtes sur une adresse locale : les QR pointeront vers ce PC. Imprimez-les depuis l’adresse en ligne (HTTPS) pour qu’ils marchent partout.</p>' : ''}
+      <div class="row"><select class="grow" data-nav="#/qr?lieu=" style="flex:1"><option value="">Tous les lieux</option>${list('localisations').map(l => `<option value="${l.id}" ${l.id === lieu ? 'selected' : ''}>${esc(locPath(l.id))}</option>`).join('')}</select>
+      <button class="btn primary" data-act="imprimer">Imprimer (${eqs.length})</button></div></div>
+      <div class="qr-grid">${eqs.map(e => `<div class="qr-label">${QR.svg(lienSignaler(e), 132)}<div><b>${esc(e.designation)}</b><div class="small">${esc(e.code)}</div><div class="small muted">${esc(locPath(e.localisationId))}</div><div class="small">Scanner pour signaler</div></div></div>`).join('') || empty('Aucun équipement.')}</div>`;
+  };
+
+  V.plus = () => `<h1>Plus</h1>${[['#/preventif', '↻ Préventif', 'Programmes et échéances'], ['#/qr', '▣ QR codes', 'Planche imprimable des équipements'], ['#/magasin', '▤ Magasin', 'Articles, stock, mouvements'], ['#/indicateurs', '▥ Indicateurs', 'Pilotage par équipement'], ['#/journal', '☰ Journal d’audit', 'Toutes les modifications'], ['#/reglages', '⚙ Réglages', 'Utilisateur, personnes, sauvegarde']]
     .map(([h, t, s]) => `<a class="card" href="${h}"><div class="t">${t}</div><div class="s">${s}</div></a>`).join('')}`;
 
   V.reglages = () => {
@@ -524,7 +539,7 @@
         <p class="small muted">Code appareil : <b>${esc(dev.code)}</b> (dans les références, évite les doublons entre appareils).<br>Hors ligne : ${esc(swState)}</p></div>
       <h2>Personnes</h2><div class="card"><ul class="lines">${list('personnes').map(p => `<li><span class="grow">${esc(p.nom)} <span class="muted small">· ${esc(L.role[p.role])}${p.societe ? ' · ' + esc(p.societe) : ''}</span></span><button class="btn sm ghost" data-act="pers-edit" data-id="${p.id}">Modifier</button></li>`).join('') || '<li class="muted">Aucune personne.</li>'}</ul><button class="btn sm" data-act="pers-new">+ Personne</button></div>
       <h2>Lieux</h2><div class="card"><ul class="lines">${list('localisations').map(l => `<li><span class="grow">${esc(locPath(l.id))} <span class="muted small">· ${esc(l.code)}</span></span></li>`).join('') || '<li class="muted">Aucun lieu.</li>'}</ul><button class="btn sm" data-act="loc-new">+ Lieu</button></div>
-      <h2>Sauvegarde et partage entre appareils</h2><div class="card"><p class="small muted" style="margin-top:0">Exportez sur le téléphone, importez sur le PC (ou l’inverse) : les fiches sont fusionnées, la version la plus récente est gardée, rien n’est supprimé.</p>
+      <h2>Sauvegarde et partage entre appareils</h2><div class="card"><p style="margin-top:0">Dernière sauvegarde : <b>${(s => s.depuis ? fmtY(s.depuis) + ` (${s.modifs} modification(s) depuis)` : 'jamais')(etatSauvegarde())}</b></p><p class="small muted">Exportez sur le téléphone, importez sur le PC (ou l’inverse) : les fiches sont fusionnées, la version la plus récente est gardée, rien n’est supprimé.</p>
         <div class="actions"><button class="btn primary" data-act="export">Exporter (JSON)</button><button class="btn" data-act="import">Importer</button><button class="btn" data-act="csv">Interventions (CSV Excel)</button></div>
         <input type="file" id="importFile" accept=".json,application/json" class="hidden"></div>
       <h2>Démonstration</h2><div class="card">${data.equipements.size ? '<p class="small muted" style="margin:0">La démo se charge uniquement sur un appareil vide.</p>' : '<button class="btn" data-act="demo">Charger la démo</button>'}</div>
@@ -542,6 +557,9 @@
       <label class="f">Besoin</label>${chipGroup('besoin', L.besoin, null, { required: true })}
       <label class="f" for="constat">Constat</label><textarea id="constat" name="constat" required placeholder="Ce que vous avez observé (bruit, fuite, défaut…)"></textarea>
       <label class="f">Impact sur l’exploitation</label>${chipGroup('impact', L.impact, 'a_confirmer')}
+      <label class="f">Photos <span class="opt">(facultatif)</span></label>
+      <input type="file" id="photoIn" accept="image/*" class="hidden">
+      <div class="thumbs" id="thumbs"></div><button type="button" class="btn sm" id="photoBtn">📷 Ajouter une photo</button>
       <details class="more"><summary>Heure du fait, demandeur</summary>
         <label class="f">Heure du fait</label>${chipGroup('quand', { maintenant: 'Maintenant', autre: 'Autre heure', inconnue: 'Inconnue' }, 'maintenant')}
         <div id="quandAutre" class="hidden"><input type="datetime-local" name="heureFait" style="margin-top:8px"><div style="margin-top:8px">${chipGroup('precisionHeure', L.precision, 'estimee')}</div></div>
@@ -580,6 +598,18 @@
         if (canScan) $('#scan').onclick = async () => { const code = await scanQR(); if (!code) return; const e = byCode(code); e ? pick(e.id) : toast('QR non reconnu : ' + code); };
       }
     };
+    const photos = [];
+    const showThumbs = () => {
+      $('#thumbs').innerHTML = photos.map((u, i) => `<button type="button" data-rm="${i}" title="Retirer"><img src="${u}" alt="Photo ${i + 1}"><span class="rm">×</span></button>`).join('');
+      $('#photoBtn').classList.toggle('hidden', photos.length >= 4);
+    };
+    $('#photoBtn').onclick = () => $('#photoIn').click();
+    $('#photoIn').onchange = async ev => {
+      const f = ev.target.files[0]; ev.target.value = '';
+      if (!f) return;
+      try { photos.push(await compresserPhoto(f)); showThumbs(); } catch { toast('Image illisible'); }
+    };
+    $('#thumbs').onclick = ev => { const b = ev.target.closest('[data-rm]'); if (b) { photos.splice(Number(b.dataset.rm), 1); showThumbs(); } };
     const pre = r.q.get('eq'); const preE = pre && byCode(pre);
     pick(preE ? preE.id : null);
     form.addEventListener('change', () => {
@@ -608,6 +638,7 @@
       };
       if (v.jInterviens && me) Object.assign(d, { statut: 'prise_en_charge', priseEnChargePar: me.id, priseEnChargeLe: now });
       await Store.save('demandes', d);
+      for (const u of photos) await Store.save('photos', { id: Store.uid(), parentType: 'demandes', parentId: d.id, dataUrl: u, le: now });
       if (v.jInterviens && me) {
         const o = await otDepuisDemande(d, true);
         toast(`${d.ref} enregistrée · ${o.ref} démarrée`);
@@ -737,21 +768,14 @@
   A['ot-terminer'] = async el => edit('ots', el.dataset.id, { statut: 'travail_termine' }, { action: 'travail_termine' });
   A['ot-cloturer'] = async el => {
     const o = data.ots.get(el.dataset.id);
-    const err = [];
-    if (o.nature === 'a_qualifier') err.push('• Qualifier la nature (corrective, préventive…).');
-    if (!o.resultat) err.push('• Indiquer le résultat du travail.');
-    if (['partiel', 'non_resolu'].includes(o.resultat) && !(o.reserves || []).some(r => r.statut === 'ouverte')) err.push('• Résultat partiel ou non résolu : ajouter une suite avec responsable.');
-    if ((o.reserves || []).some(r => r.statut === 'ouverte' && r.bloquante)) err.push('• Une réserve bloquante est encore ouverte.');
-    if (o.arretDebut && o.arretFin && o.arretFin < o.arretDebut) err.push('• La fin d’arrêt précède le début.');
-    if (err.length) { await alertBox('Avant de clôturer', err); return; }
+    const err = Calculs.verifierCloture(o);
+    if (err.length) { await alertBox('Avant de clôturer', err.map(e => '• ' + e)); return; }
     const me = Store.currentUserName(), now = Store.now();
     await Store.save('ots', { ...o, statut: 'cloturee', clotureLe: now, cloturePar: me, attentes: fermerAttentes(o) }, { action: 'cloture' });
     if (o.programmeId) {
       const p = data.programmes.get(o.programmeId);
       if (p && p.prochaineEcheance === o.echeance) {
-        const base = p.regle === 'apres_realisation' ? now : o.echeance;
-        let next = addDays(base, Number(p.periodiciteJours) || 30);
-        await Store.update('programmes', p.id, { prochaineEcheance: next, derniereRealisation: now }, { action: 'echeance_suivante' });
+        await Store.update('programmes', p.id, { prochaineEcheance: Calculs.echeanceSuivante(p, o.echeance, now), derniereRealisation: now }, { action: 'echeance_suivante' });
       }
     }
     toast(`${o.ref} clôturée`);
@@ -903,10 +927,29 @@
     render();
   };
 
+  A['photo-ajout'] = el => {
+    const inp = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/*' });
+    inp.onchange = async () => {
+      const f = inp.files[0]; if (!f) return;
+      try {
+        await Store.save('photos', { id: Store.uid(), parentType: el.dataset.type, parentId: el.dataset.id, dataUrl: await compresserPhoto(f), le: Store.now() });
+        toast('Photo enregistrée sur l’appareil'); render();
+      } catch { toast('Image illisible'); }
+    };
+    inp.click();
+  };
+  A['photo-voir'] = el => {
+    const p = data.photos.get(el.dataset.id);
+    const d = document.createElement('dialog'); d.className = 'sheet';
+    d.innerHTML = `<form method="dialog"><img src="${p.dataUrl}" alt="" style="width:100%;border-radius:10px"><p class="small muted">${fmtY(p.le)} · ${esc(p.creePar)}</p><div class="sheet-actions"><button class="btn">Fermer</button></div></form>`;
+    document.body.append(d); d.addEventListener('close', () => d.remove()); d.showModal();
+  };
+  A.imprimer = () => window.print();
   A.copy = async el => { try { await navigator.clipboard.writeText(el.dataset.v); toast('Lien copié'); } catch { toast('Copie impossible : sélectionnez le lien'); } };
   A.export = () => {
     const blob = new Blob([JSON.stringify(Store.exportAll(), null, 1)], { type: 'application/json' });
     download(blob, `gmao-sauvegarde-${Store.device().code}-${Store.now().replace(/[-:T]/g, '').slice(0, 12)}.json`);
+    Store.persistMeta({ id: 'sauvegarde', le: Store.now() }).then(() => { toast('Sauvegarde exportée'); render(); });
   };
   A.import = () => {
     const inp = $('#importFile');
@@ -994,9 +1037,10 @@
     const [name, id] = path.split('/');
     return { name, id: id ? decodeURIComponent(id) : null, q: new URLSearchParams(qs || '') };
   }
-  const TAB_OF = { demande: 'demandes', ot: 'ots', eq: 'parc', article: 'magasin', signaler: '' };
+  const TAB_OF = { demande: 'demandes', ot: 'ots', eq: 'parc', article: 'magasin', signaler: '', qr: 'parc' };
   const MOBILE_PLUS = ['preventif', 'magasin', 'article', 'indicateurs', 'journal', 'reglages', 'plus'];
   function render() {
+    cacheEtat = null;
     R = parseHash();
     const fn = V[R.name] || V.accueil;
     $('#view').innerHTML = fn(R);
@@ -1020,6 +1064,7 @@
   });
   document.addEventListener('change', async e => {
     const el = e.target;
+    if (el.dataset?.nav !== undefined) { location.hash = el.dataset.nav + encodeURIComponent(el.value); return; }
     const b = el.dataset?.bind;
     if (!b) return;
     const [t, id, field] = b.split('|');
