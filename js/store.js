@@ -3,10 +3,14 @@
    la mémoire (instantané) et chaque écriture est persistée sur l'appareil. */
 const Store = (() => {
   const DB_NAME = 'gmao-terrain';
-  // v2 (lot 0) : ajout du store « photos ». Les stores existants sont conservés tels quels.
-  const DB_VER = 2;
+  // v2 (lot 0) : store « photos ». v3 (lot 1) : store « sortie » = file d'envoi vers le cloud.
+  // Les stores existants sont conservés tels quels.
+  const DB_VER = 3;
   const TYPES = ['localisations', 'equipements', 'personnes', 'demandes', 'ots',
-    'programmes', 'articles', 'mouvements', 'journal', 'meta', 'photos'];
+    'programmes', 'articles', 'mouvements', 'journal', 'meta', 'photos', 'sortie'];
+  /** Données métier (exportées, synchronisées). meta et sortie restent propres à l'appareil. */
+  const METIER = TYPES.filter(t => t !== 'meta' && t !== 'sortie');
+  const APPEND_ONLY = ['journal', 'mouvements', 'photos'];
   const data = {};
   let db;
 
@@ -98,8 +102,62 @@ const Store = (() => {
     data[t].set(obj.id, obj);
     const j = entries.map(e => ({ id: uid(), le: ts, auteur: user, motif, ...e }));
     for (const e of j) data.journal.set(e.id, e);
-    await Promise.all([persist(t, [obj]), persist('journal', j)]);
+    const envois = [];
+    if (cloudActif() && METIER.includes(t)) {
+      // Patch = seulement les champs modifiés (fusion champ par champ côté serveur).
+      const p = prev ? Object.fromEntries(entries.map(e => [e.champ, obj[e.champ] ?? null]).concat([['modifieLe', ts], ['modifiePar', user]])) : obj;
+      envois.push(sortie(t, obj.id, p));
+      for (const e of j) envois.push(sortie('journal', e.id, e));
+    }
+    await Promise.all([persist(t, [obj]), persist('journal', j), envois.length ? persist('sortie', envois) : null]);
+    if (envois.length) quandEcrit();
     return obj;
+  }
+
+  // ---------- file d'envoi (synchronisation cloud) ----------
+  let seqSortie = 0;
+  const cloudActif = () => !!data.meta.get('cloud')?.url;
+  function sortie(type, rid, patch) {
+    const o = { id: String(Date.now()).padStart(15, '0') + '-' + String(++seqSortie).padStart(6, '0') + '-' + uid().slice(0, 6), type, rid, patch: JSON.parse(JSON.stringify(patch)) };
+    data.sortie.set(o.id, o);
+    return o;
+  }
+  let ecouteur = null;
+  const quandEcrit = () => { if (ecouteur) ecouteur(); };
+  const surEcriture = fn => { ecouteur = fn; };
+  const fileEnvoi = () => [...data.sortie.values()].sort((a, b) => a.id.localeCompare(b.id));
+  async function retirerEnvoyes(ids) {
+    await new Promise((res, rej) => {
+      const tx = db.transaction('sortie', 'readwrite');
+      for (const id of ids) { tx.objectStore('sortie').delete(id); data.sortie.delete(id); }
+      tx.oncomplete = res; tx.onerror = () => rej(tx.error);
+    });
+  }
+  /** Met toutes les données de l'appareil dans la file (premier envoi, reprise d'une sauvegarde). */
+  async function toutEnvoyer() {
+    const envois = [];
+    for (const t of METIER) for (const o of data[t].values()) envois.push(sortie(t, o.id, o));
+    for (let i = 0; i < envois.length; i += 500) await persist('sortie', envois.slice(i, i + 500));
+    quandEcrit();
+    return envois.length;
+  }
+  /** Applique des fiches reçues du serveur, sans journal ni renvoi.
+      Les modifications locales pas encore envoyées restent prioritaires sur ce qui arrive. */
+  async function appliquerDistant(rows) {
+    const enAttente = new Map();
+    for (const s of data.sortie.values()) enAttente.set(s.rid, { ...(enAttente.get(s.rid) || {}), ...s.patch });
+    const parType = new Map();
+    for (const r of rows) {
+      if (!METIER.includes(r.type) || !r.data || typeof r.data.id !== 'string') continue;
+      // Fusion : local < serveur < modifications locales non envoyées. Un champ absent côté
+      // serveur ne fait jamais disparaître la valeur locale.
+      const obj = APPEND_ONLY.includes(r.type) ? r.data : { ...(data[r.type].get(r.id) || {}), ...r.data, ...(enAttente.get(r.id) || {}) };
+      data[r.type].set(obj.id, obj);
+      if (!parType.has(r.type)) parType.set(r.type, []);
+      parType.get(r.type).push(obj);
+    }
+    for (const [t, objs] of parType) await persist(t, objs);
+    return rows.length;
   }
 
   async function update(t, id, patch, opts) {
@@ -109,7 +167,7 @@ const Store = (() => {
 
   function exportAll() {
     const out = { format: 'gmao-terrain', version: 1, exporteLe: now(), appareil: device().code, data: {} };
-    for (const t of TYPES) if (t !== 'meta') out.data[t] = [...data[t].values()];
+    for (const t of METIER) out.data[t] = [...data[t].values()];
     return out;
   }
 
@@ -117,8 +175,8 @@ const Store = (() => {
   async function importAll(o) {
     if (!o || o.format !== 'gmao-terrain') throw new Error('Fichier non reconnu');
     let n = 0;
-    for (const t of TYPES) {
-      if (t === 'meta' || !Array.isArray(o.data?.[t])) continue;
+    for (const t of METIER) {
+      if (!Array.isArray(o.data?.[t])) continue;
       const changed = [];
       for (const r of o.data[t]) {
         if (!r || typeof r.id !== 'string') continue;
@@ -138,5 +196,6 @@ const Store = (() => {
     await persistMeta({ id: 'device', code: randomCode(), personneId: null });
   }
 
-  return { open, data, save, update, uid, now, nextRef, device, persistMeta, currentUser, currentUserName, exportAll, importAll, wipe };
+  return { open, data, save, update, uid, now, nextRef, device, persistMeta, currentUser, currentUserName, exportAll, importAll, wipe,
+    cloudActif, surEcriture, fileEnvoi, retirerEnvoyes, toutEnvoyer, appliquerDistant };
 })();

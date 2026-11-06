@@ -208,3 +208,12 @@ video.scan { width: 100%; border-radius: 10px; background: #000; }
   .qr-grid { grid-template-columns: repeat(3, 1fr); gap: 4mm; margin: 0; }
   .qr-label { border-color: #999; page-break-inside: avoid; }
 }
+
+/* voyant de synchronisation */
+.sync { border: 0; border-radius: 99px; padding: 4px 10px; font: inherit; font-size: .75rem; background: var(--bg); color: var(--muted); cursor: pointer; white-space: nowrap; }
+.sync.ok { background: var(--green-soft); color: var(--green); }
+.sync.wait { background: var(--amber-soft); color: var(--amber); }
+.sync.err { background: var(--red-soft); color: var(--red); }
+
+.maj { position: fixed; left: 50%; transform: translateX(-50%); top: calc(var(--top-h) + 8px); z-index: 60; display: flex; gap: 10px; align-items: center; width: max-content; max-width: 92vw; white-space: nowrap;
+  background: var(--ink); color: #fff; padding: 8px 8px 8px 14px; border-radius: 12px; font-size: .9rem; box-shadow: 0 6px 18px rgba(0,0,0,.2); }

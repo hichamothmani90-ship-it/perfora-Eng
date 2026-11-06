@@ -245,7 +245,8 @@
     return { depuis, modifs, jours: depuis ? daysBetween(depuis, today()) : null };
   }
   function rappelSauvegarde() {
-    const s = etatSauvegarde();
+    const s = etatSauvegarde(), c = Sync.etatCourant();
+    if (c.connecte && !c.attente && !c.erreur) return ''; // tout est déjà sur le serveur
     if (!s.modifs || (s.depuis && s.jours < 7 && s.modifs < 100)) return '';
     return `<p class="warn">💾 ${s.depuis ? `Dernière sauvegarde il y a ${s.jours} j` : 'Aucune sauvegarde exportée'} · ${s.modifs} modification(s) présentes uniquement sur cet appareil. <a href="#" data-act="export">Exporter maintenant</a></p>`;
   }
@@ -546,6 +547,7 @@
       <h2>Cet appareil</h2><div class="card"><label class="f" style="margin-top:0">Qui utilise cet appareil ?</label>
         <select data-bind="meta|device|personneId"><option value="">— Choisir —</option>${list('personnes').filter(p => p.actif !== false).map(p => `<option value="${p.id}" ${dev.personneId === p.id ? 'selected' : ''}>${esc(p.nom)} (${esc(L.role[p.role])})</option>`).join('')}</select>
         <p class="small muted">Code appareil : <b>${esc(dev.code)}</b> (dans les références, évite les doublons entre appareils).<br>Hors ligne : ${esc(swState)}</p></div>
+      ${blocSynchro()}
       <h2>Adresse de l’application</h2><div class="card"><p class="small muted" style="margin-top:0">Adresse utilisée dans les QR codes. Elle doit être accessible depuis les téléphones (HTTPS).</p>
         <input type="text" value="${esc(adressePublique())}" data-bind="meta|adresse|url" inputmode="url"></div>
       <h2>Personnes</h2><div class="card"><ul class="lines">${list('personnes').map(p => `<li><span class="grow">${esc(p.nom)} <span class="muted small">· ${esc(L.role[p.role])}${p.societe ? ' · ' + esc(p.societe) : ''}</span></span><button class="btn sm ghost" data-act="pers-edit" data-id="${p.id}">Modifier</button></li>`).join('') || '<li class="muted">Aucune personne.</li>'}</ul><button class="btn sm" data-act="pers-new">+ Personne</button></div>
@@ -556,6 +558,23 @@
       <h2>Démonstration</h2><div class="card">${data.equipements.size ? '<p class="small muted" style="margin:0">La démo se charge uniquement sur un appareil vide.</p>' : '<button class="btn" data-act="demo">Charger la démo</button>'}</div>
       <h2>Zone sensible</h2><div class="card"><button class="btn danger" data-act="wipe">Effacer toutes les données de cet appareil</button><p class="small muted">Exportez d’abord une sauvegarde.</p></div>`;
   };
+
+  function blocSynchro() {
+    const s = Sync.etatCourant();
+    if (!s.configure) {
+      return `<h2>Synchronisation cloud <span class="badge blue">prototype</span></h2><div class="card"><p class="small muted" style="margin-top:0">Partage les données entre tous les appareils via un serveur Supabase. L’appli continue de fonctionner hors ligne : les saisies partent dès que le réseau revient.</p>
+        <button class="btn primary" data-act="sync-config">Connecter ce compte</button></div>`;
+    }
+    return `<h2>Synchronisation cloud <span class="badge blue">prototype</span></h2><div class="card" id="bloc-sync"><dl class="kv">
+        <dt>Serveur</dt><dd style="word-break:break-all">${esc(s.url)}</dd>
+        <dt>Compte</dt><dd>${s.connecte ? esc(s.email || '—') : '<span class="badge red">déconnecté</span>'}</dd>
+        <dt>En attente d’envoi</dt><dd><b>${s.attente}</b> modification(s)</dd>
+        <dt>Dernière synchro</dt><dd>${s.dernier ? fmtY(s.dernier) : 'jamais'}</dd>
+        ${s.erreur ? `<dt>Erreur</dt><dd class="small" style="color:var(--red)">${esc(s.erreur)}</dd>` : ''}</dl>
+      <div class="actions">${s.connecte ? `<button class="btn primary" data-act="sync-maintenant">Synchroniser maintenant</button>` : `<button class="btn primary" data-act="sync-config">Se reconnecter</button>`}
+        <button class="btn" data-act="sync-tout">Envoyer toutes les données de cet appareil</button>
+        ${s.connecte ? `<button class="btn ghost" data-act="sync-deconnecter">Se déconnecter</button>` : ''}</div></div>`;
+  }
 
   V.signaler = r => {
     const me = Store.currentUser();
@@ -983,6 +1002,39 @@
     download(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `gmao-interventions-${today()}.csv`);
   };
   function download(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); }
+  A['sync-ouvrir'] = () => { location.hash = '#/reglages'; setTimeout(() => $('#bloc-sync')?.scrollIntoView({ block: 'center' }), 50); };
+  A['sync-config'] = async () => {
+    const c = data.meta.get('cloud') || {};
+    const v = await askForm({ title: 'Connexion au serveur', ok: 'Se connecter', values: { url: c.url, cle: c.cle, email: c.email }, fields: [
+      { type: 'info', text: 'Adresse et clé publique : Supabase → Project Settings → API. Le compte est créé par le responsable dans Supabase → Authentication → Users.' },
+      { name: 'url', label: 'Adresse du projet (https://….supabase.co)', type: 'url', required: true },
+      { name: 'cle', label: 'Clé publique (anon / publishable)', type: 'text', required: true },
+      { name: 'email', label: 'E-mail', type: 'email', required: true },
+      { name: 'motDePasse', label: 'Mot de passe', type: 'password', required: true }] });
+    if (!v) return;
+    try {
+      toast('Connexion…');
+      const premiere = await Sync.connecter(v);
+      // Premier branchement : tout ce qui existe déjà sur l'appareil part au serveur (fusion, sans
+      // suppression), sinon une fiche modifiée plus tard n'arriverait qu'en partie ailleurs.
+      if (premiere && list('equipements').length + list('demandes').length + list('ots').length) {
+        const n = await Store.toutEnvoyer();
+        toast(`${n} fiche(s) de cet appareil envoyées au serveur`);
+      }
+      toast('Connecté · synchronisation en cours');
+      await Sync.synchroniser();
+      render();
+    } catch (e) { toast('Échec : ' + e.message); }
+  };
+  A['sync-maintenant'] = async () => { await Sync.synchroniser(); render(); const s = Sync.etatCourant(); toast(s.erreur ? 'Erreur : ' + s.erreur : 'Synchronisation terminée'); };
+  A['sync-tout'] = async () => {
+    if (!(await askConfirm('Tout envoyer', 'Toutes les fiches de cet appareil seront envoyées au serveur (fusion, rien n’est supprimé). Utile au premier branchement ou après l’import d’une sauvegarde.', 'Envoyer'))) return;
+    const n = await Store.toutEnvoyer(); toast(`${n} fiche(s) mises en file d’envoi`); await Sync.synchroniser(); render();
+  };
+  A['sync-deconnecter'] = async () => {
+    if (!(await askConfirm('Se déconnecter', 'Les saisies resteront sur l’appareil et partiront à la prochaine connexion.', 'Se déconnecter'))) return;
+    await Sync.deconnecter(); render();
+  };
   A.wipe = async () => {
     const v = await askForm({ title: 'Effacer cet appareil', ok: 'Effacer', fields: [{ type: 'info', cls: 'warn', text: 'Toutes les données de cet appareil seront effacées. Les autres appareils et vos sauvegardes ne sont pas touchés.' }, { name: 'c', label: 'Tapez EFFACER pour confirmer', type: 'text', required: true }] });
     if (v?.c !== 'EFFACER') return;
@@ -1103,10 +1155,40 @@
   window.addEventListener('online', net); window.addEventListener('offline', net);
 
   // ---------- démarrage ----------
-  Store.open().then(() => { net(); render(); }).catch(err => {
+  function voyantSynchro(s) {
+    const b = $('#sync');
+    if (!b) return;
+    b.classList.toggle('hidden', !s.configure);
+    let t, c;
+    if (!s.connecte) [t, c] = ['☁ Reconnexion', 'err'];
+    else if (s.enCours) [t, c] = ['☁ Synchro…', ''];
+    else if (s.erreur) [t, c] = [`☁ Erreur${s.attente ? ' · ' + s.attente : ''}`, 'err'];
+    else if (s.attente) [t, c] = [`☁ ${s.attente} à envoyer`, 'wait'];
+    else [t, c] = ['☁ À jour', 'ok'];
+    b.textContent = t; b.className = 'sync ' + c + (s.configure ? '' : ' hidden');
+    b.title = s.erreur || (s.dernier ? 'Dernière synchro : ' + fmtY(s.dernier) : '');
+    if (R?.name === 'reglages' && $('#bloc-sync') && !enSaisie()) $('#bloc-sync').outerHTML = blocSynchro().replace(/^[\s\S]*?(<div class="card" id="bloc-sync">)/, '$1');
+  }
+  const enSaisie = () => !!document.querySelector('dialog[open]') || !!document.activeElement?.matches?.('#view input, #view textarea, #view select');
+  function quandRecu(n) {
+    toast(`☁ ${n} mise(s) à jour reçue(s)`);
+    if (!enSaisie()) render();
+  }
+
+  Store.open().then(() => { net(); render(); Sync.demarrer({ etat: voyantSynchro, reception: quandRecu }); }).catch(err => {
     $('#view').innerHTML = `<p class="warn">Stockage local indisponible : ${esc(err.message)}. Vérifiez que le navigateur n’est pas en navigation privée.</p>`;
   });
   if ('serviceWorker' in navigator && isSecureContext && location.protocol !== 'file:') {
+    const avait = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.register('sw.js').catch(() => {});
+    // Nouvelle version installée : proposer de recharger (jamais de rechargement forcé en pleine saisie).
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!avait || $('#maj')) return;
+      const d = document.createElement('div');
+      d.id = 'maj'; d.className = 'maj';
+      d.innerHTML = 'Nouvelle version disponible <button class="btn sm primary" type="button">Recharger</button>';
+      d.querySelector('button').onclick = () => location.reload();
+      document.body.append(d);
+    });
   }
 })();

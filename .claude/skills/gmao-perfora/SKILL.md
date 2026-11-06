@@ -75,10 +75,21 @@ Chaque indicateur affiche périmètre, période, convention, couverture et effec
   référence lisible `PREFIX-<codeAppareil>-0007` via `Store.nextRef` (pas de collision entre appareils).
 - **Dates** : chaînes locales du site `YYYY-MM-DDTHH:mm` (`Store.now()`), dates seules `YYYY-MM-DD`.
   Le fuseau est un paramètre de site (Africa/Casablanca), pas stocké par valeur.
-- **Fusion entre appareils** : export/import JSON ; par fiche, la plus récente (`modifieLe`) gagne ;
+- **Synchronisation cloud** (`js/sync.js`, Supabase via REST, sans bibliothèque) :
+  `Store.save` place un **patch** (champs modifiés seulement) dans le store `sortie` ; `Sync` envoie
+  par lots à la fonction SQL `push_fiches` (fusion `data || patch`, append-only pour journal, mouvements,
+  photos), puis récupère par **numéro de séquence serveur** (`seq`, avec recouvrement), jamais par
+  l'horloge des téléphones. À la réception : local < serveur < modifications locales non envoyées.
+  Délai réseau max 20 s, session renouvelée automatiquement, erreurs en français, voyant ☁.
+  Premier branchement = envoi complet automatique de l'appareil. Test local : `tests/serveur_factice.py`
+  (mêmes appels et même fusion que `supabase/schema.sql`), deux « appareils » = `localhost:8080`
+  et `127.0.0.1:8080` (IndexedDB séparées).
+- **Sans cloud** : export/import JSON ; par fiche, la plus récente (`modifieLe`) gagne ;
   rien n'est supprimé par absence.
-- **Service worker** : cache d'abord puis mise à jour en arrière-plan. **Incrémenter `VERSION`
-  dans `sw.js` à chaque livraison.** Toute nouvelle ressource doit être ajoutée à `FILES`.
+- **Service worker** : cache d'abord, **une version = un cache complet installé d'un bloc** (jamais de
+  mise à jour fichier par fichier : cela mélangerait les versions). **Incrémenter `VERSION` dans `sw.js`
+  à chaque livraison** et ajouter toute nouvelle ressource à `FILES`. L'appli affiche alors
+  « Nouvelle version disponible — Recharger » (pas de rechargement forcé en pleine saisie).
 - **Évolution du schéma** : incrémenter `DB_VER` dans `store.js`, créer les nouveaux object stores dans
   `onupgradeneeded`, migrer les fiches existantes sans perte (valeurs par défaut lues avec `??`).
 
@@ -98,9 +109,11 @@ Implémenté (object stores) :
 | `mouvements` | articleId, type (entree, sortie, retour, ajustement), qte signée, otId, motif, le — immuables |
 | `journal` | entite, entiteId, action, champ, avant, apres, motif, auteur, le — append-only |
 | `photos` | parentType (demandes / ots), parentId, dataUrl JPEG ≤ 1280 px, le — depuis DB v2 |
-| `meta` | `device` {code, personneId}, `compteurs`, `sauvegarde` {le} (dernier export) |
+| `sortie` | file d'envoi cloud : {type, rid, patch} triés par id chronologique — propre à l'appareil |
+| `meta` | `device` {code, personneId}, `compteurs`, `sauvegarde` {le}, `adresse` {url des QR}, `cloud` {url, cle, session, curseur, dernier, erreur} |
 
-Version actuelle du stockage : **DB_VER = 2**.
+Version actuelle du stockage : **DB_VER = 3**. Côté serveur : table unique `fiches` (id, type, data jsonb,
+seq, recu_le, auteur), RLS « authenticated », aucune règle DELETE.
 
 Listes de choix : reprendre **exactement** les codes de la V3 (sections 32-33) déjà dans l'objet `L`
 de `app.js`. Un nouveau choix = un code stable + libellé ; un ancien choix est désactivé, jamais effacé.

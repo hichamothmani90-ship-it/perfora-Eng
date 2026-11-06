@@ -44,7 +44,15 @@ générateur de QR contre les vecteurs de la norme (`tests/qr.test.js`).
 
 ## Plusieurs appareils
 Chaque appareil a son code (dans les références : `DEM-K3-0007`).
-Réglages → Exporter (JSON) puis Importer sur l'autre appareil : fusion, la version la plus récente gagne.
+
+**Synchronisation cloud (prototype, lot 1)** — voir [`supabase/GUIDE.md`](supabase/GUIDE.md).
+Chaque saisie est enregistrée sur l'appareil puis placée dans une file d'envoi ; dès qu'il y a du
+réseau, l'appli envoie les champs modifiés et récupère ceux des autres appareils. Fusion champ par
+champ côté serveur ; les modifications locales non envoyées restent prioritaires. Voyant ☁ en haut.
+Test local sans compte : `python tests/serveur_factice.py` (faux Supabase, compte test@gmao.test / test-gmao,
+clé `cle-factice`, adresse `http://localhost:8099`).
+
+Sans cloud : Réglages → Exporter (JSON) puis Importer sur l'autre appareil (fusion, la plus récente gagne).
 
 ## Limite connue : hors ligne sur téléphone
 Le mode hors ligne (service worker) et la caméra QR exigent `localhost` ou HTTPS.
@@ -55,4 +63,5 @@ ne s'ouvrira pas sans le PC. Solutions : héberger ces fichiers statiques en HTT
 ## Fichiers
 `index.html`, `css/app.css`, `js/store.js` (stockage + journal), `js/calculs.js` (règles et
 indicateurs, testés), `js/qr.js` (QR codes hors ligne), `js/app.js` (écrans),
-`sw.js` (cache hors ligne — changer `VERSION` à chaque livraison), `serveur.py`.
+`js/sync.js` (synchronisation cloud), `sw.js` (cache hors ligne — changer `VERSION` à chaque
+livraison), `serveur.py`, `supabase/schema.sql` et `supabase/GUIDE.md`.
