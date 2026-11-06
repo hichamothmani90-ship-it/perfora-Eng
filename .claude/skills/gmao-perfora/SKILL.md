@@ -182,10 +182,13 @@ lots d'import, notifications.
 
 - **Signaler** : < 30 s, une seule page, 4 choix + 1 texte (équipement, état, besoin, constat ; impact
   préréglé « à confirmer »). Détails repliés. Alerte si une demande est déjà ouverte sur l'équipement.
-  Case « Je prends en charge et j'interviens » = demande + OT en un geste.
+  Case « Je prends en charge et j'interviens » = demande + OT en un geste. Sur la demande (v23) : « J'interviens
+  maintenant » (1 clic : prise en charge + OT en cours), « Planifier une intervention » (créneau → Planifiée),
+  « Je m'en occupe » en secondaire. Bouton flottant « Signaler » seulement sur Accueil, Demandes, Travaux, Parc.
 - **Intervenir / clôturer** : < 2 min sur smartphone. Sauvegarde automatique à chaque champ, pas de
   bouton « Enregistrer ». Actions selon le statut : Démarrer, Mettre en attente (motif), Reprendre,
-  Travail terminé, Clôturer, Rouvrir (motif).
+  Terminer (une fenêtre : fait, résultat, cause, fin d'arrêt, suite → clôture si `verifierCloture` passe, sinon
+  saisie gardée), Rouvrir (motif). Statuts : à planifier, planifiée, en cours, en attente, prête, clôturée, annulée.
 - **Accès par QR** : `…/#/signaler?eq=CODE` ouvre le formulaire présélectionné.
 - **Accueil = ce qui demande une action aujourd'hui**, le pilotage est ailleurs.
 

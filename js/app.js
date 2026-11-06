@@ -5,7 +5,7 @@
 (() => {
   const { data } = Store;
   /** Version affichée dans Réglages : à incrémenter avec VERSION dans sw.js. */
-  const APP_VERSION = 'v22';
+  const APP_VERSION = 'v23';
   const $ = s => document.querySelector(s);
   // Multi-site : les listes de fiches de site ne montrent que le site actif (« tous » possible).
   // Les fiches sans site (anciennes ou pas encore synchronisées) restent visibles.
@@ -58,7 +58,7 @@
     statutDem: { a_examiner: 'À examiner', prise_en_charge: 'Prise en charge', traitement_organise: 'Traitement organisé', close_sans_travail: 'Close sans travail', annulee: 'Annulée' },
     nature: { a_qualifier: 'À qualifier', corrective: 'Corrective', preventive: 'Préventive', assistance_production: 'Assistance production', travaux_techniques: 'Travaux techniques' },
     priorite: { urgence_securite: 'Urgence sécurité', critique_service: 'Critique', rapide: 'Rapide', planifiable: 'Planifiable', a_qualifier: 'À qualifier' },
-    statutOT: { a_preparer: 'À préparer', a_planifier: 'À planifier', prete: 'Prête', en_cours: 'En cours', suspendue: 'En attente', travail_termine: 'Travail terminé', cloturee: 'Clôturée', annulee: 'Annulée' },
+    statutOT: { a_preparer: 'À planifier', a_planifier: 'À planifier', planifiee: 'Planifiée', prete: 'Prête', en_cours: 'En cours', suspendue: 'En attente', travail_termine: 'Travail terminé', cloturee: 'Clôturée', annulee: 'Annulée' },
     resultat: { resolu: 'Résolu', retabli_provisoirement: 'Rétabli provisoirement', aucun_defaut_constate: 'Aucun défaut constaté', partiel: 'Partiel', non_resolu: 'Non résolu' },
     certitude: { non_determinee: 'Non déterminée', probable: 'Probable', confirmee: 'Confirmée' },
     famille: { mecanique: 'Mécanique', electrique: 'Électrique', automatisme: 'Automatisme', instrumentation: 'Instrumentation', pneumatique: 'Pneumatique', hydraulique: 'Hydraulique', utilite_externe: 'Utilité externe', autre: 'Autre' },
@@ -130,7 +130,7 @@
     return badge(L.statutDem[d.statut], c);
   }
   function badgeOT(o) {
-    const c = { en_cours: 'blue', suspendue: 'amber', cloturee: 'green', travail_termine: 'blue' }[o.statut] || '';
+    const c = { en_cours: 'blue', planifiee: 'blue', suspendue: 'amber', cloturee: 'green', travail_termine: 'blue' }[o.statut] || '';
     return badge(L.statutOT[o.statut], c);
   }
   const badgeEtat = e => badge(L.etat[e] || 'Normal', { indisponible: 'red', degrade: 'amber', anomalie: 'amber', normal: 'green' }[e] || '');
@@ -225,7 +225,7 @@
   const estResp = () => !role() || role() === 'responsable';
   const DROITS = {
     responsable: ['eq-new', 'eq-edit', 'loc-new', 'prog-new', 'prog-edit', 'pers-new', 'pers-edit', 'ot-rouvrir', 'sync-tout', 'equipe', 'seuil-valider', 'seuil-refuser', 'achat-valider', 'achat-completer', 'achat-refuser'],
-    terrain: ['ot-new', 'dem-ot', 'prog-ot', 'dem-pec', 'dem-classer', 'ot-demarrer', 'ot-planifier', 'ot-annuler', 'ot-suspendre', 'ot-reprendre', 'ot-terminer', 'ot-cloturer',
+    terrain: ['ot-new', 'dem-intervenir', 'dem-planifier', 'prog-ot', 'dem-pec', 'dem-classer', 'ot-demarrer', 'ot-planifier', 'ot-annuler', 'ot-suspendre', 'ot-reprendre', 'ot-terminer', 'ot-cloturer',
       'ot-ajout-int', 'ot-retirer', 'ot-ajout-piece', 'ot-annuler-piece', 'ot-ajout-suite', 'ot-lever',
       'bes-new', 'bes-urgent', 'bes-utilise', 'bes-rendre', 'bes-annuler'],
     magasin: ['art-new', 'mvt', 'mag-reserver', 'mag-remettre', 'mag-indispo', 'mag-rattacher', 'mag-verifier', 'seuil-proposer', 'achat-new', 'achat-soumettre', 'achat-annuler', 'achat-qte', 'achat-recevoir', 'achat-clore', 'iso-decider'],
@@ -267,12 +267,14 @@
     await Store.save('ots', o);
     return o;
   }
-  async function otDepuisDemande(d, demarrer) {
+  async function otDepuisDemande(d, demarrer, { creneau = null, personneId = null } = {}) {
     const indispo = d.etat === 'indisponible';
+    const me = Store.currentUser();
+    const intervenants = demarrer ? moiIntervenant() : personneId ? [{ id: Store.uid(), personneId, role: 'intervenant', depuis: Store.now(), fin: null, par: me?.nom || null }] : [];
     const o = await newOT({
       demandeIds: [d.id], equipementId: d.equipementId, nature: NATURE_DU_BESOIN[d.besoin] || 'a_qualifier',
-      priorite: indispo ? 'critique_service' : 'a_qualifier', statut: demarrer ? 'en_cours' : 'a_planifier',
-      intervenants: moiIntervenant(), avecArret: d.impact === 'interrompu' ? 'oui' : d.impact === 'aucun_constate' ? 'non' : 'inconnu',
+      priorite: indispo ? 'critique_service' : 'a_qualifier', statut: demarrer ? 'en_cours' : creneau ? 'planifiee' : 'a_planifier', creneau,
+      intervenants, avecArret: d.impact === 'interrompu' ? 'oui' : d.impact === 'aucun_constate' ? 'non' : 'inconnu',
       arretDebut: d.impact === 'interrompu' ? d.heureFait : null,
     });
     if (d.statut !== 'traitement_organise') await Store.update('demandes', d.id, { statut: 'traitement_organise' });
@@ -362,6 +364,7 @@
     const e = eq(d.equipementId);
     const ots = otsDeDemande(d);
     const ouverte = ['a_examiner', 'prise_en_charge'].includes(d.statut);
+    const otEnCours = ots.find(otOuvert);
     const doublons = list('demandes').filter(x => x.id !== d.id && x.equipementId === d.equipementId && demandeOuverte(x));
     return `<div class="row"><h1 class="grow">${esc(d.ref)}</h1>${badgeDem(d)}</div>
       <a class="card" href="#/eq/${e?.id}"><div class="row"><span class="dot ${etatEquipement(d.equipementId)}"></span><span class="t">${esc(e?.designation)}</span></div><div class="s">${esc(e?.code)} · ${esc(locPath(e?.localisationId))}</div></a>
@@ -377,8 +380,10 @@
       </dl></div>
       ${doublons.length && ouverte ? `<p class="warn">Autre(s) demande(s) ouverte(s) sur cet équipement : ${doublons.map(x => `<a href="#/demande/${x.id}">${esc(x.ref)}</a>`).join(', ')}. Vérifiez s’il s’agit du même fait.</p>` : ''}
       <div class="actions">
-        ${d.statut === 'a_examiner' ? `<button class="btn primary" data-act="dem-pec" data-id="${d.id}">Je prends en charge</button>` : ''}
-        ${ouverte || d.statut === 'traitement_organise' ? `<button class="btn ${d.statut === 'a_examiner' ? '' : 'primary'}" data-act="dem-ot" data-id="${d.id}">${ots.length ? 'Ajouter une intervention' : 'Créer l’intervention'}</button>` : ''}
+        ${ouverte || d.statut === 'traitement_organise' ? (otEnCours ? `<a class="btn primary" href="#/ot/${otEnCours.id}">Voir l’intervention ${esc(otEnCours.ref)}</a>`
+          : `<button class="btn primary" data-act="dem-intervenir" data-id="${d.id}">J’interviens maintenant</button>`)
+          + `<button class="btn" data-act="dem-planifier" data-id="${d.id}">${ots.length ? 'Planifier une autre intervention' : 'Planifier une intervention'}</button>` : ''}
+        ${d.statut === 'a_examiner' ? `<button class="btn ghost" data-act="dem-pec" data-id="${d.id}">Je m’en occupe</button>` : ''}
         ${ouverte ? `<button class="btn" data-act="dem-classer" data-id="${d.id}">Classer sans travail</button>` : ''}
         <button class="btn ghost" data-act="dem-edit" data-id="${d.id}">Compléter / corriger</button>
         ${ouverte ? `<button class="btn ghost danger" data-act="dem-annuler" data-id="${d.id}">Annuler</button>` : ''}
@@ -393,7 +398,7 @@
     let items = list('ots');
     const F = {
       ouverts: otOuvert, en_cours: o => ['en_cours', 'travail_termine'].includes(o.statut), suspendue: o => o.statut === 'suspendue',
-      a_faire: o => ['a_preparer', 'a_planifier', 'prete'].includes(o.statut), cloturee: o => o.statut === 'cloturee', tous: () => true,
+      a_faire: o => ['a_preparer', 'a_planifier', 'planifiee', 'prete'].includes(o.statut), cloturee: o => o.statut === 'cloturee', tous: () => true,
     };
     items = items.filter(F[f] || F.ouverts);
     items.sort((a, b) => f === 'cloturee' ? (b.clotureLe || '').localeCompare(a.clotureLe || '')
@@ -413,11 +418,11 @@
     const dems = (o.demandeIds || []).map(id => data.demandes.get(id)).filter(Boolean);
     const clos = o.statut === 'cloturee';
     const sAct = {
-      a_preparer: ['demarrer', 'planifier', 'annuler'], a_planifier: ['demarrer', 'planifier', 'annuler'], prete: ['demarrer', 'planifier', 'annuler'],
-      en_cours: ['suspendre', 'terminer', 'cloturer'], suspendue: ['reprendre', 'cloturer'], travail_termine: ['cloturer', 'reprendre'],
+      a_preparer: ['demarrer', 'planifier', 'annuler'], a_planifier: ['demarrer', 'planifier', 'annuler'], planifiee: ['demarrer', 'planifier', 'annuler'], prete: ['demarrer', 'planifier', 'annuler'],
+      en_cours: ['terminer', 'suspendre'], suspendue: ['reprendre', 'terminer'], travail_termine: ['cloturer', 'reprendre'],
       cloturee: ['rouvrir'], annulee: [],
     }[o.statut];
-    const LBL = { demarrer: ['Démarrer', 'primary'], planifier: ['Planifier', ''], annuler: ['Annuler', 'ghost danger'], suspendre: ['Mettre en attente', ''], terminer: ['Travail terminé', ''], cloturer: ['Clôturer', 'primary'], reprendre: ['Reprendre', 'primary'], rouvrir: ['Rouvrir', 'ghost'] };
+    const LBL = { demarrer: ['Démarrer', 'primary'], planifier: ['Planifier', ''], annuler: ['Annuler', 'ghost danger'], suspendre: ['Mettre en attente', ''], terminer: ['Terminer', 'primary'], cloturer: ['Clôturer', 'primary'], reprendre: ['Reprendre', 'primary'], rouvrir: ['Rouvrir', 'ghost'] };
     let duree = '';
     if (o.avecArret === 'oui') {
       duree = o.arretDebut && o.arretFin ? `<p class="info">Durée d’arrêt : <b>${fmtDuree(minutesBetween(o.arretDebut, o.arretFin))}</b> (bornes renseignées)</p>`
@@ -997,11 +1002,24 @@
     await edit('demandes', el.dataset.id, { statut: 'prise_en_charge', priseEnChargePar: me.id, priseEnChargeLe: Store.now() }, { action: 'prise_en_charge' });
     toast('Prise en charge enregistrée');
   };
-  A['dem-ot'] = async el => {
+  // Un clic : prise en charge + intervention démarrée à mon nom.
+  A['dem-intervenir'] = async el => {
+    const me = Store.currentUser();
+    if (!me) { toast('Choisissez d’abord qui utilise cet appareil'); return A.who(); }
     const d = data.demandes.get(el.dataset.id);
-    const v = await askForm({ title: 'Créer l’intervention', ok: 'Créer', fields: [{ name: 'go', label: 'Je démarre maintenant', type: 'checkbox' }] });
+    if (d.statut === 'a_examiner') await Store.update('demandes', d.id, { statut: 'prise_en_charge', priseEnChargePar: me.id, priseEnChargeLe: Store.now() }, { action: 'prise_en_charge' });
+    const o = await otDepuisDemande(data.demandes.get(d.id), true);
+    toast(`${o.ref} démarrée`);
+    location.hash = '#/ot/' + o.id;
+  };
+  A['dem-planifier'] = async el => {
+    const d = data.demandes.get(el.dataset.id);
+    const v = await askForm({ title: 'Planifier une intervention', ok: 'Créer', fields: [
+      { name: 'creneau', label: 'Créneau prévu', type: 'datetime-local' },
+      { name: 'personneId', label: 'Intervenant', type: 'select', options: personnesOpts(), empty: '— Plus tard —' },
+      { type: 'info', text: 'Sans créneau, l’intervention reste « À planifier ».' }] });
     if (!v) return;
-    const o = await otDepuisDemande(d, v.go);
+    const o = await otDepuisDemande(d, false, { creneau: v.creneau || null, personneId: v.personneId || null });
     location.hash = '#/ot/' + o.id;
   };
   A['dem-classer'] = async el => {
@@ -1045,7 +1063,7 @@
   A['ot-planifier'] = async el => {
     const o = data.ots.get(el.dataset.id);
     const v = await askForm({ title: 'Planifier', values: o, fields: [{ name: 'creneau', label: 'Créneau prévu', type: 'datetime-local', required: true }] });
-    if (v) await edit('ots', o.id, { creneau: v.creneau }, { action: 'planification' });
+    if (v) await edit('ots', o.id, { creneau: v.creneau, statut: 'planifiee' }, { action: 'planification' });
   };
   A['ot-annuler'] = async el => {
     const m = await askText('Annuler l’intervention', 'Motif');
@@ -1065,13 +1083,12 @@
     const o = data.ots.get(el.dataset.id);
     await edit('ots', o.id, { statut: 'en_cours', attentes: fermerAttentes(o) }, { action: 'reprise' });
   };
-  A['ot-terminer'] = async el => edit('ots', el.dataset.id, { statut: 'travail_termine' }, { action: 'travail_termine' });
-  A['ot-cloturer'] = async el => {
-    const o = data.ots.get(el.dataset.id);
+  /** Clôture d'une fiche (éventuellement complétée par la fenêtre « Terminer ») ; false si quelque chose manque. */
+  async function cloturer(o) {
     const err = Calculs.verifierCloture(o);
-    if (err.length) { await alertBox('Avant de clôturer', err.map(e => '• ' + e)); return; }
+    if (err.length) { await alertBox('Avant de clôturer', err.map(e => '• ' + e)); return false; }
     const enMain = Calculs.piecesDetenues(besoinsDe(o), [...data.mouvements.values()], o.pieces);
-    if (enMain.length && !(await askConfirm('Pièces encore en main', `${enMain.map(r => r.detenu + ' × ' + desigBesoin(r.besoin)).join(' ; ')} : remises mais ni déclarées utilisées ni rendues. Clôturer quand même ? L’écart restera visible au magasin.`, 'Clôturer quand même'))) return;
+    if (enMain.length && !(await askConfirm('Pièces encore en main', `${enMain.map(r => r.detenu + ' × ' + desigBesoin(r.besoin)).join(' ; ')} : remises mais ni déclarées utilisées ni rendues. Clôturer quand même ? L’écart restera visible au magasin.`, 'Clôturer quand même'))) return false;
     const me = Store.currentUserName(), now = Store.now();
     await Store.save('ots', { ...o, statut: 'cloturee', clotureLe: now, cloturePar: me, attentes: fermerAttentes(o) }, { action: 'cloture' });
     if (o.programmeId) {
@@ -1082,6 +1099,31 @@
     }
     toast(`${o.ref} clôturée`);
     render();
+    return true;
+  }
+  A['ot-cloturer'] = async el => { await cloturer(data.ots.get(el.dataset.id)); };
+  // Fin de travail en une fenêtre : ce qu'il faut pour clôturer, puis clôture si tout y est.
+  A['ot-terminer'] = async el => {
+    const o = data.ots.get(el.dataset.id);
+    const sansSuite = !(o.reserves || []).some(r => r.statut === 'ouverte');
+    const fields = [
+      ...(o.nature === 'a_qualifier' ? [{ name: 'nature', label: 'Nature', type: 'chips', options: Object.fromEntries(Object.entries(L.nature).filter(([k]) => k !== 'a_qualifier')), required: true }] : []),
+      { name: 'travaux', label: 'Ce qui a été fait', type: 'textarea', required: true },
+      { name: 'resultat', label: 'Résultat', type: 'chips', options: L.resultat, required: true },
+      { name: 'certitudeCause', label: 'Certitude de la cause', type: 'chips', options: L.certitude },
+      { name: 'cause', label: 'Cause, si connue', type: 'textarea' },
+      ...(o.avecArret === 'oui' && !o.arretFin ? [{ name: 'arretFin', label: 'Remise à disposition (fin d’arrêt)', type: 'datetime-local' }] : []),
+      ...(sansSuite ? [{ name: 'suite', label: 'Suite à donner, si partiel ou non résolu', type: 'text' },
+        { name: 'suiteResp', label: 'Responsable de la suite', type: 'select', options: personnesOpts(), empty: '—' }] : []),
+    ];
+    const v = await askForm({ title: 'Terminer l’intervention', ok: 'Clôturer', values: { travaux: o.travaux, resultat: o.resultat, certitudeCause: o.certitudeCause, cause: o.cause }, fields });
+    if (!v) return;
+    const patch = { travaux: v.travaux, resultat: v.resultat, certitudeCause: v.certitudeCause || o.certitudeCause, cause: v.cause || null };
+    if (v.nature) patch.nature = v.nature;
+    if (v.arretFin) patch.arretFin = v.arretFin;
+    if (v.suite) patch.reserves = [...(o.reserves || []), { id: Store.uid(), type: 'suite', texte: v.suite, responsableId: v.suiteResp || null, echeance: null, bloquante: false, statut: 'ouverte', creeLe: Store.now() }];
+    // Si la clôture n'aboutit pas, la saisie est gardée et l'intervention reste ouverte.
+    if (!(await cloturer({ ...o, ...patch }))) await edit('ots', o.id, patch, { action: 'saisie_fin' });
   };
   A['ot-rouvrir'] = async el => {
     const m = await askText('Rouvrir l’intervention', 'Motif de la réouverture');
@@ -1543,7 +1585,8 @@
       const t = a.dataset.tab;
       a.classList.toggle('on', t === tab || (t === 'plus' && MOBILE_PLUS.includes(R.name)));
     });
-    $('#fab').classList.toggle('hidden', R.name === 'signaler');
+    const avecFab = ['accueil', 'demandes', 'ots', 'parc'].includes(R.name) || !V[R.name];
+    $('#fab').classList.toggle('hidden', !avecFab);
     const pf = Sync.profil();
     const bs = $('#site');
     if (bs) {
@@ -1560,7 +1603,7 @@
     $('#who').textContent = me ? '👤 ' + me.nom : '👤 Qui êtes-vous ?';
     if (role()) {
       document.querySelectorAll('#view [data-act]').forEach(b => { if (!autorise(b.dataset.act)) b.remove(); });
-      $('#fab').classList.toggle('hidden', R.name === 'signaler' || !autorise('signaler'));
+      $('#fab').classList.toggle('hidden', !avecFab || !autorise('signaler'));
       if (R.name === 'ot') {
         const o = data.ots.get(R.id);
         if (o && !peutModifierOT(o)) {

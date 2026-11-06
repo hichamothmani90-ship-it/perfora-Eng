@@ -39,9 +39,9 @@ des indicateurs fiables par équipement, avec une traçabilité complète pour l
 ## 4. Le parcours en 5 écrans
 
 1. **Accueil** — ce qui demande une action aujourd'hui : équipements indisponibles, demandes à examiner, mes travaux, préventif à lancer.
-2. **Signaler** (bouton bleu, ou scan du QR de la machine) — équipement, état, besoin, constat, impact. Case *« Je prends en charge et j'interviens »* : la demande et l'intervention sont créées d'un geste.
+2. **Signaler** (bouton bleu, ou scan du QR de la machine) — équipement, état, besoin, constat, impact. Case *« Je prends en charge et j'interviens »* : la demande et l'intervention sont créées d'un geste. Depuis une demande reçue : *J'interviens maintenant* (un clic) ou *Planifier une intervention* (créneau et intervenant).
 3. **Intervention** — intervenants, arrêt oui/non, ce qui a été fait, résultat, cause (*non déterminée*, *probable*, *confirmée*), pièces, réserves. Tout s'enregistre au fil de la saisie.
-4. **Clôture** — l'appli vérifie l'essentiel : nature, résultat, pas de réserve bloquante, une suite si le résultat est partiel.
+4. **Terminer** — une seule fenêtre : ce qui a été fait, résultat, cause si connue, fin d'arrêt, suite à donner ; l'intervention est clôturée si tout y est, sinon la saisie est gardée et l'appli dit ce qui manque. Elle vérifie l'essentiel : nature, résultat, pas de réserve bloquante, une suite si le résultat est partiel.
 5. **Indicateurs** — interventions par nature, délai de clôture, préventif réalisé à l'échéance, pannes répétitives, pièces par équipement, arrêts (seulement sur heures connues). Jamais de classement des personnes.
 
 ## 5. Qui fait quoi (rôles)

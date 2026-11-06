@@ -1,6 +1,7 @@
 # Parcours demande → intervention : état actuel et simplifications proposées
 
-Statut : **proposition à valider** (6 nov. 2026). Rien n'est encore modifié.
+Statut : **validé et fait le 6 nov. 2026 (v23)**, sauf l'option « clôture validée par le responsable », qui demande un
+réglage par entreprise côté serveur : elle sera faite avec D2.
 
 ## 1. À quoi sert chaque fiche
 
