@@ -1005,7 +1005,8 @@
   A['sync-ouvrir'] = () => { location.hash = '#/reglages'; setTimeout(() => $('#bloc-sync')?.scrollIntoView({ block: 'center' }), 50); };
   A['sync-config'] = async () => {
     const c = data.meta.get('cloud') || {};
-    const v = await askForm({ title: 'Connexion au serveur', ok: 'Se connecter', values: { url: c.url, cle: c.cle, email: c.email }, fields: [
+    // Projet Supabase du site (adresse et clé publique : publiques par conception, protégées par les règles RLS).
+    const v = await askForm({ title: 'Connexion au serveur', ok: 'Se connecter', values: { url: c.url || 'https://oihaqzkqhvyjybijsonc.supabase.co', cle: c.cle || 'sb_publishable_Qpm_99-lOQOOJ5R__oyIcA_4nd7t3un', email: c.email }, fields: [
       { type: 'info', text: 'Adresse et clé publique : Supabase → Project Settings → API. Le compte est créé par le responsable dans Supabase → Authentication → Users.' },
       { name: 'url', label: 'Adresse du projet (https://….supabase.co)', type: 'url', required: true },
       { name: 'cle', label: 'Clé publique (anon / publishable)', type: 'text', required: true },
