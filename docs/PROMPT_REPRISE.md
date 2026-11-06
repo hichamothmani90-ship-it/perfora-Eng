@@ -28,7 +28,7 @@ multi-entreprise) et concepteur d'interfaces terrain mobile-first. Langue : fran
      (décision du 6 nov. 2026 : traçabilité légère, pas de chronomètre).
    Si tu as besoin d'un passage précis, demande à lire le fichier.
 
-3. ÉTAT (fin du 6 nov. 2026, appli v20 publiée = volets A, B et C terminés) — détail : docs/FEUILLE_DE_ROUTE.md et docs/RECETTE_VOLET_A.md
+3. ÉTAT (fin du 6 nov. 2026, appli v22 publiée sur app.perfora.ma = volets A, B et C terminés) — détail : docs/FEUILLE_DE_ROUTE.md et docs/RECETTE_VOLET_A.md
    - Appli PWA statique, hors ligne, sans dépendance, sur GitHub Pages :
      https://hichamothmani90-ship-it.github.io/perfora-Eng/ (dépôt hichamothmani90-ship-it/perfora-Eng,
      branche main ; chaque push publie en ~5 min ; si le déploiement Pages échoue, pousser un commit vide).
@@ -39,8 +39,8 @@ multi-entreprise) et concepteur d'interfaces terrain mobile-first. Langue : fran
      terrain, écrans Magasin dans js/vues/magasin.js. Volet C terminé (docs/VOLET_C_CONCEPTION.md) : seuils, à
      réapprovisionner, achats, réception partielle, isolés, valeur du stock ; prix lisibles seulement par responsable,
      magasinier, achats, pilote. Cadrage du lancement : docs/CADRAGE_LANCEMENT.md ;
-     phase 1 en cours (perfora.ma sur Cloudflare : docs/MISE_EN_LIGNE_PERFORA_MA.md ; site : dépôt perfora-site ; attente du compte
-     Cloudflare et du changement de serveurs de noms chez Nindohost). Ensuite volet D (énergie et eau). Ou mise
+     phase 1 faite : https://app.perfora.ma (appli, Cloudflare Pages perfora-app) et https://perfora.ma
+     (site, dépôt perfora-site) en ligne ; DNS chez Cloudflare (docs/MISE_EN_LIGNE_PERFORA_MA.md). Reste e-mails pro. Ensuite volet D (énergie et eau). Ou mise
      en production (docs/RECETTE_VOLET_A.md §4). Démo VITRINE à réinitialiser une fois (nouvelles données magasin).
    - Supabase « gmao-terrain » (réf. oihaqzkqhvyjybijsonc, Frankfurt). Scripts dans l'ordre :
      schema.sql → roles.sql → multitenant.sql → quotas.sql → plateforme.sql → durcissement.sql → magasin.sql → achats.sql → demo.sql ; tests : tests_etancheite, tests_quotas, tests_plateforme, tests_magasin, tests_demo, tests_achats ;

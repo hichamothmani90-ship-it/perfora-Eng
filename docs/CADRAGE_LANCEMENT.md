@@ -15,6 +15,8 @@ une proposition. Les prix et conditions des fournisseurs sont à revérifier au 
   factures, et seuil à partir duquel créer une société (SARL / SARL AU) ; le contrat client et la déclaration CNDP se
   font au nom de l'éditeur personne physique.
 
+- 6 nov. 2026 : **phase 1 en ligne** — app.perfora.ma, perfora.ma, www.perfora.ma (HTTPS) ; Supabase pointé sur app.perfora.ma.
+
 ## 1. Recommandations en bref
 
 1. **perfora.ma** = site de présentation ; **app.perfora.ma** = l'application. Domaine et DNS restent chez Nindohost.

@@ -37,6 +37,17 @@ ne déclare pas perfora.ma ; l'ancien dépôt n'a plus d'effet une fois les DNS 
 - Application Cloudflare installée sur GitHub ; projet Pages `perfora-app` (dépôt perfora-Eng, build
   `sh scripts/build_pages.sh app`, sortie `dist`) → https://perfora-app.pages.dev ; projet `perfora-site` (dépôt perfora-site).
 
+- **En ligne le 6 nov. 2026** : https://app.perfora.ma (projet perfora-app) et https://perfora.ma +
+  https://www.perfora.ma (projet perfora-site), certificats HTTPS actifs ; vérifié : v21, en-têtes de sécurité,
+  connexion Supabase, service worker (13 fichiers en cache). Enregistrements DNS : `app` CNAME perfora-app.pages.dev
+  (ajouté à la main), `perfora.ma` et `www` CNAME perfora-site.pages.dev (créés par Cloudflare), tous « proxied ».
+- Supabase → Authentication → URL Configuration : Site URL `https://app.perfora.ma/` ; URL de redirection autorisées :
+  `https://app.perfora.ma/**` et `https://hichamothmani90-ship-it.github.io/perfora-Eng/**` (transition).
+- v22 : adresse par défaut des QR codes = app.perfora.ma ; bandeau « Perfora déménage » sur l'ancienne adresse github.io.
+- Chaque `git push` sur main publie automatiquement : GitHub Pages (ancienne adresse) et app.perfora.ma (Cloudflare).
+- Reste : `contact@perfora.ma` (Cloudflare Email Routing → Gmail, confirmation par e-mail à faire par toi), envoi des
+  invitations par un service dédié depuis no-reply@perfora.ma, redirection www → perfora.ma (facultatif).
+
 ## C. Transition des téléphones (important)
 
 Les données hors ligne d'un téléphone sont liées à l'adresse de l'appli. Passer de github.io à app.perfora.ma :

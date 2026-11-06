@@ -5,7 +5,7 @@
 (() => {
   const { data } = Store;
   /** Version affichée dans Réglages : à incrémenter avec VERSION dans sw.js. */
-  const APP_VERSION = 'v21';
+  const APP_VERSION = 'v22';
   const $ = s => document.querySelector(s);
   // Multi-site : les listes de fiches de site ne montrent que le site actif (« tous » possible).
   // Les fiches sans site (anciennes ou pas encore synchronisées) restent visibles.
@@ -517,7 +517,7 @@
 
   /** Adresse imprimée dans les QR : jamais une adresse locale (localhost, IP du PC),
       sinon le téléphone ne peut pas l'ouvrir. Réglable dans Réglages. */
-  const ADRESSE_PAR_DEFAUT = 'https://hichamothmani90-ship-it.github.io/perfora-Eng/';
+  const ADRESSE_PAR_DEFAUT = 'https://app.perfora.ma/'; // adresse publique durable (QR codes imprimés depuis un poste local)
   const estLocale = h => /^(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1\]?$)/.test(h) || h === '';
   function adressePublique() {
     const reglee = data.meta.get('adresse')?.url;
@@ -1553,6 +1553,8 @@
     }
     document.querySelectorAll('.tabs a[data-tab=magasin]').forEach(a => a.classList.toggle('hidden', !aModule('magasin')));
     document.querySelectorAll('.tabs a[data-tab=preventif]').forEach(a => a.classList.toggle('hidden', !aModule('preventif')));
+    // Transition : l'ancienne adresse GitHub Pages invite à passer sur app.perfora.ma (données hors ligne liées à l'adresse).
+    if (location.hostname.endsWith('github.io')) $('#view').insertAdjacentHTML('afterbegin', '<p class="info"><b>Perfora déménage sur <a href="https://app.perfora.ma/">app.perfora.ma</a>.</b> Attendez « ☁ À jour » (rien en attente d’envoi), puis ouvrez la nouvelle adresse et reconnectez-vous : vos données reviennent du serveur. Ajoutez-la à l’écran d’accueil.</p>');
     if (pf && !ecritureOK()) $('#view').insertAdjacentHTML('afterbegin', '<p class="warn">Abonnement suspendu ou expiré : consultation seule. Vos données restent accessibles et exportables.</p>');
     const me = Store.currentUser();
     $('#who').textContent = me ? '👤 ' + me.nom : '👤 Qui êtes-vous ?';
