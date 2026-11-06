@@ -146,6 +146,22 @@ const Sync = (() => {
   // ---------- profil et équipe (rôles contrôlés par le serveur) ----------
   async function chargerProfil() {
     const p = await api('/rest/v1/rpc/mon_profil', { method: 'POST', body: '{}' });
+    // Multi-entreprise : un appareil ne mélange jamais les données de deux entreprises.
+    const ent = p?.entreprise?.id || null, dev = Store.device();
+    if (ent && dev.entrepriseId && dev.entrepriseId !== ent) {
+      if (data.sortie.size) {
+        await deconnecter();
+        throw new Error('Cet appareil contient des saisies non envoyées d’une autre entreprise : reconnectez l’ancien compte pour les envoyer, ou effacez l’appareil (Réglages).');
+      }
+      await Store.viderMetier();
+      await majCfg({ curseur: 0 });
+    } else if (ent && !dev.entrepriseId && (cfg().curseur || 0) > 0 && !data.sortie.size) {
+      // Premier passage en multi-entreprise d'un appareil déjà synchronisé : on repart du serveur,
+      // qui ne renvoie que l'entreprise et les sites autorisés (plus de copies hors périmètre).
+      await Store.viderMetier();
+      await majCfg({ curseur: 0 });
+    }
+    if (ent && Store.device().entrepriseId !== ent) await Store.persistMeta({ ...Store.device(), entrepriseId: ent, siteActif: null });
     await majCfg({ profil: p, profilLe: Date.now() });
     if (p?.personneId && Store.device().personneId !== p.personneId) await Store.persistMeta({ ...Store.device(), personneId: p.personneId });
     return p;

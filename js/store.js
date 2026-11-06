@@ -11,6 +11,10 @@ const Store = (() => {
   /** Données métier (exportées, synchronisées). meta et sortie restent propres à l'appareil. */
   const METIER = TYPES.filter(t => t !== 'meta' && t !== 'sortie');
   const APPEND_ONLY = ['journal', 'mouvements', 'photos'];
+  /** Fiches rattachées à un site (les autres — personnes, articles — sont communes à l'entreprise). */
+  const SITE_TYPES = ['localisations', 'equipements', 'demandes', 'ots', 'programmes', 'mouvements', 'photos', 'journal'];
+  let siteDe = null;
+  const definirSite = fn => { siteDe = fn; };
   const data = {};
   let db;
 
@@ -98,6 +102,8 @@ const Store = (() => {
     if (!prev) {
       obj.creeLe = obj.creeLe || ts;
       obj.creePar = obj.creePar || user;
+      // Multi-site : une nouvelle fiche de site reçoit son site (parent, sinon site actif).
+      if (SITE_TYPES.includes(t) && !obj.siteId && siteDe) { const s = siteDe(t, obj); if (s) obj.siteId = s; }
       entries.push({ entite: t, entiteId: obj.id, action: action || 'creation', champ: null, avant: null,
         apres: obj.ref || obj.code || obj.designation || obj.nom || obj.libelle || null });
     } else {
@@ -112,7 +118,7 @@ const Store = (() => {
     obj.modifieLe = ts;
     obj.modifiePar = user;
     data[t].set(obj.id, obj);
-    const j = entries.map(e => ({ id: uid(), le: ts, auteur: user, motif, ...e }));
+    const j = entries.map(e => ({ id: uid(), le: ts, auteur: user, motif, ...(obj.siteId ? { siteId: obj.siteId } : {}), ...e }));
     for (const e of j) data.journal.set(e.id, e);
     const envois = [];
     if (cloudActif() && METIER.includes(t)) {
@@ -201,6 +207,15 @@ const Store = (() => {
     return n;
   }
 
+  /** Vide les données métier et la file d'envoi (changement d'entreprise), sans toucher aux réglages. */
+  async function viderMetier() {
+    for (const t of [...METIER, 'sortie']) {
+      await new Promise((res, rej) => { const tx = db.transaction(t, 'readwrite'); tx.objectStore(t).clear(); tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
+      data[t] = new Map();
+    }
+    // Les compteurs de références sont conservés : pas de doublon de référence sur cet appareil.
+  }
+
   async function wipe() {
     for (const t of TYPES) {
       await new Promise((res, rej) => { const tx = db.transaction(t, 'readwrite'); tx.objectStore(t).clear(); tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
@@ -210,5 +225,5 @@ const Store = (() => {
   }
 
   return { open, data, save, update, uid, now, nextRef, device, persistMeta, currentUser, currentUserName, exportAll, importAll, wipe,
-    cloudActif, surEcriture, fileEnvoi, retirerEnvoyes, toutEnvoyer, appliquerDistant };
+    cloudActif, surEcriture, fileEnvoi, retirerEnvoyes, toutEnvoyer, appliquerDistant, viderMetier, definirSite, SITE_TYPES };
 })();

@@ -1,0 +1,7 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "gmao", "runtimeExecutable": "python", "runtimeArgs": ["serveur.py", "8081", "--no-browser"], "port": 8081 },
+    { "name": "supabase-factice", "runtimeExecutable": "python", "runtimeArgs": ["tests/serveur_factice.py", "8099"], "port": 8099 }
+  ]
+}

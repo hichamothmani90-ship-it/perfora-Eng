@@ -1,6 +1,6 @@
 # Volet A — Multi-entreprise, sites, packs et quotas : proposition de conception
 
-Statut : choix 1 à 5 **validés** le 6 nov. 2026. **A1 fait** (serveur : `supabase/multitenant.sql`, tests `supabase/tests_etancheite.sql` tous conformes). A2 à A5 à venir.
+Statut : choix 1 à 5 **validés** le 6 nov. 2026. **A1 fait** (serveur : `supabase/multitenant.sql`, tests `supabase/tests_etancheite.sql` tous conformes). **A2 fait** (appli multi-site, v15). A3 à A5 à venir.
 
 Références V3 : §24 (droits appliqués aux API, listes, exports, pièces jointes), §25 (modules désactivables
 par site), §30 (« toutes les références sont rattachées à la même entreprise et au périmètre autorisé »),

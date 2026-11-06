@@ -1,32 +1,49 @@
-"""Faux serveur Supabase pour tester la synchronisation en local, sans compte.
-Reproduit les 3 appels utilisés par js/sync.js et la fusion de supabase/schema.sql :
-  POST /auth/v1/token?grant_type=password|refresh_token
-  POST /rest/v1/rpc/push_fiches
-  GET  /rest/v1/fiches?select=...&seq=gt.N&order=seq.asc&limit=L
-Comptes de test : test@gmao.test (responsable), tech2@gmao.test (technicien) / test-gmao
-Clé publique : cle-factice. Mêmes règles de droits que supabase/roles.sql.
-Lancer : python tests/serveur_factice.py [port]   (8099 par défaut)
-Données en mémoire : perdues à l'arrêt."""
+"""Faux serveur Supabase pour tester l'appli en local, sans compte ni réseau.
+Reproduit les appels de js/sync.js et les règles de supabase/schema.sql, roles.sql et
+multitenant.sql (entreprises, sites, modules du pack, abonnement, rôles) :
+  POST /auth/v1/token?grant_type=password|refresh_token   · POST /auth/v1/recover · GET/PUT /auth/v1/user
+  POST /rest/v1/rpc/push_fiches | mon_profil | definir_profil
+  GET  /rest/v1/fiches?...seq=gt.N | id=in.(...)            · GET /rest/v1/profils
+Comptes (mot de passe test-gmao), clé publique cle-factice :
+  test@gmao.test   responsable, entreprise DEMO (pack Pro), sites Tanger + Casablanca
+  tech2@gmao.test  technicien,  entreprise DEMO, site Casablanca seulement
+  autre@gmao.test  responsable, entreprise AUTRE (pack Essentiel), site Rabat
+Aide aux tests : GET /etat ; POST /test/abonnement {"entreprise":"AUTRE","statut":"suspendu"}
+Lancer : python tests/serveur_factice.py [port]   (8099 par défaut). Données en mémoire."""
 import json, secrets, sys, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
 PORT = next((int(a) for a in sys.argv[1:] if a.isdigit()), 8099)
 CLE = "cle-factice"
-COMPTES = {"test@gmao.test": "test-gmao", "tech2@gmao.test": "test-gmao"}
 APPEND_ONLY = {"journal", "mouvements", "photos"}
 TYPES = {"localisations", "equipements", "personnes", "demandes", "ots", "programmes", "articles", "mouvements", "journal", "photos"}
+COMMUNS = {"personnes", "articles"}
+
+PACKS = {
+    "essentiel": {"nom": "Essentiel", "modules": ["base", "preventif"], "maxSites": 1, "maxUtilisateursSite": 5, "maxUtilisateursTotal": 5},
+    "pro": {"nom": "Pro", "modules": ["base", "preventif", "magasin", "rapports"], "maxSites": 3, "maxUtilisateursSite": 15, "maxUtilisateursTotal": 45},
+}
+ENTREPRISES = {
+    "DEMO": {"id": "e-demo", "code": "DEMO", "nom": "Perfora Démo", "pack": "pro", "statut": "actif"},
+    "AUTRE": {"id": "e-autre", "code": "AUTRE", "nom": "Autre Industrie", "pack": "essentiel", "statut": "actif"},
+}
+SITES = {  # id -> site
+    "s-tng": {"id": "s-tng", "entreprise": "DEMO", "code": "TNG", "nom": "Site Tanger"},
+    "s-cas": {"id": "s-cas", "entreprise": "DEMO", "code": "CAS", "nom": "Site Casablanca"},
+    "s-rab": {"id": "s-rab", "entreprise": "AUTRE", "code": "RAB", "nom": "Site Rabat"},
+}
+COMPTES = {"test@gmao.test": "test-gmao", "tech2@gmao.test": "test-gmao", "autre@gmao.test": "test-gmao"}
+PROFILS = {
+    "test@gmao.test": {"role": "responsable", "nom": "Responsable test", "actif": True, "entreprise": "DEMO", "sites": ["s-tng", "s-cas"], "defaut": "s-tng"},
+    "tech2@gmao.test": {"role": "technicien", "nom": "Technicien test", "actif": True, "entreprise": "DEMO", "sites": ["s-cas"], "defaut": "s-cas"},
+    "autre@gmao.test": {"role": "responsable", "nom": "Responsable Autre", "actif": True, "entreprise": "AUTRE", "sites": ["s-rab"], "defaut": "s-rab"},
+}
 
 verrou = threading.Lock()
-fiches = {}          # id -> {id, type, data, seq}
+fiches = {}          # id -> {id, type, data, seq, entreprise, site}
 seq = [0]
-jetons = {}          # access -> (email, expire)
-rafraichis = {}      # refresh -> email
-ENVOIS = []          # e-mails « envoyés » (lien de mot de passe)
-PROFILS = {          # email -> profil (miroir de la table profils)
-    "test@gmao.test": {"role": "responsable", "nom": "Responsable test", "actif": True},
-    "tech2@gmao.test": {"role": "technicien", "nom": "Technicien test", "actif": True},
-}
+jetons, rafraichis, ENVOIS = {}, {}, []
 
 
 def peut_ecrire(r, t):
@@ -45,9 +62,32 @@ def peut_ecrire(r, t):
     return False
 
 
+def module_de(t):
+    return "magasin" if t in ("articles", "mouvements") else "preventif" if t == "programmes" else "base"
+
+
 def role_de(email):
     p = PROFILS.get(email)
     return p["role"] if p and p["actif"] else None
+
+
+def mes_sites(email):
+    p = PROFILS[email]
+    if p["role"] == "responsable":
+        return [s for s, v in SITES.items() if v["entreprise"] == p["entreprise"]]
+    return list(p["sites"])
+
+
+def droits(code):
+    e = ENTREPRISES[code]
+    pk = PACKS[e["pack"]]
+    return {"pack": e["pack"], "packNom": pk["nom"], "statut": e["statut"], "fin": None, "ecriture": e["statut"] in ("essai", "actif"),
+            "modules": pk["modules"], "maxSites": pk["maxSites"], "maxUtilisateursSite": pk["maxUtilisateursSite"], "maxUtilisateursTotal": pk["maxUtilisateursTotal"]}
+
+
+def visible(f, email):
+    p = PROFILS[email]
+    return f["entreprise"] == p["entreprise"] and (f["site"] is None or f["site"] in mes_sites(email))
 
 
 def nouvelle_session(email):
@@ -91,6 +131,7 @@ class H(BaseHTTPRequestHandler):
         e = jetons.get(tok)
         return e[0] if e and e[1] > time.time() else None
 
+    # ---------- POST ----------
     def do_POST(self):
         u = urlparse(self.path)
         if u.path == "/auth/v1/token":
@@ -110,75 +151,107 @@ class H(BaseHTTPRequestHandler):
                 return self.repondre(401, {"message": "Invalid API key"})
             ENVOIS.append({"email": self.corps().get("email"), "redirect_to": parse_qs(u.query).get("redirect_to", [""])[0]})
             return self.repondre(200, {})
-        if u.path == "/auth/v1/user":   # PUT simulé en POST impossible : voir do_PUT
-            return self.repondre(405, {"message": "PUT attendu"})
-        if u.path == "/rest/v1/rpc/push_fiches":
-            email = self.utilisateur()
-            if not email:
-                return self.repondre(401, {"message": "JWT expired"})
-            r = role_de(email)
-            if not r:
-                return self.repondre(403, {"message": "Compte sans droits (profil absent ou désactivé)"})
-            lot = self.corps().get("lot", [])
-            acceptes, refus, refuses = 0, [], set()
-            with verrou:
-                for f in lot:
-                    t = f.get("type")
-                    cible = f["patch"].get("entite") if t == "journal" else t
-                    motif = None
-                    if t not in TYPES:
-                        motif = "type inconnu"
-                    elif t == "journal" and f["patch"].get("entiteId") in refuses:
-                        motif = "modification liée refusée"
-                    elif not peut_ecrire(r, cible):
-                        motif = f"droits insuffisants ({r})"
-                    elif t == "mouvements" and r in ("technicien", "prestataire") and not f["patch"].get("otId"):
-                        motif = "mouvement de stock hors intervention : réservé au magasin"
-                    elif t == "ots" and r != "responsable" and fiches.get(f["id"], {}).get("data", {}).get("statut") == "cloturee":
-                        motif = "intervention clôturée : modification réservée au responsable"
-                    if motif:
-                        refus.append({"id": f["id"], "type": t, "motif": motif})
-                        refuses.add(f["id"])
-                        continue
-                    ex = fiches.get(f["id"])
-                    acceptes += 1
-                    if ex and t in APPEND_ONLY:
-                        continue
-                    seq[0] += 1
-                    data = {**ex["data"], **f["patch"]} if ex else f["patch"]
-                    fiches[f["id"]] = {"id": f["id"], "type": t, "data": data, "seq": seq[0]}
-            return self.repondre(200, {"acceptes": acceptes, "refuses": refus})
-        if u.path == "/rest/v1/rpc/mon_profil":
-            email = self.utilisateur()
-            if not email:
-                return self.repondre(401, {"message": "JWT expired"})
-            p = PROFILS.get(email)
-            if not p:
-                return self.repondre(403, {"message": "Compte sans profil"})
-            pid = "p-" + email.split("@")[0]
-            with verrou:
-                if pid not in fiches:
-                    seq[0] += 1
-                    fiches[pid] = {"id": pid, "type": "personnes", "seq": seq[0], "data": {"id": pid, "nom": p["nom"], "role": p["role"], "actif": p["actif"], "email": email, "creeLe": "2026-11-06T08:00", "modifieLe": "2026-11-06T08:00"}}
-            return self.repondre(200, {"userId": "u-" + email, "email": email, "nom": p["nom"], "role": p["role"], "personneId": pid, "actif": p["actif"]})
-        if u.path == "/rest/v1/rpc/definir_profil":
-            email = self.utilisateur()
-            if role_de(email) != "responsable":
-                return self.repondre(403, {"message": "Réservé au responsable"})
+        if u.path == "/test/abonnement":
             b = self.corps()
-            cible = b["cible"].removeprefix("u-")
-            if cible not in PROFILS:
-                return self.repondre(404, {"message": "inconnu"})
-            PROFILS[cible].update({"role": b.get("nouveau_role") or PROFILS[cible]["role"], "nom": b.get("nouveau_nom") or PROFILS[cible]["nom"], "actif": b.get("est_actif", True)})
-            pid = "p-" + cible.split("@")[0]
-            with verrou:
-                if pid in fiches:
-                    seq[0] += 1
-                    fiches[pid]["data"].update({k: PROFILS[cible][k] for k in ("role", "nom", "actif")})
-                    fiches[pid]["seq"] = seq[0]
-            return self.repondre(200, None)
+            ENTREPRISES[b["entreprise"]]["statut"] = b["statut"]
+            return self.repondre(200, droits(b["entreprise"]))
+        email = self.utilisateur()
+        if not email:
+            return self.repondre(401, {"message": "JWT expired"})
+        if u.path == "/rest/v1/rpc/push_fiches":
+            return self.push(email)
+        if u.path == "/rest/v1/rpc/mon_profil":
+            return self.mon_profil(email)
+        if u.path == "/rest/v1/rpc/definir_profil":
+            return self.definir_profil(email)
         self.repondre(404, {"message": "inconnu"})
 
+    def push(self, email):
+        r = role_de(email)
+        if not r:
+            return self.repondre(403, {"message": "Compte sans droits (profil absent, désactivé ou sans entreprise)"})
+        p = PROFILS[email]
+        ent, dr, mes = p["entreprise"], droits(p["entreprise"]), mes_sites(email)
+        defaut = p["defaut"] if p["defaut"] in mes else (mes[0] if len(mes) == 1 else None)
+        acceptes, refus, refuses = 0, [], set()
+        with verrou:
+            for f in self.corps().get("lot", []):
+                t, pa = f.get("type"), f.get("patch") or {}
+                cible = pa.get("entite") if t == "journal" else t
+                ex = fiches.get(f["id"])
+                motif, s = None, None
+                if t not in TYPES:
+                    motif = "type inconnu"
+                elif not dr["ecriture"]:
+                    motif = "abonnement suspendu ou expiré : lecture seule"
+                elif ex and ex["entreprise"] != ent:
+                    motif = "fiche d'une autre entreprise"
+                elif t == "journal" and pa.get("entiteId") in refuses:
+                    motif = "modification liée refusée"
+                elif module_de(cible) not in dr["modules"]:
+                    motif = f"module « {module_de(cible)} » non inclus dans l'abonnement"
+                elif not peut_ecrire(r, cible):
+                    motif = f"droits insuffisants ({r})"
+                elif t == "mouvements" and r in ("technicien", "prestataire") and not pa.get("otId"):
+                    motif = "mouvement de stock hors intervention : réservé au magasin"
+                elif t == "ots" and r != "responsable" and ex and ex["data"].get("statut") == "cloturee":
+                    motif = "intervention clôturée : modification réservée au responsable"
+                if not motif and t not in COMMUNS:
+                    parent = pa.get("entiteId") if t == "journal" else pa.get("parentId") if t == "photos" else None
+                    hp = fiches.get(parent) if parent else None
+                    s = (pa.get("siteId") if pa.get("siteId") in SITES else None) or (ex and ex["site"]) or (hp and hp["entreprise"] == ent and hp["site"]) or defaut
+                    if not s:
+                        motif = "site non déterminé (choisissez un site)"
+                    elif s not in mes:
+                        motif = "site non autorisé"
+                    elif ex and ex["site"] and s != ex["site"] and r != "responsable":
+                        motif = "changement de site réservé au responsable"
+                if motif:
+                    refus.append({"id": f["id"], "type": t, "motif": motif})
+                    refuses.add(f["id"])
+                    continue
+                acceptes += 1
+                if ex and t in APPEND_ONLY:
+                    continue
+                seq[0] += 1
+                data = {**(ex["data"] if ex else {}), **pa, **({"siteId": s} if s else {})}
+                fiches[f["id"]] = {"id": f["id"], "type": t, "data": data, "seq": seq[0], "entreprise": ent, "site": s}
+        return self.repondre(200, {"acceptes": acceptes, "refuses": refus})
+
+    def mon_profil(self, email):
+        p = PROFILS.get(email)
+        if not p:
+            return self.repondre(403, {"message": "Compte sans profil"})
+        pid = "p-" + email.split("@")[0]
+        with verrou:
+            if pid not in fiches:
+                seq[0] += 1
+                fiches[pid] = {"id": pid, "type": "personnes", "seq": seq[0], "entreprise": p["entreprise"], "site": None,
+                               "data": {"id": pid, "nom": p["nom"], "role": p["role"], "actif": p["actif"], "email": email, "creeLe": "2026-11-06T08:00", "modifieLe": "2026-11-06T08:00"}}
+        e = ENTREPRISES[p["entreprise"]]
+        sites = sorted((SITES[s] for s in mes_sites(email)), key=lambda x: x["nom"])
+        return self.repondre(200, {"userId": "u-" + email, "email": email, "nom": p["nom"], "role": p["role"], "personneId": pid, "actif": p["actif"],
+                                   "entreprise": {"id": e["id"], "code": e["code"], "nom": e["nom"], "statut": e["statut"]},
+                                   "sites": [{"id": s["id"], "code": s["code"], "nom": s["nom"]} for s in sites],
+                                   "siteDefaut": p["defaut"], "abonnement": droits(p["entreprise"]), "adminPlateforme": False})
+
+    def definir_profil(self, email):
+        if role_de(email) != "responsable":
+            return self.repondre(403, {"message": "Réservé au responsable"})
+        b = self.corps()
+        cible = b["cible"].removeprefix("u-")
+        if cible not in PROFILS or PROFILS[cible]["entreprise"] != PROFILS[email]["entreprise"]:
+            return self.repondre(403, {"message": "Compte hors de votre entreprise"})
+        PROFILS[cible].update({"role": b.get("nouveau_role") or PROFILS[cible]["role"], "nom": b.get("nouveau_nom") or PROFILS[cible]["nom"], "actif": b.get("est_actif", True)})
+        pid = "p-" + cible.split("@")[0]
+        with verrou:
+            if pid in fiches:
+                seq[0] += 1
+                fiches[pid]["data"].update({k: PROFILS[cible][k] for k in ("role", "nom", "actif")})
+                fiches[pid]["seq"] = seq[0]
+        return self.repondre(200, None)
+
+    # ---------- PUT / GET ----------
     def do_PUT(self):
         if urlparse(self.path).path == "/auth/v1/user":
             email = self.utilisateur()
@@ -193,35 +266,41 @@ class H(BaseHTTPRequestHandler):
 
     def do_GET(self):
         u = urlparse(self.path)
+        if u.path == "/etat":
+            with verrou:
+                par = {}
+                for f in fiches.values():
+                    k = f"{f['entreprise']}/{f['site'] or 'commun'}"
+                    par[k] = par.get(k, 0) + 1
+                return self.repondre(200, {"envois": ENVOIS[-3:], "fiches": len(fiches), "seq": seq[0], "par_entreprise_site": par})
+        email = self.utilisateur()
+        if not email:
+            return self.repondre(401, {"message": "JWT expired"})
         if u.path == "/auth/v1/user":
-            email = self.utilisateur()
-            return self.repondre(200, {"id": "u-" + email, "email": email}) if email else self.repondre(401, {"message": "JWT expired"})
+            return self.repondre(200, {"id": "u-" + email, "email": email})
         if u.path == "/rest/v1/profils":
-            email = self.utilisateur()
-            if not email:
-                return self.repondre(401, {"message": "JWT expired"})
-            vis = PROFILS.items() if role_de(email) == "responsable" else [(email, PROFILS[email])]
+            moi = PROFILS[email]
+            vis = [(e, p) for e, p in PROFILS.items() if p["entreprise"] == moi["entreprise"]] if role_de(email) == "responsable" else [(email, moi)]
             return self.repondre(200, [{"user_id": "u-" + e, "email": e, "nom": p["nom"], "role": p["role"], "actif": p["actif"], "personne_id": "p-" + e.split("@")[0]} for e, p in sorted(vis)])
         if u.path == "/rest/v1/fiches":
-            email = self.utilisateur()
-            if not email or not role_de(email):
-                return self.repondre(401, {"message": "JWT expired"})
+            if not role_de(email):
+                return self.repondre(200, [])
             q = parse_qs(u.query)
-            if "id" in q:   # id=in.("a","b")
-                ids = [x.strip('"') for x in q["id"][0].removeprefix("in.(").removesuffix(")").split(",")]
-                with verrou:
-                    return self.repondre(200, [fiches[i] for i in ids if i in fiches])
-            apres = int(q.get("seq", ["gt.0"])[0].removeprefix("gt."))
-            lim = int(q.get("limit", ["1000"])[0])
             with verrou:
-                rows = sorted((f for f in fiches.values() if f["seq"] > apres), key=lambda f: f["seq"])[:lim]
-            return self.repondre(200, rows)
-        if u.path == "/etat":   # aide aux tests
-            with verrou:
-                return self.repondre(200, {"envois": ENVOIS[-3:], "fiches": len(fiches), "seq": seq[0], "types": {t: sum(1 for f in fiches.values() if f["type"] == t) for t in TYPES}})
+                if "id" in q:   # id=in.("a","b")
+                    ids = [x.strip('"') for x in q["id"][0].removeprefix("in.(").removesuffix(")").split(",")]
+                    return self.repondre(200, [self.public(fiches[i]) for i in ids if i in fiches and visible(fiches[i], email)])
+                apres = int(q.get("seq", ["gt.0"])[0].removeprefix("gt."))
+                lim = int(q.get("limit", ["1000"])[0])
+                rows = sorted((f for f in fiches.values() if f["seq"] > apres and visible(f, email)), key=lambda f: f["seq"])[:lim]
+            return self.repondre(200, [self.public(f) for f in rows])
         self.repondre(404, {"message": "inconnu"})
+
+    @staticmethod
+    def public(f):
+        return {"id": f["id"], "type": f["type"], "data": f["data"], "seq": f["seq"]}
 
 
 if __name__ == "__main__":
-    print(f"Faux serveur Supabase : http://localhost:{PORT}  (clé {CLE})")
+    print(f"Faux serveur Supabase multi-entreprise : http://localhost:{PORT}  (clé {CLE})")
     ThreadingHTTPServer(("127.0.0.1", PORT), H).serve_forever()

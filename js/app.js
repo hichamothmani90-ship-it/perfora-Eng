@@ -5,7 +5,42 @@
 (() => {
   const { data } = Store;
   const $ = s => document.querySelector(s);
-  const list = t => [...data[t].values()];
+  // Multi-site : les listes de fiches de site ne montrent que le site actif (« tous » possible).
+  // Les fiches sans site (anciennes ou pas encore synchronisées) restent visibles.
+  const list = t => { const a = [...data[t].values()]; return Store.SITE_TYPES.includes(t) ? a.filter(dansSite) : a; };
+  function dansSite(o) { const s = siteActif(); return !s || s === 'tous' || !o.siteId || o.siteId === s; }
+  const mesSites = () => Sync.profil()?.sites || [];
+  function siteActif() {
+    const p = Sync.profil();
+    if (!p) return null;
+    const sites = p.sites || [], v = Store.device().siteActif;
+    if (v === 'tous' && sites.length > 1) return 'tous';
+    if (sites.some(x => x.id === v)) return v;
+    return (sites.find(x => x.id === p.siteDefaut) || sites[0])?.id || null;
+  }
+  /** Site d'une nouvelle fiche : celui de son parent, sinon le site actif (ou le site par défaut si « tous »). */
+  function siteCreation() {
+    const s = siteActif();
+    if (s && s !== 'tous') return s;
+    const p = Sync.profil(), sites = p?.sites || [];
+    return (sites.find(x => x.id === p?.siteDefaut) || sites[0])?.id || null;
+  }
+  const nomSite = id => mesSites().find(x => x.id === id)?.nom || '';
+  Store.definirSite((t, o) => {
+    if (!Sync.profil()) return null;
+    const g = (tt, id) => id && data[tt]?.get(id)?.siteId;
+    const parent =
+      t === 'demandes' || t === 'ots' || t === 'programmes' ? g('equipements', o.equipementId) || g('demandes', (o.demandeIds || [])[0])
+      : t === 'equipements' ? g('localisations', o.localisationId)
+      : t === 'localisations' ? g('localisations', o.parentId)
+      : t === 'photos' ? g(o.parentType, o.parentId)
+      : t === 'mouvements' ? g('ots', o.otId)
+      : null;
+    return parent || siteCreation();
+  });
+  // Modules du pack et abonnement (sans compte cloud : tout est disponible).
+  const aModule = m => { const mods = Sync.profil()?.abonnement?.modules; return !mods || mods.includes(m); };
+  const ecritureOK = () => Sync.profil()?.abonnement?.ecriture !== false;
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const trunc = (s, n) => { s = s || ''; return s.length > n ? s.slice(0, n - 1) + '…' : s; };
 
@@ -189,8 +224,11 @@
     magasin: ['art-new', 'mvt'],
     saisie: ['dem-edit', 'dem-annuler', 'photo-ajout', 'signaler'],
   };
+  const ACT_MODULE = { 'art-new': 'magasin', mvt: 'magasin', 'prog-new': 'preventif', 'prog-edit': 'preventif', 'prog-ot': 'preventif' };
   function autorise(act) {
     const r = role();
+    if (ACT_MODULE[act] && !aModule(ACT_MODULE[act])) return false;
+    if (r && !ecritureOK() && Object.values(DROITS).some(l => l.includes(act))) return false;
     if (!r || r === 'responsable') return true;
     if (DROITS.responsable.includes(act)) return false;
     if (DROITS.terrain.includes(act)) return ['technicien', 'prestataire'].includes(r);
@@ -198,9 +236,11 @@
     if (DROITS.saisie.includes(act)) return r !== 'pilote';
     return true;
   }
-  const peutModifierOT = o => o.statut === 'cloturee' ? estResp() : (!role() || ['responsable', 'technicien', 'prestataire'].includes(role()));
+  const peutModifierOT = o => !ecritureOK() ? false : o.statut === 'cloturee' ? estResp() : (!role() || ['responsable', 'technicien', 'prestataire'].includes(role()));
   const REFUS_TXT = { responsable: 'Réservé au responsable', terrain: 'Réservé aux techniciens et au responsable', magasin: 'Réservé au magasin et au responsable', saisie: 'Consultation seule' };
-  function motifRefus(act) { for (const [k, l] of Object.entries(DROITS)) if (l.includes(act)) return REFUS_TXT[k]; return 'Action non autorisée'; }
+  function motifRefus(act) {
+    if (ACT_MODULE[act] && !aModule(ACT_MODULE[act])) return `Module « ${ACT_MODULE[act]} » non inclus dans votre abonnement`;
+    if (!ecritureOK()) return 'Abonnement suspendu ou expiré : consultation seule'; for (const [k, l] of Object.entries(DROITS)) if (l.includes(act)) return REFUS_TXT[k]; return 'Action non autorisée'; }
 
   // ---------- objets métier ----------
   const { NATURE_DU_BESOIN } = Calculs;
@@ -561,6 +601,7 @@
   };
 
   V.plus = () => `<h1>Plus</h1>${[['#/preventif', '↻ Préventif', 'Programmes et échéances'], ['#/qr', '▣ QR codes', 'Planche imprimable des équipements'], ['#/magasin', '▤ Magasin', 'Articles, stock, mouvements'], ['#/indicateurs', '▥ Indicateurs', 'Pilotage par équipement'], ['#/journal', '☰ Journal d’audit', 'Toutes les modifications'], ['#/reglages', '⚙ Réglages', 'Utilisateur, personnes, sauvegarde']]
+    .filter(([h]) => !(h === '#/magasin' && !aModule('magasin')) && !(h === '#/preventif' && !aModule('preventif')))
     .map(([h, t, s]) => `<a class="card" href="${h}"><div class="t">${t}</div><div class="s">${s}</div></a>`).join('')}`;
 
   V.reglages = () => {
@@ -572,6 +613,7 @@
       <h2>Cet appareil</h2><div class="card">${Sync.profil() ? `<p style="margin-top:0">Connecté : <b>${esc(Store.currentUser()?.nom || Sync.profil().nom || Sync.profil().email)}</b> · ${badge(L.role[Sync.profil().role] || Sync.profil().role, 'blue')}<br><span class="small muted">${esc(Sync.profil().email)} — identité et droits fixés par le compte.</span></p>` : `<label class="f" style="margin-top:0">Qui utilise cet appareil ?</label>
         <select data-bind="meta|device|personneId"><option value="">— Choisir —</option>${list('personnes').filter(p => p.actif !== false).map(p => `<option value="${p.id}" ${dev.personneId === p.id ? 'selected' : ''}>${esc(p.nom)} (${esc(L.role[p.role])})</option>`).join('')}</select>`}
         <p class="small muted">Code appareil : <b>${esc(dev.code)}</b> (dans les références, évite les doublons entre appareils).<br>Hors ligne : ${esc(swState)}</p></div>
+      ${blocEntreprise()}
       ${blocSynchro()}
       ${Sync.profil()?.role === 'responsable' ? `<h2>Équipe et droits</h2><div class="card" id="equipe"><p class="muted small" style="margin:0">Chargement de l’équipe…</p></div>` : ''}
       <h2>Adresse de l’application</h2><div class="card"><p class="small muted" style="margin-top:0">Adresse utilisée dans les QR codes. Elle doit être accessible depuis les téléphones (HTTPS).</p>
@@ -584,6 +626,21 @@
       <h2>Démonstration</h2><div class="card">${data.equipements.size ? '<p class="small muted" style="margin:0">La démo se charge uniquement sur un appareil vide.</p>' : '<button class="btn" data-act="demo">Charger la démo</button>'}</div>
       <h2>Zone sensible</h2><div class="card"><button class="btn danger" data-act="wipe">Effacer toutes les données de cet appareil</button><p class="small muted">Exportez d’abord une sauvegarde.</p></div>`;
   };
+
+  const MODULES = { base: 'Demandes et interventions', preventif: 'Préventif', magasin: 'Magasin', rapports: 'Rapports', achats: 'Achats', energie: 'Énergie et eau', imports: 'Imports Excel' };
+  function blocEntreprise() {
+    const p = Sync.profil();
+    if (!p?.entreprise) return '';
+    const a = p.abonnement || {};
+    const lim = v => v == null ? 'illimité' : v;
+    return `<h2>Entreprise et abonnement</h2><div class="card"><dl class="kv">
+        <dt>Entreprise</dt><dd><b>${esc(p.entreprise.nom)}</b> <span class="muted small">${esc(p.entreprise.code)}</span></dd>
+        <dt>Pack</dt><dd>${esc(a.packNom || a.pack || '—')} ${a.ecriture === false ? badge('lecture seule', 'red') : badge(a.statut || 'actif', 'green')}${a.fin ? ` <span class="small muted">jusqu’au ${fmtY(a.fin)}</span>` : ''}</dd>
+        <dt>Modules</dt><dd class="small">${(a.modules || []).map(m => esc(MODULES[m] || m)).join(' · ')}</dd>
+        <dt>Limites</dt><dd class="small">${lim(a.maxSites)} site(s) · ${lim(a.maxUtilisateursSite)} utilisateur(s) par site · ${lim(a.maxUtilisateursTotal)} au total</dd>
+        <dt>Mes sites</dt><dd>${mesSites().map(s => `${esc(s.nom)}${s.id === siteActif() ? ' ' + badge('actif', 'blue') : ''}`).join('<br>') || '—'}</dd></dl>
+      ${mesSites().length > 1 ? '<button class="btn sm" data-act="site">Changer de site</button>' : ''}</div>`;
+  }
 
   function blocSynchro() {
     const s = Sync.etatCourant();
@@ -737,7 +794,8 @@
   function byCode(raw) {
     let code = raw;
     const m = /[?&]eq=([^&#]+)/.exec(raw); if (m) code = decodeURIComponent(m[1]);
-    return list('equipements').find(e => e.code.toLowerCase() === code.trim().toLowerCase());
+    // Tous les sites de l'appareil : un QR scanné ailleurs que sur le site affiché reste reconnu.
+    return [...data.equipements.values()].find(e => e.code.toLowerCase() === code.trim().toLowerCase());
   }
   function scanQR() {
     return new Promise(resolve => {
@@ -764,6 +822,17 @@
   const personnesOpts = () => list('personnes').filter(p => p.actif !== false).map(p => [p.id, `${p.nom} (${L.role[p.role]})`]);
   const A = {};
 
+  A.site = async () => {
+    const sites = mesSites();
+    if (sites.length < 2) { toast(sites[0] ? `Site : ${sites[0].nom}` : 'Aucun site'); return; }
+    const opts = Object.fromEntries([...sites.map(s => [s.id, s.nom]), ['tous', 'Tous mes sites']]);
+    const v = await askForm({ title: 'Site affiché', ok: 'Afficher', values: { s: siteActif() }, fields: [
+      { name: 's', label: 'Site', type: 'chips', options: opts, required: true },
+      { type: 'info', text: 'Accueil, listes et indicateurs se limitent à ce site. Les nouvelles fiches prennent le site de leur équipement, sinon ce site.' }] });
+    if (!v) return;
+    await Store.persistMeta({ ...Store.device(), siteActif: v.s });
+    render();
+  };
   A.who = async () => {
     if (Sync.profil()) { location.hash = '#/reglages'; return; }
     const v = await askForm({ title: 'Qui utilise cet appareil ?', ok: 'Valider', values: { p: Store.device().personneId }, fields: [
@@ -1094,9 +1163,15 @@
     } catch (e) { toast('Échec : ' + e.message); }
   };
   async function premierEnvoiSiBesoin(premiere) {
-    if (premiere && list('equipements').length + list('demandes').length + list('ots').length) {
+    const nb = data.equipements.size + data.demandes.size + data.ots.size;
+    if (!premiere || !nb) return;
+    const ent = Sync.profil()?.entreprise?.nom || 'votre entreprise';
+    if (await askConfirm('Données déjà présentes sur cet appareil', `Cet appareil contient ${data.equipements.size} équipement(s), ${data.demandes.size} demande(s) et ${data.ots.size} intervention(s). Les envoyer dans « ${ent} » ? Sinon, elles seront effacées de l’appareil et remplacées par les données du serveur.`, 'Envoyer')) {
       const n = await Store.toutEnvoyer();
-      toast(`${n} fiche(s) de cet appareil envoyées au serveur`);
+      toast(`${n} fiche(s) envoyées vers ${ent}`);
+    } else {
+      await Store.viderMetier();
+      toast('Données locales effacées : chargement depuis le serveur');
     }
   }
   /** Retour d'un lien reçu par e-mail : invitation ou mot de passe oublié. */
@@ -1216,6 +1291,16 @@
       a.classList.toggle('on', t === tab || (t === 'plus' && MOBILE_PLUS.includes(R.name)));
     });
     $('#fab').classList.toggle('hidden', R.name === 'signaler');
+    const pf = Sync.profil();
+    const bs = $('#site');
+    if (bs) {
+      bs.classList.toggle('hidden', !pf);
+      const sa = siteActif();
+      bs.textContent = pf ? '📍 ' + (sa === 'tous' ? 'Tous les sites' : nomSite(sa) || 'Site') : '';
+    }
+    document.querySelectorAll('.tabs a[data-tab=magasin]').forEach(a => a.classList.toggle('hidden', !aModule('magasin')));
+    document.querySelectorAll('.tabs a[data-tab=preventif]').forEach(a => a.classList.toggle('hidden', !aModule('preventif')));
+    if (pf && !ecritureOK()) $('#view').insertAdjacentHTML('afterbegin', '<p class="warn">Abonnement suspendu ou expiré : consultation seule. Vos données restent accessibles et exportables.</p>');
     const me = Store.currentUser();
     $('#who').textContent = me ? '👤 ' + me.nom : '👤 Qui êtes-vous ?';
     if (role()) {

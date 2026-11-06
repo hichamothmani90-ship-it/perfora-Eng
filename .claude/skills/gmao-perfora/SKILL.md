@@ -105,6 +105,15 @@ Chaque indicateur affiche périmètre, période, convention, couverture et effec
   `siteId` dans `data`. `mon_profil()` renvoie entreprise, sites, siteDefaut, abonnement, adminPlateforme.
   Toute nouvelle table de données doit porter entreprise_id (+ site_id) et une politique RLS équivalente ;
   rejouer `supabase/tests_etancheite.sql` après chaque changement de règle.
+- **Appli multi-site** (A2) : `list(t)` filtre les types de `Store.SITE_TYPES` sur le site actif
+  (`siteActif()` : `device.siteActif`, « tous » possible si plusieurs sites ; fiche sans `siteId` = visible).
+  Une nouvelle fiche de site reçoit son site dans `Store.save` via `Store.definirSite` : site du parent
+  (équipement, lieu, demande, intervention, parent de photo) sinon `siteCreation()`. Pour chercher hors
+  du site actif (QR, liens), lire `data[t]` directement. `Sync.chargerProfil` : changement d'entreprise =
+  `Store.viderMetier()` (refusé si la file d'envoi n'est pas vide) ; premier passage multi-entreprise d'un
+  appareil déjà synchronisé = resynchronisation complète. Modules : `aModule()`, `ACT_MODULE` ; abonnement
+  non écrivable : `ecritureOK()` (bandeau, actions retirées). Faux serveur : 3 comptes / 2 entreprises,
+  `POST /test/abonnement` pour suspendre.
 - **Sans cloud** : export/import JSON ; par fiche, la plus récente (`modifieLe`) gagne ;
   rien n'est supprimé par absence.
 - **Service worker** : cache d'abord, **une version = un cache complet installé d'un bloc** (jamais de

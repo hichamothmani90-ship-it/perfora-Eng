@@ -31,6 +31,9 @@ h3 { font-size: 1.05rem; margin: 0 0 12px; }
   background: var(--card); border-bottom: 1px solid var(--line);
 }
 .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--ink); }
+.site { border: 1px solid var(--line); background: var(--blue-soft); color: var(--blue); border-radius: 99px; padding: 5px 10px;
+  font: inherit; font-size: .8rem; font-weight: 600; max-width: 34vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+@media (max-width: 520px) { .brand-txt { display: none; } }
 .net { font-size: .75rem; padding: 3px 8px; border-radius: 99px; background: var(--green-soft); color: var(--green); }
 .net.off { background: var(--amber-soft); color: var(--amber); }
 .who {
