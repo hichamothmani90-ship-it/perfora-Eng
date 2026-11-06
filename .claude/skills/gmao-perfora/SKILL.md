@@ -226,3 +226,32 @@ facultative ou déplacée vers le responsable.
 - Rendre un champ obligatoire au signalement « pour les statistiques ».
 - Utiliser une API réservée à HTTPS sans repli (caméra, `crypto.randomUUID`, service worker).
 - Oublier d'incrémenter `VERSION` : les téléphones garderaient l'ancienne version.
+
+## 9. Continuité de session (ne jamais perdre le fil)
+
+Le contexte de conversation est limité et peut être résumé (compaction) à tout moment. Le **dépôt** est la
+seule mémoire fiable : tout ce qui compte doit y être écrit avant de continuer.
+
+1. **Fin de chaque étape** (et avant toute pause) : tests verts → commit en français → push → mise à jour
+   de `docs/FEUILLE_DE_ROUTE.md` (tableau « Ce qui est fait », état, prochaine étape).
+2. **Changement serveur** : le SQL exécuté dans Supabase est **toujours** d'abord écrit dans `supabase/*.sql`
+   (rejouable), puis exécuté ; les tests correspondants vont dans `supabase/tests_*.sql`. Rien n'existe
+   seulement dans la base ou dans la conversation.
+3. **Décision ou constat** (choix validé par Hicham, piège rencontré, limite) : l'écrire dans le document
+   concerné (`docs/VOLET_*_CONCEPTION.md`, `RECETTE_*.md`, ce skill) dans le même commit.
+4. **État courant** : `docs/PROMPT_REPRISE.md` §3 décrit l'état réel (version, entreprises, comptes,
+   scripts, ports de test). Le mettre à jour à chaque fin de volet.
+5. **Moment pour compacter** : seulement entre deux étapes, quand `git status` est propre et poussé, et
+   que la feuille de route est à jour. Jamais au milieu d'une migration, d'un déploiement ou d'un test.
+6. **Après une compaction ou dans une nouvelle session** : relire ce skill, `docs/PROMPT_REPRISE.md`,
+   `docs/FEUILLE_DE_ROUTE.md`, puis `git log --oneline -10` et `git status` avant toute action.
+
+Pièges opérationnels déjà rencontrés :
+- SQL Editor Supabase : insérer le script via `monaco.editor.getEditors()[0].setValue(...)` (pas de `\`,
+  de backtick ni de `${` dans le script) ; confirmer « Run query » sur l'alerte « destructive » ; un
+  `begin … rollback` n'est pas conservé → tester avec une fonction plpgsql temporaire qui nettoie, puis la
+  supprimer ; la grille de résultats est virtualisée → agréger en une ligne (`jsonb_object_agg`).
+- Fenêtres de saisie de l'appli dans un onglet masqué : fermeture retardée par le navigateur → tester par
+  appels directs (`Sync.*`, `Store.*`) quand le panneau est caché.
+- Service worker : un onglet ancien peut bloquer l'évolution d'IndexedDB (géré : message + `onversionchange`).
+- E-mails Supabase par défaut : quelques-uns par heure, souvent en indésirables (Outlook).
