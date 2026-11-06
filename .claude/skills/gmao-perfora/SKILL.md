@@ -161,12 +161,16 @@ Implémenté (object stores) :
 | `seuils` | articleId, siteId, securite, pointCommande, cible, delaiJours, critique, justification, statut (propose / valide / refuse), proposePar/Le, validePar/Le — une version validée ne se modifie pas |
 | `achats` | ref DA-, siteId, statut (brouillon … close), origine, lignes [{articleId \| description, qte, unite, motif, qteCommandee, prixUnitaire}], redigePar/Le, fournisseur, refCommande — **lecture restreinte** |
 | `valorisations` | mouvementId, prixUnitaire, devise (MAD), prixUnitaireMAD, statut (connu / provisoire) — **lecture restreinte** |
+| `compteurs` | code (QR), libelle, ressource, mode (cumulatif / periode / instantane), unite, coefficient, parentId (sous-comptage), frequenceJours, toleranceVariation, siteId — module energie ; mode, unité, coefficient figés après le 1er relevé (rupture) |
+| `releves` | compteurId, le, valeur, estime, debut (mode période), remplaceId (correction), nature « rupture » (indexFinal, indexInitial, coefficient, motif), decision (confirme / invalide) + motifDecision / decideLe / decidePar (responsable) — jamais modifiés |
+| `factures_energie` | du, au, quantite, unite, montantHT, devise, compteurIds[], fournisseur, reference — **lecture restreinte** (pièce jointe = photos parentType factures_energie, restreinte aussi) |
+| `parametres` | une fiche `parametres-<entreprise>` : clotureParResponsable — écrite par le responsable, lue par tous |
 | `journal` | entite, entiteId, action, champ, avant, apres, motif, auteur, le — append-only |
 | `photos` | parentType (demandes / ots), parentId, dataUrl JPEG ≤ 1280 px, le — depuis DB v2 |
 | `sortie` | file d'envoi cloud : {type, rid, patch} triés par id chronologique — propre à l'appareil |
 | `meta` | `device` {code, personneId}, `compteurs`, `sauvegarde` {le}, `adresse` {url des QR}, `cloud` {url, cle, session, curseur, dernier, erreur} |
 
-Version actuelle du stockage : **DB_VER = 5** (v5 : seuils, achats, valorisations). Pièces d'une intervention : `o.pieces[]` = déclarations d'**utilisation** (`besoinId` si la pièce vient du magasin) ; une attente `motif: 'piece'` peut porter `besoinId` (levée automatique, `Calculs.attentesALever`). Côté serveur : table unique `fiches` (id, type, data jsonb,
+Version actuelle du stockage : **DB_VER = 6** (v5 : seuils, achats, valorisations ; v6 : compteurs, releves, factures_energie, parametres). Pièces d'une intervention : `o.pieces[]` = déclarations d'**utilisation** (`besoinId` si la pièce vient du magasin) ; une attente `motif: 'piece'` peut porter `besoinId` (levée automatique, `Calculs.attentesALever`). Côté serveur : table unique `fiches` (id, type, data jsonb,
 seq, recu_le, auteur), RLS « authenticated », aucune règle DELETE.
 
 Listes de choix : reprendre **exactement** les codes de la V3 (sections 32-33) déjà dans l'objet `L`
@@ -175,7 +179,7 @@ de `app.js`. Un nouveau choix = un code stable + libellé ; un ancien choix est 
 Cible V3 non encore implémentée (à ajouter par lots, voir §7) : événement technique multi-équipements
 et période technique (ouverte / fin proposée / close), impact exploitation séparé, occurrence préventive
 distincte de l'OT avec rapport (non requis / attendu / reçu / examiné) et verdict, calendrier de temps
-requis, réservation et besoin matériel, réception partielle, CUMP, compteurs et relevés, objectifs,
+requis, CUMP, préventif sur compteur d'équipement (à discuter : docs/DISCUSSION_MODELE_DONNEES.md), objectifs,
 lots d'import, notifications.
 
 ## 5. Parcours terrain (critères d'acceptation)

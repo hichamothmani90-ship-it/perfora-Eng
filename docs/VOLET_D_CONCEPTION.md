@@ -1,6 +1,6 @@
 # Volet D — Énergie et eau : proposition de conception
 
-Statut : **validé le 6 nov. 2026** avec les ajustements de la section 6. D1 (calculs et tests) fait le 6 nov. 2026.
+Statut : **validé le 6 nov. 2026** avec les ajustements de la section 6. D1 (calculs et tests) et D2 (serveur) faits le 6 nov. 2026.
 Références V3 : §19 (compteurs, modes de mesure, contrôle ciblé des relevés), §20 (factures, bilan combustible, air
 comprimé et froid, de l'écart à l'intervention, ratios), §21 (écrans Énergie et eau, pilotage, qualité des données),
 §36 (modèle : compteur, relevé et rupture, anomalie, facture et bilan, donnée externe), §37 (scénarios : index remplacé,
@@ -104,3 +104,20 @@ consommation), `consommationPeriode` (couverture, prorata seulement sur demande 
 (bornes au plus proche du relevé, tolérance 1 jour ; incomplet si une borne manque), `residuSousComptage` (à expliquer,
 incohérent, non comparable), `totauxParUnite`, `relevesDus`, `bilanCombustible`, `totalFactures`.
 `tests/energie.test.js` : 16 tests dont les 7 scénarios V3 §37.
+
+## 8. Fait en D2 (6 nov. 2026)
+
+`supabase/energie.sql` exécuté sur Supabase (après `achats.sql`) :
+- types `compteurs`, `releves`, `factures_energie` (module energie) et `parametres` (réglages de l'entreprise, une fiche
+  `parametres-<entreprise>`, écrite par le responsable seul, lue par tous) ;
+- droits : compteurs = responsable ; relevés = technicien, prestataire, exploitation, responsable ; factures = responsable
+  et achats ; lecture des factures, de leur journal et de leurs pièces jointes réservée à responsable, magasinier, achats,
+  pilote (`voit_couts`) ;
+- relevé jamais modifié (seule la qualification par le responsable : decision, motifDecision, decideLe, decidePar) ;
+  correction = nouveau relevé `remplaceId` du même compteur ; renvoi identique accepté ; site = celui du compteur ;
+- compteur déjà relevé : mode, unité, coefficient figés (rupture) ;
+- réglage `clotureParResponsable` : le serveur refuse la clôture par un autre rôle que le responsable.
+`supabase/tests_energie.sql` : 25 tests conformes sur Supabase. Faux serveur aligné (`tests/energie_serveur_test.py`,
+32 vérifications ; compte factice `expl@gmao.test`). Appli v24 : stockage local v6, réglage dans Réglages
+(« Règles de l'entreprise »), « Terminer » → « À valider » quand le réglage est actif, accueil du responsable
+« Interventions à valider ».
