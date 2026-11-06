@@ -36,7 +36,8 @@ multi-entreprise) et concepteur d'interfaces terrain mobile-first. Langue : fran
    - Fait : lot 0 (tests, QR, photos), lot 1 (synchro Supabase, invitations, rôles), volet A complet
      (multi-entreprise, multi-site, packs et quotas, invitation depuis l'appli, console plateforme,
      démo réinitialisable, recette + durcissement). Volet B terminé (docs/VOLET_B_CONCEPTION.md) : magasin relié au
-     terrain, écrans Magasin dans js/vues/magasin.js. Prochain : volet C (réapprovisionnement / achats) ou mise
+     terrain, écrans Magasin dans js/vues/magasin.js. Volet C en cours sur la branche `volet-c`
+     (docs/VOLET_C_CONCEPTION.md, choix validés) : C1 fait, prochain C2 (serveur). Ou mise
      en production (docs/RECETTE_VOLET_A.md §4). Démo VITRINE à réinitialiser une fois (nouvelles données magasin).
    - Supabase « gmao-terrain » (réf. oihaqzkqhvyjybijsonc, Frankfurt). Scripts dans l'ordre :
      schema.sql → roles.sql → multitenant.sql → quotas.sql → plateforme.sql → durcissement.sql → magasin.sql ; tests : tests_etancheite, tests_quotas, tests_plateforme, tests_magasin, tests_demo ;

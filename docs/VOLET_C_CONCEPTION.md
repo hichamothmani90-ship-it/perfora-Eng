@@ -1,6 +1,12 @@
 # Volet C — Définition des stocks, réapprovisionnement et achats : proposition de conception
 
-Statut : **proposition à valider** (6 nov. 2026). Rien n'est encore codé.
+Statut : choix 1 à 7 **validés** le 6 nov. 2026. Travail sur la branche git `volet-c` (publication en C5).
+**C1 fait** : `calculs.js` (seuilActif, besoinsNonCouverts, receptionLigne, etatAchat, qteEnCommande, qteIsolee,
+situationArticle, aReapprovisionner, prixMAD, valorisation, coutConsomme) + `tests/achats.test.js` (10 tests).
+Conventions de mouvements retenues : `entree` = utilisable reçu ; `isolement` (qte 0, quantite N) ; `liberation`
+(+N, isolementId) ; `disposition` (qte 0, quantite N, decision). Aucun prix sur les mouvements.
+Fiche `valorisations` : { mouvementId, prixUnitaire, devise (MAD par défaut), prixUnitaireMAD si autre devise,
+statut connu / provisoire }. Une pièce libérée prend le prix de sa réception (valorisation de l'isolement).
 Références V3 : §14 (seuils proposés et validés), §15-16 (stock explicable, réception partielle, pièces isolées),
 §17 (besoins achats : circuit et états), §18 (CUMP, prix manquant, coûts distincts), §24 (rôle Achats facultatif,
 prix masqués aux techniciens), §33 (compatibilités et seuils), §37 (scénarios de vérification).
@@ -74,7 +80,7 @@ réception restent lisibles par tous **sans prix** (le technicien voit le stock,
 | C4 | Circuit achats, réception partielle, isolés, valeur du stock | Navigateur, 3 rôles + technicien sans prix |
 | C5 | Faux serveur, démo, guide, recette, publication v20 | — |
 
-## 7. Choix à valider
+## 7. Choix validés (6 nov. 2026)
 
 1. **Modules** : seuils et « À réapprovisionner » dans le module **magasin** (pack Pro) ; demandes d'achat, réceptions
    liées et valorisation dans le module **achats** (pack Entreprise, ou option du Pro).
