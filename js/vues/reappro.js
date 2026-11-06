@@ -77,7 +77,7 @@
     return `<h2>Seuils${s ? ' · ' + esc(nomSite(s)) : ''}</h2><div class="card">
       ${actif && !actif.provisoire ? `<div>${ligne(actif)}</div><div class="s">Validé le ${esc(fmtY(actif.valideLe))} par ${esc(actif.validePar)}${actif.justification ? ' · « ' + esc(actif.justification) + ' »' : ''}</div>`
         : actif ? `<p class="warn" style="margin:0">Repère provisoire : stock mini ${q(actif.pointCommande)} (non validé). Proposez des seuils.</p>` : '<p class="muted" style="margin:0">Aucun seuil : l’article n’est pas suivi par « À réapprovisionner ».</p>'}
-      ${prop.map(x => `<div class="info" style="margin-top:10px"><b>Proposition</b> de ${esc(x.proposePar || x.creePar)} (${esc(fmtY(x.creeLe))}) : ${ligne(x)}${x.justification ? `<br>« ${esc(x.justification)} »` : ''}
+      ${prop.map(x => `<div class="info" style="margin-top:10px"><b>Proposition</b> de ${esc(x.proposePar || x.creePar)} (${esc(fmtY(x.proposeLe || x.creeLe))}) : ${ligne(x)}${x.justification ? `<br>« ${esc(x.justification)} »` : ''}
         <div class="actions" style="margin:8px 0 0"><button class="btn sm primary" data-act="seuil-valider" data-id="${x.id}">Valider</button><button class="btn sm ghost" data-act="seuil-refuser" data-id="${x.id}">Refuser</button></div></div>`).join('')}
       <p class="small muted" style="margin-bottom:0">Consommation : ${q(conso)} ${esc(a.unite || '')} / semaine (90 derniers jours, retours déduits). Repère V3 : consommation × délai + sécurité ; insuffisant pour une pièce critique rarement consommée.</p>
       <div class="actions" style="margin-bottom:0"><button class="btn sm" data-act="seuil-proposer" data-id="${a.id}">${role() && role() !== 'responsable' ? 'Proposer des seuils' : 'Définir les seuils'}</button></div>

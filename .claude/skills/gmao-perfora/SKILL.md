@@ -265,6 +265,9 @@ Pièges opérationnels déjà rencontrés :
   insérer le texte via `setValue(...)` (pas de `\`, de backtick ni de `${`) ; confirmer « Run query » sur l'alerte « destructive » ; un
   `begin … rollback` n'est pas conservé → tester avec une fonction plpgsql temporaire qui nettoie, puis la
   supprimer ; la grille de résultats est virtualisée → agréger en une ligne (`jsonb_object_agg`).
+  Panneau masqué : la grille ne s'affiche pas du tout → lire le résultat via
+  `do $x$ begin raise exception 'RESULTAT %', (select …)::text; end $x$;` (message d'erreur lisible ; tout est annulé,
+  pratique aussi pour un test qui ne doit rien laisser).
 - Fenêtres de saisie de l'appli dans un onglet masqué : fermeture retardée par le navigateur. Contournement fiable :
   remplir le formulaire, `form.requestSubmit()` puis `dialog.dispatchEvent(new Event('close'))` (le vrai code de
   l'action s'exécute : contrôles, enregistrements, synchro).

@@ -29,6 +29,10 @@ des indicateurs fiables par équipement, avec une traçabilité complète pour l
 | **Arrêt de production** | Oui / Non / Inconnu, avec début et fin **facultatifs** | La durée n'apparaît que si les deux heures sont connues |
 | **Préventif** | Un programme répété (tous les 30 jours…) qui crée les interventions à faire | Vidange compresseur tous les 90 jours |
 | **Demande de pièce** | Ce que le technicien demande au magasin depuis l'intervention ; elle ne retire rien du stock | 1 rouleau tendeur, urgent |
+| **Seuils** | Par article et site : sécurité, point de commande, cible ; proposés par le magasin, validés par le responsable | Joint : commander sous 4, viser 8 |
+| **À réapprovisionner** | Liste calculée : disponible − demandes non couvertes + en commande, sous le point de commande ; propose une quantité, ne commande rien | « 6 joints proposés » |
+| **Demande d'achat** | Besoin validé par le responsable, puis commande passée chez le fournisseur (hors Perfora) et réceptions, même partielles | 3 filtres commandés, 2 reçus, 1 attendu |
+| **Valeur du stock** | Coût moyen pondéré par article et site ; une quantité sans prix est montrée à part, jamais à zéro | 58 L d'huile à 42 MAD |
 | **Magasin** | Réserve, remet, vérifie les retraits urgents ; stock par site (physique, réservé, disponible) | Remise du rouleau → l'intervention redevient « Prête » |
 | **Journal** | L'historique de toutes les saisies et corrections | « statut : en cours → clôturée, par Technicien A, 06/11 11:20 » |
 
@@ -46,7 +50,8 @@ des indicateurs fiables par équipement, avec une traçabilité complète pour l
 |---|---|
 | **Responsable maintenance** | Configure (équipements, préventif, équipe), corrige une intervention clôturée, voit tout |
 | **Technicien / Prestataire** | Signale, prend en charge, intervient, clôture ses interventions |
-| **Magasinier** | Sert les demandes de pièces (réserver, remettre, indisponible + délai), vérifie les retraits urgents, réceptionne et inventorie |
+| **Magasinier** | Sert les demandes de pièces (réserver, remettre, indisponible + délai), vérifie les retraits urgents, propose les seuils, rédige les demandes d'achat, réceptionne (y compris partiellement), isole et inventorie |
+| **Achats** (facultatif) | Renseigne la commande passée chez le fournisseur (référence, prix, délai) sur une demande validée ; ne valide rien |
 | **Exploitation** | Signale des demandes |
 | **Pilote / Direction** | Consulte les indicateurs, ne modifie rien |
 
@@ -72,6 +77,7 @@ Matériel : un PC (vidéoprojecteur) + un téléphone, connectés au même compt
 | 5-7 | Sur le téléphone : résultat *Résolu*, cause *Probable* → **Clôturer** (essayer d'abord sans résultat : l'appli bloque) | « Les règles de qualité sont dans l'outil, pas dans un classeur. » |
 | 7-8 | Sur le PC : ouvrir l'historique de l'intervention, puis le **Journal** | « Preuve d'audit : qui, quoi, quand, ancienne et nouvelle valeur. » |
 | 8-9 | **Indicateurs** : pannes répétitives (le convoyeur), préventif à l'échéance, arrêts « 2 sur 3 renseignés » | « Des chiffres honnêtes : on montre ce qu'on sait, et ce qui manque. » |
+| + 4 min | **Achats** (option, pack Entreprise) : **Magasin → À réapprovisionner** : le joint est sous son point de commande, 6 proposés → **Créer la demande d'achat** → Soumettre ; en responsable **Valider**. Puis **Plus → Achats** : la commande de filtres DA-DEMO-0001 → **Réceptionner** 2 dont 1 isolée → décision **Libérer**. Finir par **Valeur du stock** | « Le stock se pilote : seuils validés, rien n'est commandé sans décision, une livraison partielle reste visible, et les prix restent invisibles aux techniciens. » |
 | + 3 min | **Magasin** (option) : sur l'intervention du convoyeur, la pièce « Rouleau tendeur » est demandée en urgence ; ouvrir **Magasin → À servir** → **Remettre**. Sur le téléphone du technicien : « Pièce remise : … peut reprendre ». Puis **À vérifier** : le retrait urgent d'huile → **Vérifié** | « Demande, réservation, remise, utilisation, retour : cinq faits distincts, un stock juste, sans ressaisie. » |
 | 9-10 | Montrer un compte **technicien** : pas de bouton de configuration ; une intervention clôturée est en lecture seule | « Chacun son rôle, contrôlé par le serveur. » |
 
@@ -85,7 +91,9 @@ la veille ; avoir un deuxième téléphone en secours.
 - **Où sont les données ?** Sur un serveur en Europe (Frankfurt) ; chaque client sera isolé (multi-entreprise, à venir). Formalités CNDP à valider avant mise en production.
 - **Peut-on importer nos équipements ?** Prévu (import Excel contrôlé, volet F).
 - **Suivez-vous le temps des techniciens ?** Non, volontairement : on suit les machines, pas la productivité individuelle.
-- **Et le magasin, les achats, l'énergie ?** Le magasin est relié au terrain (demande de pièce, réservation, remise, retrait urgent vérifié, retour, stock par site). Réapprovisionnement / achats et énergie / eau sont les prochains volets.
+- **Et le magasin, les achats, l'énergie ?** Le magasin est relié au terrain (demande de pièce, réservation, remise, retrait urgent vérifié, retour, stock par site) et aux achats : seuils validés, liste « à réapprovisionner », demande d'achat, commande saisie, réceptions partielles, pièces isolées, valeur du stock. Énergie / eau est le prochain volet.
+- **Les techniciens voient-ils les prix ?** Non : le serveur ne leur envoie ni les demandes d'achat, ni les prix, ni l'historique de ces montants.
+- **Perfora passe-t-il les commandes ?** Non, volontairement : on suit le besoin, la décision et la livraison ; la commande reste dans votre circuit fournisseur habituel.
 
 ## 8 bis. Préparer et réinitialiser la démo commerciale
 
@@ -93,6 +101,7 @@ la veille ; avoir un deuxième téléphone en secours.
   (responsable, site « Usine de démonstration »).
 - **Avant** la présentation : sur votre compte principal, **Plus → Console plateforme → Vitrine Perfora →
   Réinitialiser la démo** ; sur l'appareil de présentation, **Réglages → Synchroniser maintenant**.
+- **Achats et valeur du stock** : visibles seulement si l'abonnement de la démo inclut le module « achats » (pack Entreprise).
 - Pour montrer le multi-site ou un client : la console permet aussi de créer une entreprise d'essai
   (pack, premier site, invitation du responsable) en une minute, devant le prospect.
 
@@ -100,9 +109,10 @@ la veille ; avoir un deuxième téléphone en secours.
 
 | Disponible aujourd'hui | Prochains volets |
 |---|---|
-| Demandes, interventions, préventif, QR codes, photos | Réapprovisionnement et achats (seuils, propositions de commande) |
-| Hors ligne + synchronisation, rôles et droits, multi-entreprise et multi-site, packs et quotas, invitations, console plateforme | Énergie et eau |
-| Indicateurs par équipement, journal d'audit, export CSV | Rapports mensuels, imports Excel |
-| Magasin relié au terrain : demandes de pièces, réservation, remise, retrait urgent, retour, stock par site, accueil magasinier | Pilotage avancé |
+| Demandes, interventions, préventif, QR codes, photos | Énergie et eau |
+| Hors ligne + synchronisation, rôles et droits, multi-entreprise et multi-site, packs et quotas, invitations, console plateforme | Rapports mensuels, imports Excel |
+| Indicateurs par équipement, journal d'audit, export CSV | Pilotage avancé |
+| Magasin relié au terrain : demandes de pièces, réservation, remise, retrait urgent, retour, stock par site, accueil magasinier | Fiche fournisseurs, emplacements et transferts |
+| Achats : seuils, à réapprovisionner (CSV), demandes d'achat, commande, réceptions partielles, isolés, valeur du stock (CUMP) | |
 
 Feuille de route détaillée : [`FEUILLE_DE_ROUTE.md`](FEUILLE_DE_ROUTE.md).

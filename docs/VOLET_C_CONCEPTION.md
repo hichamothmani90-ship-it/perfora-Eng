@@ -22,7 +22,8 @@ demande d'achat en brouillon depuis les lignes cochées (une par site, aucun pri
 quantités / soumission / annulation de la demande. Stockage local v5. Faux serveur aligné sur `achats.sql` (compte
 `achat@` rôle achats ; `POST /test/abonnement {"entreprise":"DEMO","pack":"entreprise"}`).
 
-**C4 fait** (v20 locale) : `js/vues/achats.js` — écran **Achats** (menu Plus : à valider, à commander, à réceptionner,
+**C5 fait** : démo enrichie (`supabase/demo.sql`), guide, publication v20 — **volet C terminé**.
+**C4 fait** : `js/vues/achats.js` — écran **Achats** (menu Plus : à valider, à commander, à réceptionner,
 brouillons, terminées ; pièces isolées en attente), détail d'une demande (valider / à compléter / refuser ; commande
 externe saisie par le rôle achats ou le responsable : fournisseur, référence, dates, devise et taux explicites, quantité
 commandée et prix par ligne ; réception partielle avec isolé et bon de livraison ; clôture, motif obligatoire s'il reste
