@@ -117,6 +117,10 @@ Classeur modèle (sites, équipements, articles, compteurs, programmes) ; prévi
 - Page de présentation (bénéfices, packs, contact), fiche PDF, vidéo courte téléphone + PC.
 - Pilote terrain gratuit de 4 à 6 semaines chez un premier site, avec indicateurs avant / après.
 
+## 2 ter. Cadrage du lancement
+Domaine perfora.ma, hébergement, CNDP, Payzone, packs, site de présentation, préréglages, WhatsApp, rôles, tableaux de bord,
+sécurité, authentification, parcours et planning en phases : [`CADRAGE_LANCEMENT.md`](CADRAGE_LANCEMENT.md).
+
 ## 2 bis. Avant le premier client payant
 Liste de contrôle détaillée : [`RECETTE_VOLET_A.md` §4](RECETTE_VOLET_A.md) — e-mails dédiés, Supabase payant, projet de production séparé, photos en stockage de fichiers, nom de domaine, CNDP, exports, pilote.
 
