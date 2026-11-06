@@ -168,11 +168,14 @@
     const a = data.articles.get(el.dataset.id), type = el.dataset.sub, p = physique(a.id);
     const v = await askForm({ title: L.mvt[type], fields: type === 'ajustement'
       ? [{ type: 'info', text: `Stock enregistré : ${p} ${a.unite}` }, { name: 'compte', label: 'Quantité comptée', type: 'number', required: true }, { name: 'motif', label: 'Motif', type: 'text', required: true }]
-      : [{ name: 'qte', label: 'Quantité', type: 'number', required: true }, { name: 'motif', label: type === 'entree' ? 'Bon de livraison / fournisseur' : 'Motif', type: 'text', required: type !== 'entree' }] });
+      : [{ name: 'qte', label: 'Quantité', type: 'number', required: true }, { name: 'motif', label: type === 'entree' ? 'Bon de livraison / fournisseur' : 'Motif', type: 'text', required: type !== 'entree' },
+        ...(type === 'entree' && App.aModule('achats') && App.voitCouts?.() ? [{ name: 'prix', label: 'Prix unitaire HT en MAD (facultatif : vide = inconnu, jamais 0)', type: 'number' }] : [])] });
     if (!v) return;
     const qte = type === 'ajustement' ? v.compte - p : type === 'sortie' ? -Math.abs(v.qte) : Math.abs(v.qte);
     if (!qte) { toast('Aucun écart'); return; }
-    await Store.save('mouvements', { id: Store.uid(), articleId: a.id, type, qte, otId: null, le: Store.now(), motif: v.motif });
+    const m = { id: Store.uid(), articleId: a.id, type, qte, otId: null, le: Store.now(), motif: v.motif };
+    await Store.save('mouvements', m);
+    if (type === 'entree' && v.prix != null) await Store.save('valorisations', { id: Store.uid(), mouvementId: m.id, ...(m.siteId ? { siteId: m.siteId } : {}), prixUnitaire: v.prix, devise: 'MAD', statut: 'connu' }, { action: 'prix_reception' });
     render();
   };
 })();

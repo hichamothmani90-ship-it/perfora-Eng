@@ -224,14 +224,15 @@
   const role = () => Sync.profil()?.role || null;
   const estResp = () => !role() || role() === 'responsable';
   const DROITS = {
-    responsable: ['eq-new', 'eq-edit', 'loc-new', 'prog-new', 'prog-edit', 'pers-new', 'pers-edit', 'ot-rouvrir', 'sync-tout', 'equipe', 'seuil-valider', 'seuil-refuser'],
+    responsable: ['eq-new', 'eq-edit', 'loc-new', 'prog-new', 'prog-edit', 'pers-new', 'pers-edit', 'ot-rouvrir', 'sync-tout', 'equipe', 'seuil-valider', 'seuil-refuser', 'achat-valider', 'achat-completer', 'achat-refuser'],
     terrain: ['ot-new', 'dem-ot', 'prog-ot', 'dem-pec', 'dem-classer', 'ot-demarrer', 'ot-planifier', 'ot-annuler', 'ot-suspendre', 'ot-reprendre', 'ot-terminer', 'ot-cloturer',
       'ot-ajout-int', 'ot-retirer', 'ot-ajout-piece', 'ot-annuler-piece', 'ot-ajout-suite', 'ot-lever',
       'bes-new', 'bes-urgent', 'bes-utilise', 'bes-rendre', 'bes-annuler'],
-    magasin: ['art-new', 'mvt', 'mag-reserver', 'mag-remettre', 'mag-indispo', 'mag-rattacher', 'mag-verifier', 'seuil-proposer', 'achat-new', 'achat-soumettre', 'achat-annuler'],
+    magasin: ['art-new', 'mvt', 'mag-reserver', 'mag-remettre', 'mag-indispo', 'mag-rattacher', 'mag-verifier', 'seuil-proposer', 'achat-new', 'achat-soumettre', 'achat-annuler', 'achat-qte', 'achat-recevoir', 'achat-clore', 'iso-decider'],
+    achats: ['achat-commande'],
     saisie: ['dem-edit', 'dem-annuler', 'photo-ajout', 'signaler'],
   };
-  const ACT_MODULE = { 'art-new': 'magasin', mvt: 'magasin', 'mag-reserver': 'magasin', 'mag-remettre': 'magasin', 'mag-indispo': 'magasin', 'mag-rattacher': 'magasin', 'mag-verifier': 'magasin', 'seuil-proposer': 'magasin', 'seuil-valider': 'magasin', 'seuil-refuser': 'magasin', 'achat-new': 'achats', 'achat-soumettre': 'achats', 'achat-annuler': 'achats', 'bes-new': 'magasin', 'bes-urgent': 'magasin', 'bes-utilise': 'magasin', 'bes-rendre': 'magasin', 'bes-annuler': 'magasin', 'prog-new': 'preventif', 'prog-edit': 'preventif', 'prog-ot': 'preventif' };
+  const ACT_MODULE = { 'art-new': 'magasin', mvt: 'magasin', 'mag-reserver': 'magasin', 'mag-remettre': 'magasin', 'mag-indispo': 'magasin', 'mag-rattacher': 'magasin', 'mag-verifier': 'magasin', 'seuil-proposer': 'magasin', 'seuil-valider': 'magasin', 'seuil-refuser': 'magasin', 'achat-new': 'achats', 'achat-soumettre': 'achats', 'achat-annuler': 'achats', 'achat-qte': 'achats', 'achat-valider': 'achats', 'achat-completer': 'achats', 'achat-refuser': 'achats', 'achat-commande': 'achats', 'achat-recevoir': 'achats', 'achat-clore': 'achats', 'iso-decider': 'achats', 'bes-new': 'magasin', 'bes-urgent': 'magasin', 'bes-utilise': 'magasin', 'bes-rendre': 'magasin', 'bes-annuler': 'magasin', 'prog-new': 'preventif', 'prog-edit': 'preventif', 'prog-ot': 'preventif' };
   function autorise(act) {
     const r = role();
     if (ACT_MODULE[act] && !aModule(ACT_MODULE[act])) return false;
@@ -240,11 +241,12 @@
     if (DROITS.responsable.includes(act)) return false;
     if (DROITS.terrain.includes(act)) return ['technicien', 'prestataire'].includes(r);
     if (DROITS.magasin.includes(act)) return r === 'magasinier';
+    if (DROITS.achats.includes(act)) return r === 'achats';
     if (DROITS.saisie.includes(act)) return r !== 'pilote';
     return true;
   }
   const peutModifierOT = o => !ecritureOK() ? false : o.statut === 'cloturee' ? estResp() : (!role() || ['responsable', 'technicien', 'prestataire'].includes(role()));
-  const REFUS_TXT = { responsable: 'Réservé au responsable', terrain: 'Réservé aux techniciens et au responsable', magasin: 'Réservé au magasin et au responsable', saisie: 'Consultation seule' };
+  const REFUS_TXT = { responsable: 'Réservé au responsable', terrain: 'Réservé aux techniciens et au responsable', magasin: 'Réservé au magasin et au responsable', achats: 'Réservé aux achats et au responsable', saisie: 'Consultation seule' };
   function motifRefus(act) {
     if (ACT_MODULE[act] && !aModule(ACT_MODULE[act])) return `Module « ${ACT_MODULE[act]} » non inclus dans votre abonnement`;
     if (!ecritureOK()) return 'Abonnement suspendu ou expiré : consultation seule'; for (const [k, l] of Object.entries(DROITS)) if (l.includes(act)) return REFUS_TXT[k]; return 'Action non autorisée'; }
@@ -282,6 +284,7 @@
 
   V.accueil = () => {
     if (role() === 'magasinier' && aModule('magasin') && V.accueilMagasin) return V.accueilMagasin();
+    if (role() === 'achats' && aModule('achats') && V.accueilAchats) return V.accueilAchats();
     if (!data.equipements.size) {
       return `<h1>Bienvenue</h1><div class="card"><p>Aucune donnée sur cet appareil.</p>
         <div class="actions"><button class="btn primary" data-act="demo">Charger la démo</button><a class="btn" href="#/parc">Créer mes équipements</a></div>
@@ -624,9 +627,9 @@
        <div id="pf-liste"><p class="muted">Chargement…</p></div>`
     : empty('Réservé à l’administrateur plateforme.');
 
-  V.plus = () => `<h1>Plus</h1>${[['#/preventif', '↻ Préventif', 'Programmes et échéances'], ['#/qr', '▣ QR codes', 'Planche imprimable des équipements'], ['#/magasin', '▤ Magasin', 'Articles, stock, mouvements'], ['#/indicateurs', '▥ Indicateurs', 'Pilotage par équipement'], ['#/journal', '☰ Journal d’audit', 'Toutes les modifications'], ['#/reglages', '⚙ Réglages', 'Utilisateur, personnes, sauvegarde']]
+  V.plus = () => `<h1>Plus</h1>${[['#/preventif', '↻ Préventif', 'Programmes et échéances'], ['#/qr', '▣ QR codes', 'Planche imprimable des équipements'], ['#/magasin', '▤ Magasin', 'Articles, stock, mouvements'], ['#/achats', '₪ Achats', 'Demandes d’achat, commandes, réceptions'], ['#/valeur', '∑ Valeur du stock', 'Coût moyen pondéré par article et site'], ['#/indicateurs', '▥ Indicateurs', 'Pilotage par équipement'], ['#/journal', '☰ Journal d’audit', 'Toutes les modifications'], ['#/reglages', '⚙ Réglages', 'Utilisateur, personnes, sauvegarde']]
     .concat(Sync.profil()?.adminPlateforme ? [['#/plateforme', '◆ Console plateforme', 'Clients, abonnements, démo commerciale']] : [])
-    .filter(([h]) => !(h === '#/magasin' && !aModule('magasin')) && !(h === '#/preventif' && !aModule('preventif')))
+    .filter(([h]) => !(h === '#/magasin' && !aModule('magasin')) && !(h === '#/preventif' && !aModule('preventif')) && !(['#/achats', '#/valeur'].includes(h) && !(aModule('achats') && App.voitCouts?.())))
     .map(([h, t, s]) => `<a class="card" href="${h}"><div class="t">${t}</div><div class="s">${s}</div></a>`).join('')}`;
 
   V.reglages = () => {
@@ -1516,8 +1519,8 @@
     const [name, id] = path.split('/');
     return { name, id: id ? decodeURIComponent(id) : null, q: new URLSearchParams(qs || '') };
   }
-  const TAB_OF = { demande: 'demandes', ot: 'ots', eq: 'parc', article: 'magasin', reappro: 'magasin', achat: 'magasin', signaler: '', qr: 'parc', plateforme: 'plus' };
-  const MOBILE_PLUS = ['preventif', 'magasin', 'article', 'reappro', 'achat', 'indicateurs', 'journal', 'reglages', 'plus'];
+  const TAB_OF = { demande: 'demandes', ot: 'ots', eq: 'parc', article: 'magasin', reappro: 'magasin', achat: 'plus', achats: 'plus', valeur: 'plus', signaler: '', qr: 'parc', plateforme: 'plus' };
+  const MOBILE_PLUS = ['preventif', 'magasin', 'article', 'reappro', 'achat', 'achats', 'valeur', 'indicateurs', 'journal', 'reglages', 'plus'];
   function render() {
     cacheEtat = null;
     R = parseHash();

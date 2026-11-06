@@ -2,15 +2,10 @@
    Seuils par article et site : le magasinier propose, le responsable valide (auteur et motif conservés).
    « À réapprovisionner » propose des quantités ; l'appli ne commande rien (aide pour l'acheteur, export CSV).
    Les prix ne figurent jamais ici : ils vivent dans les fiches achats / valorisations (lecture restreinte).
-   Script classique chargé après magasin.js. */
+   Script classique chargé après magasin.js ; la demande d'achat elle-même est dans achats.js. */
 (() => {
   const { V, A, esc, badge, empty, askForm, askConfirm, askText, toast, list, render, fmtY, role, autorise, aModule, siteActif, nomSite, mesSites, exportCsv } = App;
   const { data } = Store;
-
-  const STATUT_ACHAT = { brouillon: 'Brouillon', soumise: 'Soumise', a_completer: 'À compléter', validee: 'Validée', refusee: 'Refusée', transmise: 'Transmise aux achats',
-    commandee: 'Commandée', partiellement_recue: 'Partiellement reçue', recue: 'Reçue', close: 'Close', annulee: 'Annulée' };
-  const CLS_ACHAT = { soumise: 'blue', a_completer: 'amber', validee: 'blue', refusee: 'red', commandee: 'blue', partiellement_recue: 'amber', recue: 'green', close: 'green' };
-  App.STATUT_ACHAT = STATUT_ACHAT; App.CLS_ACHAT = CLS_ACHAT;
 
   const D = () => ({ articles: list('articles'), seuils: list('seuils'), besoins: list('besoins'), mouvements: list('mouvements'), achats: list('achats') });
   const siteCalc = () => { const s = siteActif(); return s && s !== 'tous' ? s : undefined; };
@@ -43,7 +38,7 @@
       ${l.length ? l.map(carteReappro).join('') : empty('Rien à réapprovisionner. Les articles sans seuil validé ni stock mini ne sont pas suivis.')}
       <div class="actions">${l.length ? `<button class="btn" data-act="reappro-csv">Exporter (CSV Excel)</button>` : ''}${l.length && peutDA() ? '<button class="btn primary" data-act="achat-new">Créer la demande d’achat</button>' : ''}</div>
       ${l.length && !aModule('achats') ? '<p class="small muted">Demandes d’achat et valorisation : module « achats » (pack Entreprise). L’export CSV reste disponible.</p>' : ''}
-      ${list('achats').length ? `<h2>Demandes d’achat</h2>${list('achats').sort((x, y) => (y.creeLe || '').localeCompare(x.creeLe || '')).slice(0, 10).map(carteAchat).join('')}` : ''}`;
+      ${list('achats').length && App.carteAchat ? `<h2>Demandes d’achat <a class="small" href="#/achats" style="font-weight:400">tout voir</a></h2>${list('achats').sort((x, y) => (y.creeLe || '').localeCompare(x.creeLe || '')).slice(0, 10).map(App.carteAchat).join('')}` : ''}`;
   };
   A['reappro-csv'] = () => {
     const head = ['Site', 'Référence', 'Désignation', 'Unité', 'Physique', 'Réservé', 'Disponible', 'Demandes non couvertes', 'En commande', 'Couverture', 'Point de commande', 'Cible', 'Délai (j)', 'Critique', 'Seuil', 'Quantité proposée'];
@@ -68,43 +63,6 @@
     }
     toast(parSite.size > 1 ? `${parSite.size} demandes d’achat créées (une par site)` : 'Demande d’achat créée (brouillon)');
     location.hash = '#/achat/' + premier.id;
-  };
-
-  // ---------- demande d'achat (consultation et soumission ; circuit complet : étape C4) ----------
-  function carteAchat(da) {
-    const etat = Calculs.etatAchat(da, list('mouvements'));
-    return `<a class="card" href="#/achat/${da.id}"><div class="row"><span class="t grow">${esc(da.ref)}</span>${badge(STATUT_ACHAT[etat] || etat, CLS_ACHAT[etat] || '')}</div>
-      <div class="s">${(da.lignes || []).length} ligne(s) · ${esc(fmtY(da.redigeLe || da.creeLe))} par ${esc(da.redigePar || da.creePar)}${siteActif() === 'tous' && da.siteId ? ' · ' + esc(nomSite(da.siteId)) : ''}</div></a>`;
-  }
-  App.carteAchat = carteAchat;
-  V.achat = r => {
-    const da = data.achats.get(r.id);
-    if (!da) return empty('Demande d’achat introuvable (ou non visible avec votre rôle).');
-    const etat = Calculs.etatAchat(da, list('mouvements')), modifiable = ['brouillon', 'a_completer'].includes(da.statut);
-    const lignes = (da.lignes || []).map(l => { const a = data.articles.get(l.articleId);
-      return `<li><span class="grow">${esc(a?.designation || l.description || 'Article')}<br><span class="small muted">${esc(a?.ref || '')}${l.motif ? ' · ' + esc(l.motif) : ''}</span></span><b>${q(Number(l.qte) || 0)} ${esc(l.unite || a?.unite || '')}</b>${modifiable ? `<button class="btn sm ghost" data-act="achat-qte" data-id="${da.id}" data-sub="${l.id}">Modifier</button>` : ''}</li>`; }).join('');
-    return `<div class="row"><h1 class="grow">${esc(da.ref)}</h1>${badge(STATUT_ACHAT[etat] || etat, CLS_ACHAT[etat] || '')}</div>
-      <div class="card"><div class="s">Rédigée par ${esc(da.redigePar || da.creePar)} le ${esc(fmtY(da.redigeLe || da.creeLe))}${da.siteId ? ' · ' + esc(nomSite(da.siteId)) : ''}${da.origine === 'reapprovisionnement' ? ' · depuis « À réapprovisionner »' : ''}</div></div>
-      <h2>Lignes</h2><div class="card"><ul class="lines">${lignes || '<li class="muted">Aucune ligne.</li>'}</ul></div>
-      <div class="actions">${modifiable ? `<button class="btn primary" data-act="achat-soumettre" data-id="${da.id}">Soumettre au responsable</button>` : ''}${['brouillon', 'soumise', 'a_completer'].includes(da.statut) ? `<button class="btn ghost danger" data-act="achat-annuler" data-id="${da.id}">Annuler</button>` : ''}</div>
-      <p class="small muted">Perfora n’envoie aucune commande : après validation, l’acheteur renseigne la commande passée chez le fournisseur.</p>`;
-  };
-  A['achat-qte'] = async el => {
-    const da = data.achats.get(el.dataset.id), l = da.lignes.find(x => x.id === el.dataset.sub);
-    const v = await askForm({ title: 'Quantité demandée', values: { qte: l.qte }, fields: [{ name: 'qte', label: 'Quantité', type: 'number', required: true }] });
-    if (!v || !(v.qte > 0)) return;
-    await Store.update('achats', da.id, { lignes: da.lignes.map(x => x.id === l.id ? { ...x, qte: v.qte } : x) }, { action: 'modification_ligne' });
-    render();
-  };
-  A['achat-soumettre'] = async el => {
-    await Store.update('achats', el.dataset.id, { statut: 'soumise', soumiseLe: Store.now(), soumisePar: Store.currentUserName() }, { action: 'soumission' });
-    toast('Demande soumise au responsable'); render();
-  };
-  A['achat-annuler'] = async el => {
-    const m = await askText('Annuler la demande d’achat', 'Motif (conservé dans le journal)');
-    if (!m) return;
-    await Store.update('achats', el.dataset.id, { statut: 'annulee', motifAnnulation: m }, { action: 'annulation', motif: m });
-    render();
   };
 
   // ---------- seuils d'un article (bloc de la fiche article) ----------

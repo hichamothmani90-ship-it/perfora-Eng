@@ -22,6 +22,14 @@ demande d'achat en brouillon depuis les lignes cochées (une par site, aucun pri
 quantités / soumission / annulation de la demande. Stockage local v5. Faux serveur aligné sur `achats.sql` (compte
 `achat@` rôle achats ; `POST /test/abonnement {"entreprise":"DEMO","pack":"entreprise"}`).
 
+**C4 fait** (v20 locale) : `js/vues/achats.js` — écran **Achats** (menu Plus : à valider, à commander, à réceptionner,
+brouillons, terminées ; pièces isolées en attente), détail d'une demande (valider / à compléter / refuser ; commande
+externe saisie par le rôle achats ou le responsable : fournisseur, référence, dates, devise et taux explicites, quantité
+commandée et prix par ligne ; réception partielle avec isolé et bon de livraison ; clôture, motif obligatoire s'il reste
+un reliquat), décisions sur pièces isolées (libérer, retour fournisseur, rebut, réparation), **Valeur du stock** (CUMP
+par article et site, quantités sans prix montrées « non valorisé »), accueil du rôle achats, prix facultatif à la
+réception manuelle. Calculs ajoutés : `montantCommande`, `isolementsEnAttente` (50 tests).
+
 ## 5 quater. Décisions prises en C3
 
 - Le récapitulatif reste visible des techniciens (aucun prix) ; les demandes d'achat ne leur parviennent jamais.
@@ -29,6 +37,15 @@ quantités / soumission / annulation de la demande. Stockage local v5. Faux serv
   sécurité ≤ point de commande ≤ cible ; justification obligatoire (motif de révision V3 §14).
 - Seuil indicatif = consommation hebdomadaire (90 j, retours déduits) × délai + sécurité, simple aide (V3 §14).
 - Correction en passant : charger la démo sur un appareil connecté ne change plus la signature (elle reste celle du compte).
+
+## 5 quinquies. Décisions prises en C4
+
+- La réception crée l'entrée (utilisable) et l'isolement ; le prix de la ligne de commande est copié dans une fiche
+  `valorisations` pour chacun (une pièce libérée prend ainsi le prix de sa réception).
+- Prix en devise étrangère : valorisés seulement si un taux est saisi (`prixUnitaireMAD`), sinon « non valorisé ».
+- Clôture avec reliquat : motif obligatoire ; une demande close ne compte plus « en commande ».
+- Réception au-delà du reste attendu : refusée à l'écran (sur-livraison à traiter hors commande).
+- Valeur du stock : un article sans aucun prix affiche « non valorisé », jamais 0,00 MAD.
 Références V3 : §14 (seuils proposés et validés), §15-16 (stock explicable, réception partielle, pièces isolées),
 §17 (besoins achats : circuit et états), §18 (CUMP, prix manquant, coûts distincts), §24 (rôle Achats facultatif,
 prix masqués aux techniciens), §33 (compatibilités et seuils), §37 (scénarios de vérification).

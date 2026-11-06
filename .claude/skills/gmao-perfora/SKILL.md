@@ -199,7 +199,8 @@ lots d'import, notifications.
   Écrans par domaine dans `js/vues/*.js` (scripts classiques chargés après `app.js`) : ils lisent les aides
   communes sur `window.App` (esc, askForm, edit, list, render, role…) et enregistrent `V.*` / `A.*`. `app.js` démarre
   sur `DOMContentLoaded` pour que ces écrans soient enregistrés avant le premier affichage. Ajouter tout nouveau
-  fichier à `index.html` et à `FILES` dans `sw.js`. Déjà sortis : `js/vues/magasin.js`, `js/vues/reappro.js` (seuils, à réapprovisionner, demandes d'achat). Prochains candidats : réglages, console.
+  fichier à `index.html` et à `FILES` dans `sw.js`. Déjà sortis : `js/vues/magasin.js`, `js/vues/reappro.js` (seuils, à réapprovisionner), `js/vues/achats.js` (circuit achats,
+  réception, isolés, valeur du stock). Prochains candidats : réglages, console.
 
 ## 7. Conduite de projet
 
@@ -264,7 +265,8 @@ Pièges opérationnels déjà rencontrés :
   insérer le texte via `setValue(...)` (pas de `\`, de backtick ni de `${`) ; confirmer « Run query » sur l'alerte « destructive » ; un
   `begin … rollback` n'est pas conservé → tester avec une fonction plpgsql temporaire qui nettoie, puis la
   supprimer ; la grille de résultats est virtualisée → agréger en une ligne (`jsonb_object_agg`).
-- Fenêtres de saisie de l'appli dans un onglet masqué : fermeture retardée par le navigateur → tester par
-  appels directs (`Sync.*`, `Store.*`) quand le panneau est caché.
+- Fenêtres de saisie de l'appli dans un onglet masqué : fermeture retardée par le navigateur. Contournement fiable :
+  remplir le formulaire, `form.requestSubmit()` puis `dialog.dispatchEvent(new Event('close'))` (le vrai code de
+  l'action s'exécute : contrôles, enregistrements, synchro).
 - Service worker : un onglet ancien peut bloquer l'évolution d'IndexedDB (géré : message + `onversionchange`).
 - E-mails Supabase par défaut : quelques-uns par heure, souvent en indésirables (Outlook).

@@ -144,3 +144,16 @@ test('V3 §14 : aide au seuil — 2 par semaine × 3 semaines de délai + 2 de s
   assert.equal(C.seuilIndicatif(2, 21, 2), 8);
   assert.equal(C.consommationHebdo([], A.id, S1, '2026-11-06'), 0);
 });
+
+test('montant commandé : lignes sans prix comptées à part, jamais à zéro', () => {
+  const a = { lignes: [{ qteCommandee: 10, prixUnitaire: 100 }, { qte: 2, prixUnitaire: 50, devise: 'MAD' }, { qteCommandee: 3 }, { qteCommandee: 1, prixUnitaire: 20, devise: 'EUR' }] };
+  assert.deepEqual(C.montantCommande(a), { montant: 1100, sansPrix: 2, complet: false });
+  assert.equal(C.montantCommande({ lignes: [] }).complet, true);
+});
+
+test('isolements en attente : décisions partielles déduites, isolement soldé retiré', () => {
+  const i1 = mv({ type: 'isolement', qte: 0, quantite: 3, le: '2026-11-02T08:00' }), i2 = mv({ type: 'isolement', qte: 0, quantite: 1, le: '2026-11-01T08:00' });
+  const m = [i1, i2, mv({ type: 'liberation', qte: 1, isolementId: i1.id }), mv({ type: 'disposition', qte: 0, quantite: 1, isolementId: i1.id, decision: 'rebut' }),
+    mv({ type: 'disposition', qte: 0, quantite: 1, isolementId: i2.id, decision: 'retour_fournisseur' })];
+  assert.deepEqual(C.isolementsEnAttente(m).map(x => [x.m.id, x.reste]), [[i1.id, 1]]);
+});

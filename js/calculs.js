@@ -336,6 +336,25 @@
   }
   const seuilIndicatif = (consoHebdo, delaiJours, securite) => Math.ceil(consoHebdo * (num(delaiJours) / 7) + num(securite));
 
+  /** Montant d'une commande externe (MAD HT) : lignes avec prix connu ; les lignes sans prix sont comptées à part. */
+  function montantCommande(achat) {
+    let montant = 0, sansPrix = 0;
+    for (const l of achat.lignes || []) {
+      const p = prixMAD(l), qc = num(l.qteCommandee ?? l.qte);
+      if (p == null) sansPrix++; else montant += qc * p;
+    }
+    return { montant, sansPrix, complet: sansPrix === 0 };
+  }
+
+  /** Pièces isolées en attente de décision, isolement par isolement (reste = isolé − libéré − sorti autrement). */
+  function isolementsEnAttente(mouvements) {
+    const dec = new Map();
+    for (const m of mouvements) if (m.isolementId && (m.type === 'liberation' || m.type === 'disposition'))
+      dec.set(m.isolementId, (dec.get(m.isolementId) || 0) + (m.type === 'liberation' ? num(m.qte) : num(m.quantite)));
+    return mouvements.filter(m => m.type === 'isolement').map(m => ({ m, reste: num(m.quantite) - (dec.get(m.id) || 0) })).filter(x => x.reste > 0)
+      .sort((x, y) => (x.m.le || '').localeCompare(y.m.le || ''));
+  }
+
   /** Coût consommé par un besoin : quantité utilisée × coût figé de ses remises (moyenne pondérée), null si inconnu. */
   function coutConsomme(besoin, mouvements, pieces, couts) {
     const rem = remisesDuBesoin(mouvements, besoin.id);
@@ -345,6 +364,6 @@
     return rapprochementBesoin(besoin, mouvements, pieces).utilise * cu;
   }
 
-  const Calculs = { consommationHebdo, seuilIndicatif, seuilActif, besoinsNonCouverts, receptionLigne, etatAchat, qteEnCommande, qteIsolee, situationArticle, aReapprovisionner, prixMAD, valorisation, coutConsomme, besoinsAServir, attentesALever, piecesDetenues, stockPhysique, qteReservee, stockDisponible, etatBesoin, rapprochementBesoin, retraitsAVerifier, qteRemise, addDays, daysBetween, minutesBetween, dureeUnion, mediane, NATURE_DU_BESOIN, ETAT_RANK, otOuvert, demandeOuverte, indexOtsParDemande, etatEquipement, verifierCloture, echeanceSuivante, indicateurs };
+  const Calculs = { montantCommande, isolementsEnAttente, consommationHebdo, seuilIndicatif, seuilActif, besoinsNonCouverts, receptionLigne, etatAchat, qteEnCommande, qteIsolee, situationArticle, aReapprovisionner, prixMAD, valorisation, coutConsomme, besoinsAServir, attentesALever, piecesDetenues, stockPhysique, qteReservee, stockDisponible, etatBesoin, rapprochementBesoin, retraitsAVerifier, qteRemise, addDays, daysBetween, minutesBetween, dureeUnion, mediane, NATURE_DU_BESOIN, ETAT_RANK, otOuvert, demandeOuverte, indexOtsParDemande, etatEquipement, verifierCloture, echeanceSuivante, indicateurs };
   if (typeof module === 'object' && module.exports) module.exports = Calculs; else root.Calculs = Calculs;
 })(this);
