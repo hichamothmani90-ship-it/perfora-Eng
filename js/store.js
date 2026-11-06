@@ -24,7 +24,19 @@ const Store = (() => {
       };
       r.onsuccess = () => res(r.result);
       r.onerror = () => rej(r.error);
+      // Un autre onglet (ancienne version) garde la base ouverte : l'évolution du stockage attend.
+      // On le dit au lieu de rester sur « Chargement… » ; l'ouverture reprend dès qu'il se ferme.
+      r.onblocked = () => {
+        const v = document.querySelector('#view');
+        if (v) v.innerHTML = '<div class="warn" style="margin-top:16px"><b>Mise à jour du stockage en attente.</b><br>L’appli est ouverte dans un autre onglet ou une autre fenêtre avec une ancienne version. Fermez ces autres onglets : cette page continuera toute seule. Vos données ne sont pas perdues.</div>';
+      };
     });
+    // Si une version plus récente s'ouvre ailleurs, on libère la base pour ne pas la bloquer.
+    db.onversionchange = () => {
+      db.close();
+      const v = document.querySelector('#view');
+      if (v) v.innerHTML = '<div class="warn" style="margin-top:16px"><b>Une version plus récente de l’appli est ouverte dans un autre onglet.</b><br><button class="btn primary" onclick="location.reload()">Recharger cette page</button></div>';
+    };
     for (const t of TYPES) {
       const all = await req(db.transaction(t).objectStore(t).getAll());
       data[t] = new Map(all.map(o => [o.id, o]));
