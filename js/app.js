@@ -409,6 +409,17 @@
       <div class="actions"><button class="btn" data-act="eq-new">+ Équipement</button><button class="btn" data-act="loc-new">+ Lieu</button><a class="btn" href="#/qr">Planche de QR codes</a></div>`;
   };
 
+  /** Adresse imprimée dans les QR : jamais une adresse locale (localhost, IP du PC),
+      sinon le téléphone ne peut pas l'ouvrir. Réglable dans Réglages. */
+  const ADRESSE_PAR_DEFAUT = 'https://hichamothmani90-ship-it.github.io/perfora-Eng/';
+  const estLocale = h => /^(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1\]?$)/.test(h) || h === '';
+  function adressePublique() {
+    const reglee = data.meta.get('adresse')?.url;
+    if (reglee) return reglee;
+    return estLocale(location.hostname) || location.protocol !== 'https:' ? ADRESSE_PAR_DEFAUT : location.origin + location.pathname;
+  }
+  const lienSignaler = e => `${adressePublique().replace(/#.*$/, '')}#/signaler?eq=${encodeURIComponent(e.code)}`;
+
   V.eq = r => {
     const e = data.equipements.get(r.id);
     if (!e) return empty('Équipement introuvable.');
@@ -419,7 +430,7 @@
     const hist = [...dems.map(d => ['d', d]), ...ots.map(o => ['o', o])].sort((a, b) => b[1].creeLe.localeCompare(a[1].creeLe));
     const progs = list('programmes').filter(p => p.equipementId === e.id);
     const conso = consoParArticle(ots.map(o => o.id));
-    const lien = `${location.origin}${location.pathname}#/signaler?eq=${encodeURIComponent(e.code)}`;
+    const lien = lienSignaler(e);
     return `<div class="row"><h1 class="grow">${esc(e.designation)}</h1>${badgeEtat(et)}</div>
       <div class="card"><dl class="kv"><dt>Code</dt><dd>${esc(e.code)}</dd><dt>Lieu</dt><dd>${esc(locPath(e.localisationId))}</dd>
         ${e.famille ? `<dt>Famille</dt><dd>${esc(e.famille)}</dd>` : ''}<dt>Criticité</dt><dd>${esc(e.criticite || '—')} / 4</dd></dl>
@@ -509,17 +520,15 @@
       <div class="card">${j.slice(0, 300).map(x => `<div class="journal-item"><b>${esc(L.entite[x.entite] || x.entite)} ${esc(refDe(x.entite, x.entiteId))}</b><br>${journalLine(x).replace('<div class="journal-item">', '').replace(/<\/div>$/, '')}</div>`).join('') || '<p class="muted">Journal vide.</p>'}</div>`;
   };
 
-  const lienSignaler = e => `${location.origin}${location.pathname}#/signaler?eq=${encodeURIComponent(e.code)}`;
   V.qr = r => {
     const lieu = r.q.get('lieu') || '', un = r.q.get('eq');
     let eqs = list('equipements').filter(e => e.actif !== false);
     if (un) eqs = eqs.filter(e => e.id === un);
     else if (lieu) eqs = eqs.filter(e => locPath(e.localisationId).startsWith(locPath(lieu)));
     eqs.sort((a, b) => locPath(a.localisationId).localeCompare(locPath(b.localisationId)) || a.designation.localeCompare(b.designation));
-    const local = /^(localhost|127\.|192\.168\.|10\.)/.test(location.hostname);
     return `<div class="no-print"><h1>Planche de QR codes</h1>
       <p class="small muted">Un QR par équipement : scanné avec l’appareil photo du téléphone, il ouvre « Signaler » sur cet équipement. Imprimez sur étiquettes ou papier, puis plastifiez.</p>
-      ${local ? '<p class="warn">Vous êtes sur une adresse locale : les QR pointeront vers ce PC. Imprimez-les depuis l’adresse en ligne (HTTPS) pour qu’ils marchent partout.</p>' : ''}
+      <p class="info">Les QR ouvrent : <b style="word-break:break-all">${esc(adressePublique())}</b> <a href="#/reglages">Modifier</a></p>
       <div class="row"><select class="grow" data-nav="#/qr?lieu=" style="flex:1"><option value="">Tous les lieux</option>${list('localisations').map(l => `<option value="${l.id}" ${l.id === lieu ? 'selected' : ''}>${esc(locPath(l.id))}</option>`).join('')}</select>
       <button class="btn primary" data-act="imprimer">Imprimer (${eqs.length})</button></div></div>
       <div class="qr-grid">${eqs.map(e => `<div class="qr-label">${QR.svg(lienSignaler(e), 132)}<div><b>${esc(e.designation)}</b><div class="small">${esc(e.code)}</div><div class="small muted">${esc(locPath(e.localisationId))}</div><div class="small">Scanner pour signaler</div></div></div>`).join('') || empty('Aucun équipement.')}</div>`;
@@ -537,6 +546,8 @@
       <h2>Cet appareil</h2><div class="card"><label class="f" style="margin-top:0">Qui utilise cet appareil ?</label>
         <select data-bind="meta|device|personneId"><option value="">— Choisir —</option>${list('personnes').filter(p => p.actif !== false).map(p => `<option value="${p.id}" ${dev.personneId === p.id ? 'selected' : ''}>${esc(p.nom)} (${esc(L.role[p.role])})</option>`).join('')}</select>
         <p class="small muted">Code appareil : <b>${esc(dev.code)}</b> (dans les références, évite les doublons entre appareils).<br>Hors ligne : ${esc(swState)}</p></div>
+      <h2>Adresse de l’application</h2><div class="card"><p class="small muted" style="margin-top:0">Adresse utilisée dans les QR codes. Elle doit être accessible depuis les téléphones (HTTPS).</p>
+        <input type="text" value="${esc(adressePublique())}" data-bind="meta|adresse|url" inputmode="url"></div>
       <h2>Personnes</h2><div class="card"><ul class="lines">${list('personnes').map(p => `<li><span class="grow">${esc(p.nom)} <span class="muted small">· ${esc(L.role[p.role])}${p.societe ? ' · ' + esc(p.societe) : ''}</span></span><button class="btn sm ghost" data-act="pers-edit" data-id="${p.id}">Modifier</button></li>`).join('') || '<li class="muted">Aucune personne.</li>'}</ul><button class="btn sm" data-act="pers-new">+ Personne</button></div>
       <h2>Lieux</h2><div class="card"><ul class="lines">${list('localisations').map(l => `<li><span class="grow">${esc(locPath(l.id))} <span class="muted small">· ${esc(l.code)}</span></span></li>`).join('') || '<li class="muted">Aucun lieu.</li>'}</ul><button class="btn sm" data-act="loc-new">+ Lieu</button></div>
       <h2>Sauvegarde et partage entre appareils</h2><div class="card"><p style="margin-top:0">Dernière sauvegarde : <b>${(s => s.depuis ? fmtY(s.depuis) + ` (${s.modifs} modification(s) depuis)` : 'jamais')(etatSauvegarde())}</b></p><p class="small muted">Exportez sur le téléphone, importez sur le PC (ou l’inverse) : les fiches sont fusionnées, la version la plus récente est gardée, rien n’est supprimé.</p>
@@ -612,6 +623,7 @@
     $('#thumbs').onclick = ev => { const b = ev.target.closest('[data-rm]'); if (b) { photos.splice(Number(b.dataset.rm), 1); showThumbs(); } };
     const pre = r.q.get('eq'); const preE = pre && byCode(pre);
     pick(preE ? preE.id : null);
+    if (pre && !preE) $('#dupl').innerHTML = `<p class="warn">Le QR désigne l’équipement <b>${esc(pre)}</b>, inconnu sur cet appareil. Les données ne sont pas encore partagées entre appareils : importez une sauvegarde du PC (Réglages → Importer), ou choisissez l’équipement ci-dessus.</p>`;
     form.addEventListener('change', () => {
       $('#quandAutre').classList.toggle('hidden', form.quand.value !== 'autre');
       $('#tiers').classList.toggle('hidden', form.origine.value !== 'tiers');
@@ -1072,7 +1084,11 @@
     if (el.type === 'checkbox' && el.closest('.chips')) v = [...el.closest('.chips').querySelectorAll('input:checked')].map(i => i.value);
     else if (el.type === 'checkbox') v = el.checked;
     else v = (el.value || '').trim() || null;
-    if (t === 'meta') { await Store.persistMeta({ ...data.meta.get(id), [field]: v }); render(); return; }
+    if (t === 'meta') {
+      const urlOk = u => { try { return /^https:\/\//.test(u) && !estLocale(new URL(u).hostname); } catch { return false; } };
+      if (id === 'adresse' && v && !urlOk(v)) { toast('Adresse refusée : elle doit commencer par https:// et ne pas être locale'); render(); return; }
+      await Store.persistMeta({ ...(data.meta.get(id) || {}), id, [field]: v }); render(); return;
+    }
     const rr = el.type === 'radio' || el.tagName === 'SELECT' || 'rerender' in el.dataset;
     await edit(t, id, { [field]: v }, { render: rr });
   });
