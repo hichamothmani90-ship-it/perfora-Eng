@@ -26,7 +26,24 @@ soient faites.
 | 1.4 | **Supervision** : erreurs de l'appli et refus du serveur remontés dans un onglet « Technique » du centre de contrôle ; alerte si le site ne répond plus | Savoir qu'un client est bloqué avant qu'il appelle | moi |
 | 1.5 | **Tests automatisés de bout en bout** (deux appareils, hors ligne puis retour du réseau, droits par rôle) lancés avant chaque publication | Les tests actuels sont surtout manuels dans le navigateur | moi |
 | 1.6 | **Mises à jour sans surprise** : réglage Cloudflare « Browser Cache TTL → Respect Existing Headers », message « nouvelle version » fiable, numéro de version visible | Le cache de 4 h de Cloudflare a déjà servi une ancienne console | toi (1 clic) + moi |
+| 1.0 | **Campagne de tests hors ligne** (en premier, demandée le 7 nov. 2026), sur vrais téléphones (Android et iPhone) et en automatique : voir le détail ci-dessous | Le hors ligne est la promesse de Perfora : il doit être prouvé, pas supposé | moi + toi (téléphones) |
 | 1.7 | **Volumes réalistes** : essai avec 2 000 équipements, 20 000 fiches et un téléphone d'entrée de gamme (chargement, recherche, synchronisation) | L'appli charge tout en mémoire : à mesurer avant un gros client | moi |
+
+### Détail de la campagne hors ligne (1.0)
+
+| Scénario | Résultat attendu |
+|---|---|
+| Ouvrir l'appli en mode avion (déjà installée) | L'appli s'ouvre, toutes les données du site sont là |
+| Signaler, démarrer et clôturer une intervention, prendre 3 photos, demander une pièce, saisir un relevé, tout en mode avion | Tout est enregistré sur le téléphone, compteur « en attente d'envoi » visible |
+| Retour du réseau | Envoi automatique, « ☁ À jour », rien de perdu ni en double |
+| Deux téléphones hors ligne modifient la même intervention, puis reviennent en ligne | Règle de fusion appliquée, aucune saisie perdue, l'historique montre les deux |
+| Réseau très faible (2G, coupures pendant l'envoi) | Pas de blocage ; reprise propre au prochain essai |
+| Téléphone éteint ou appli fermée pendant l'attente d'envoi | Les saisies sont toujours là au redémarrage, puis envoyées |
+| Saisie refusée par le serveur au retour (droits changés, intervention clôturée entre-temps) | Message clair, version du serveur rétablie, pas de boucle d'erreurs |
+| Plusieurs jours hors ligne (100 saisies et 30 photos en attente) | Envoi complet par lots, téléphone utilisable pendant l'envoi |
+| Session expirée pendant la période hors ligne | Reconnexion demandée sans perdre les saisies en attente |
+| Nouvelle version publiée pendant que le téléphone est hors ligne | Mise à jour proposée au retour, saisies en attente conservées |
+| iPhone : appli installée sur l'écran d'accueil, 8 jours sans ouverture | Données toujours présentes (et mesure de ce qui se passe sans installation) |
 
 ## 2. Phase « Sécurité » (S2 – S4) — priorité 2
 
