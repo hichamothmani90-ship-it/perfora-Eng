@@ -21,7 +21,7 @@ soient faites.
 | # | Chantier | Pourquoi | Qui |
 |---|---|---|---|
 | 1.1 | **Projet Supabase de production séparé** du projet actuel (qui devient la recette), avec **scripts SQL numérotés** (migrations) au lieu de scripts rejouables à passer dans un ordre précis | Aujourd'hui démo, tests et futurs clients partagent la même base ; un essai peut toucher un client | moi + toi (souscription) |
-| 1.2 | **Photos dans Supabase Storage** (fichiers) au lieu de la base, avec limite par pack | Les photos en base font grossir la synchronisation et la sauvegarde : premier risque de lenteur | moi |
+| 1.2 | **Fichiers joints dans Supabase Storage** (et non dans la base) : **photos et PDF** (factures d'énergie et d'eau, rapports de vérification réglementaire, certificats, notices, bons de livraison), taille limitée par fichier et quota par pack ; lecture restreinte pour les fichiers de coûts (factures) ; consultation hors ligne des fichiers déjà ouverts | Les fichiers en base font grossir la synchronisation et la sauvegarde : premier risque de lenteur ; les PDF sont indispensables aux factures (volet D) et aux contrôles réglementaires | moi |
 | 1.3 | **Sauvegarde quotidienne + test de restauration** documenté (offre Supabase Pro) | Sans test de restauration, une sauvegarde n'est qu'un espoir | moi + toi (offre) |
 | 1.4 | **Supervision** : erreurs de l'appli et refus du serveur remontés dans un onglet « Technique » du centre de contrôle ; alerte si le site ne répond plus | Savoir qu'un client est bloqué avant qu'il appelle | moi |
 | 1.5 | **Tests automatisés de bout en bout** (deux appareils, hors ligne puis retour du réseau, droits par rôle) lancés avant chaque publication | Les tests actuels sont surtout manuels dans le navigateur | moi |
@@ -87,6 +87,7 @@ nouvel utilisateur arrive sur une appli vide qui propose « Charger la démo ».
 
 | # | Chantier |
 |---|---|
+| 5.0 | **État énergie et eau (7 nov. 2026)** : calculs (D1) et serveur (D2, D2 bis) faits ; **aucun écran encore** : compteurs, relevés, consommations, factures et rapprochement arrivent en D3 – D5 ci-dessous. À avancer avant le pilote si le client pilote en a besoin (pack Entreprise). |
 | 5.1 | **D3** : relevés de compteurs sur le terrain (QR, hors ligne, contrôle immédiat), compteurs d'équipement et **préventif selon l'usage** (heures) |
 | 5.2 | **Classification du parc** à l'écran (catalogue, criticité A/B/C guidée, parent, réglementaire, écran « À classer ») |
 | 5.3 | **Inventaire du magasin** (prioritaire dans C bis), puis emplacement, conditionnement, liste des fournisseurs, achats non stockés |
