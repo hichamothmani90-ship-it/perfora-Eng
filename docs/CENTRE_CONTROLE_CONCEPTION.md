@@ -1,6 +1,9 @@
 # Centre de contrôle Perfora (administration de la plateforme) : proposition
 
-Statut : **proposition à valider** (6 nov. 2026). Rien n'est codé. Prolonge la console plateforme actuelle (clients,
+Statut : **validé le 6 nov. 2026** (5 choix acceptés). **CC1 fait (v26, 7 nov. 2026)** : `app.perfora.ma/console/`
+(`console/index.html`, `console.js`, `calculs_console.js` testé par `tests/console.test.js`), `supabase/centre_controle.sql`
+(fiches clients dans `pf_objets`, prix convenu / périodicité / remise / conditions sur `abonnements`, `pf_tarifs`) et
+`tests_centre_controle.sql` (9 tests conformes). Suite : CC2 (prospects, support, communication). Prolonge la console plateforme actuelle (clients,
 abonnements, démo, mise en service) et le cadrage du lancement (`CADRAGE_LANCEMENT.md` : E paiement, I parrainage,
 H installation, N parcours).
 
