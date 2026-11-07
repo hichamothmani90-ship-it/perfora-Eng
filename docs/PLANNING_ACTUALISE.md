@@ -125,7 +125,15 @@ nouvel utilisateur arrive sur une appli vide qui propose « Charger la démo ».
    à partir de 10 USD / mois) : sauvegardes quotidiennes conservées 7 jours, pas de mise en veille, 8 Go de base, support
    par e-mail. **Pas obligatoire techniquement, recommandé dès le premier client réel.** Plan : le projet de production en
    Pro ; la recette (démo, tests) dans une organisation gratuite (elle peut se mettre en veille, sans conséquence).
-   *En attente de ta souscription.*
+   **Décision du 7 nov. 2026 : démarrer gratuitement.** Deux projets gratuits (limite de l'offre : 2 projets actifs) :
+   recette (l'actuel) et production (créée avant le pilote). Ce que l'offre gratuite ne fournit pas, on le compense :
+   - **sauvegarde quotidienne automatique maison** : export chiffré de la base de production chaque nuit (tâche planifiée
+     dans un dépôt GitHub **privé**, mot de passe de la base et clé de chiffrement en secrets saisis par Hicham), conservée
+     30 jours, avec un test de restauration sur la recette ; l'export quotidien évite aussi la mise en veille après
+     7 jours sans activité ;
+   - limites à surveiller dans le centre de contrôle : base 500 Mo, fichiers 1 Go (≈ 9 000 photos), 5 Go de trafic / mois ;
+   - pas de refus des mots de passe compromis (offre Pro) : règle de longueur et MFA administrateur à la place.
+   Passage en Pro (25 USD / mois, un clic, sans migration) dès le premier client payant ou à 70 % d'une limite.
 2. **Pas d'inscription libre** : les essais sont ouverts par l'administrateur ; le site propose « Demander un essai »
    (prospect dans le centre de contrôle) et WhatsApp.
 3. **MFA** : obligatoire pour l'administrateur seulement.
