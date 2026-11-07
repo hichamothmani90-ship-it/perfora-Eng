@@ -8,8 +8,9 @@ const Store = (() => {
   // v5 (volet C) : stores « seuils », « achats », « valorisations ».
   // v6 (volet D) : stores « compteurs », « releves », « factures_energie », « parametres » (réglages de l'entreprise).
   // v7 (mise en service) : store « fournisseurs ».
+  // v8 (fichiers joints) : store « blobs » = contenu des photos et PDF, lu à la demande (jamais chargé en mémoire).
   // Les stores existants sont conservés tels quels.
-  const DB_VER = 7;
+  const DB_VER = 8;
   const TYPES = ['localisations', 'equipements', 'personnes', 'demandes', 'ots',
     'programmes', 'articles', 'mouvements', 'journal', 'meta', 'photos', 'sortie', 'besoins', 'seuils', 'achats', 'valorisations',
     'compteurs', 'releves', 'factures_energie', 'parametres', 'fournisseurs'];
@@ -30,6 +31,7 @@ const Store = (() => {
       const r = indexedDB.open(DB_NAME, DB_VER);
       r.onupgradeneeded = () => {
         for (const t of TYPES) if (!r.result.objectStoreNames.contains(t)) r.result.createObjectStore(t, { keyPath: 'id' });
+        if (!r.result.objectStoreNames.contains('blobs')) r.result.createObjectStore('blobs', { keyPath: 'id' });
       };
       r.onsuccess = () => res(r.result);
       r.onerror = () => rej(r.error);
@@ -217,6 +219,7 @@ const Store = (() => {
 
   /** Vide les données métier et la file d'envoi (changement d'entreprise), sans toucher aux réglages. */
   async function viderMetier() {
+    await blobsVider();
     for (const t of [...METIER, 'sortie']) {
       await new Promise((res, rej) => { const tx = db.transaction(t, 'readwrite'); tx.objectStore(t).clear(); tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
       data[t] = new Map();
@@ -224,7 +227,13 @@ const Store = (() => {
     // Les compteurs de références sont conservés : pas de doublon de référence sur cet appareil.
   }
 
+  // ---------- contenu des fichiers joints : { id (= id de la fiche photos), blob, envoye } ----------
+  const blobLire = id => req(db.transaction('blobs').objectStore('blobs').get(id));
+  const blobEcrire = rec => new Promise((res, rej) => { const tx = db.transaction('blobs', 'readwrite'); tx.objectStore('blobs').put(rec); tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
+  const blobsVider = () => new Promise((res, rej) => { const tx = db.transaction('blobs', 'readwrite'); tx.objectStore('blobs').clear(); tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
+
   async function wipe() {
+    await blobsVider();
     for (const t of TYPES) {
       await new Promise((res, rej) => { const tx = db.transaction(t, 'readwrite'); tx.objectStore(t).clear(); tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
       data[t] = new Map();
@@ -232,6 +241,6 @@ const Store = (() => {
     await persistMeta({ id: 'device', code: randomCode(), personneId: null });
   }
 
-  return { open, data, save, update, uid, now, nextRef, device, persistMeta, currentUser, currentUserName, exportAll, importAll, wipe,
+  return { open, data, save, update, uid, now, nextRef, device, persistMeta, currentUser, currentUserName, exportAll, importAll, wipe, blobLire, blobEcrire,
     cloudActif, surEcriture, fileEnvoi, retirerEnvoyes, toutEnvoyer, appliquerDistant, viderMetier, definirSite, SITE_TYPES };
 })();

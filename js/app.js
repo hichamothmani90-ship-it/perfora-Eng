@@ -5,7 +5,7 @@
 (() => {
   const { data } = Store;
   /** Version affichée dans Réglages : à incrémenter avec VERSION dans sw.js. */
-  const APP_VERSION = 'v30';
+  const APP_VERSION = 'v31';
   const $ = s => document.querySelector(s);
   // Multi-site : les listes de fiches de site ne montrent que le site actif (« tous » possible).
   // Les fiches sans site (anciennes ou pas encore synchronisées) restent visibles.
@@ -388,8 +388,54 @@
     return `<p class="warn">💾 ${s.depuis ? `Dernière sauvegarde il y a ${s.jours} j` : 'Aucune sauvegarde exportée'} · ${s.modifs} modification(s) présentes uniquement sur cet appareil. <a href="#" data-act="export">Exporter maintenant</a></p>`;
   }
 
-  // ---------- photos (compressées sur l'appareil, ~150 Ko) ----------
-  async function compresserPhoto(file, max = 1280, qualite = 0.72) {
+  // ---------- fichiers joints : photos (compressées sur l'appareil, ~150 Ko) et PDF (5 Mo max) ----------
+  // La fiche « photos » décrit le fichier (chemin, type, taille, nom) ; le contenu est gardé sur l'appareil (store blobs)
+  // puis déposé dans l'espace privé « fichiers » du serveur avant l'envoi de la fiche.
+  const PDF_MAX = 5 * 1024 * 1024;
+  const CATEGORIE_COUTS = ['factures_energie', 'achats', 'valorisations'];
+  /** Ajoute un fichier joint (File ou Blob) à une fiche. Rend la fiche créée. */
+  async function ajouterFichier(parentType, parentId, fichier, nom) {
+    const pdf = fichier.type === 'application/pdf' || /\.pdf$/i.test(nom || fichier.name || '');
+    if (pdf && fichier.size > PDF_MAX) throw new Error('PDF trop lourd (5 Mo maximum)');
+    const blob = pdf ? fichier : await compresserPhoto(fichier, 1280, 0.72, true);
+    const id = Store.uid(), mime = pdf ? 'application/pdf' : 'image/jpeg', ext = pdf ? 'pdf' : 'jpg';
+    const p = Sync.profil(), ent = p?.entreprise?.id;
+    const g = data[parentType]?.get(parentId);
+    const site = g?.siteId || (siteActif() && siteActif() !== 'tous' ? siteActif() : null);
+    const categorie = CATEGORIE_COUTS.includes(parentType) ? 'couts' : pdf ? 'documents' : 'photos';
+    const chemin = ent ? `${ent}/${site || 'commun'}/${categorie}/${id}.${ext}` : null; // sans compte : fichier gardé sur l'appareil
+    await Store.blobEcrire({ id, blob, envoye: false });
+    const f = { id, parentType, parentId, chemin, mime, taille: blob.size, nom: nom || fichier.name || (pdf ? 'document.pdf' : 'photo.jpg'), le: Store.now() };
+    await Store.save('photos', f);
+    return f;
+  }
+  /** Contenu d'un fichier joint : ancienne photo (dans la fiche), copie sur l'appareil, sinon téléchargement (gardé ensuite hors ligne). */
+  async function contenuFichier(p) {
+    if (p.dataUrl) return (await fetch(p.dataUrl)).blob();
+    const b = await Store.blobLire(p.id);
+    if (b?.blob) return b.blob;
+    if (!p.chemin) throw new Error('Fichier absent de cet appareil');
+    const blob = await Sync.lireFichier(p.chemin);
+    await Store.blobEcrire({ id: p.id, blob, envoye: true });
+    return blob;
+  }
+  const urlsFichiers = new Map();
+  async function urlFichier(p) {
+    if (p.dataUrl) return p.dataUrl;
+    if (!urlsFichiers.has(p.id)) urlsFichiers.set(p.id, URL.createObjectURL(await contenuFichier(p)));
+    return urlsFichiers.get(p.id);
+  }
+  /** Vignettes affichées après le rendu (chargement à la demande, hors ligne si déjà vues). */
+  function chargerVignettes() {
+    document.querySelectorAll('#view img[data-fichier]').forEach(img => {
+      const p = data.photos.get(img.dataset.fichier);
+      if (!p) return;
+      urlFichier(p).then(u => { img.src = u; img.classList.remove('attente'); }).catch(() => { img.alt = 'Photo non disponible hors ligne'; img.classList.add('absente'); });
+    });
+  }
+  const estPdf = p => p.mime === 'application/pdf';
+
+  async function compresserPhoto(file, max = 1280, qualite = 0.72, enBlob = false) {
     const url = URL.createObjectURL(file);
     try {
       const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
@@ -397,14 +443,16 @@
       const c = document.createElement('canvas');
       c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
       c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      if (enBlob) return await new Promise((res, rej) => c.toBlob(b => (b ? res(b) : rej(new Error('Image illisible'))), 'image/jpeg', qualite));
       return c.toDataURL('image/jpeg', qualite);
     } finally { URL.revokeObjectURL(url); }
   }
   const photosDe = id => list('photos').filter(p => p.parentId === id).sort((a, b) => a.le.localeCompare(b.le));
   function blocPhotos(type, id) {
-    const ph = photosDe(id);
-    return `<h2>Photos</h2><div class="card"><div class="thumbs">${ph.map(p => `<button type="button" data-act="photo-voir" data-id="${p.id}"><img src="${p.dataUrl}" alt="Photo du ${esc(fmt(p.le))}"></button>`).join('')}</div>
-      ${ph.length ? '' : '<p class="muted small" style="margin-top:0">Aucune photo.</p>'}<button class="btn sm" data-act="photo-ajout" data-type="${type}" data-id="${id}">📷 Ajouter une photo</button></div>`;
+    const ph = photosDe(id), images = ph.filter(p => !estPdf(p)), docs = ph.filter(estPdf);
+    return `<h2>Photos et documents</h2><div class="card"><div class="thumbs">${images.map(p => `<button type="button" data-act="photo-voir" data-id="${p.id}">${p.dataUrl ? `<img src="${p.dataUrl}" alt="Photo du ${esc(fmt(p.le))}">` : `<img class="attente" data-fichier="${p.id}" alt="Photo du ${esc(fmt(p.le))}">`}</button>`).join('')}</div>
+      ${docs.length ? `<ul class="lines">${docs.map(p => `<li><button type="button" class="btn sm ghost grow" style="justify-content:flex-start" data-act="photo-voir" data-id="${p.id}">📄 ${esc(p.nom || 'document.pdf')} <span class="muted small">· ${Math.max(1, Math.round((p.taille || 0) / 1024))} Ko · ${esc(fmt(p.le))}</span></button></li>`).join('')}</ul>` : ''}
+      ${ph.length ? '' : '<p class="muted small" style="margin-top:0">Aucune photo ni document.</p>'}<button class="btn sm" data-act="photo-ajout" data-type="${type}" data-id="${id}">📎 Ajouter une photo ou un PDF</button></div>`;
   }
 
   V.demandes = r => {
@@ -995,7 +1043,7 @@
       };
       if (v.jInterviens && me) Object.assign(d, { statut: 'prise_en_charge', priseEnChargePar: me.id, priseEnChargeLe: now });
       await Store.save('demandes', d);
-      for (const u of photos) await Store.save('photos', { id: Store.uid(), parentType: 'demandes', parentId: d.id, dataUrl: u, le: now });
+      for (const u of photos) await ajouterFichier('demandes', d.id, await (await fetch(u)).blob(), 'photo.jpg');
       if (v.jInterviens && me) {
         const o = await otDepuisDemande(d, true);
         toast(`${d.ref} enregistrée · ${o.ref} démarrée`);
@@ -1445,20 +1493,24 @@
   };
 
   A['photo-ajout'] = el => {
-    const inp = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/*' });
+    const inp = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/*,application/pdf' });
     inp.onchange = async () => {
       const f = inp.files[0]; if (!f) return;
       try {
-        await Store.save('photos', { id: Store.uid(), parentType: el.dataset.type, parentId: el.dataset.id, dataUrl: await compresserPhoto(f), le: Store.now() });
-        toast('Photo enregistrée sur l’appareil'); render();
-      } catch { toast('Image illisible'); }
+        const x = await ajouterFichier(el.dataset.type, el.dataset.id, f);
+        toast(estPdf(x) ? 'PDF enregistré sur l’appareil' : 'Photo enregistrée sur l’appareil'); render();
+      } catch (e) { toast(e.message || 'Fichier illisible'); }
     };
     inp.click();
   };
-  A['photo-voir'] = el => {
+  A['photo-voir'] = async el => {
     const p = data.photos.get(el.dataset.id);
+    let url;
+    try { url = await urlFichier(p); } catch (e) { toast(/introuvable|absent/i.test(e.message) ? e.message : 'Fichier non disponible hors ligne : réessayez avec du réseau'); return; }
     const d = document.createElement('dialog'); d.className = 'sheet';
-    d.innerHTML = `<form method="dialog"><img src="${p.dataUrl}" alt="" style="width:100%;border-radius:10px"><p class="small muted">${fmtY(p.le)} · ${esc(p.creePar)}</p><div class="sheet-actions"><button class="btn">Fermer</button></div></form>`;
+    d.innerHTML = `<form method="dialog">${estPdf(p) ? `<p style="margin-top:0">📄 <b>${esc(p.nom || 'document.pdf')}</b><br><span class="small muted">${Math.max(1, Math.round((p.taille || 0) / 1024))} Ko</span></p>
+        <a class="btn primary block" href="${url}" target="_blank" rel="noopener" download="${esc(p.nom || 'document.pdf')}">Ouvrir le PDF</a>`
+      : `<img src="${url}" alt="" style="width:100%;border-radius:10px">`}<p class="small muted">${fmtY(p.le)} · ${esc(p.creePar || '')}</p><div class="sheet-actions"><button class="btn">Fermer</button></div></form>`;
     document.body.append(d); d.addEventListener('close', () => d.remove()); d.showModal();
   };
   A.imprimer = () => window.print();
@@ -1757,6 +1809,7 @@
     const p = Sync.profil();
     if (p) $('#who').textContent = `👤 ${Store.currentUser()?.nom || p.nom || p.email} · ${L.role[p.role] || p.role}`;
     AFTER[R.name]?.(R);
+    chargerVignettes();
   }
 
   // ---------- événements globaux ----------

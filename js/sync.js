@@ -17,7 +17,7 @@ const Sync = (() => {
   const PROJET = { url: 'https://oihaqzkqhvyjybijsonc.supabase.co', cle: 'sb_publishable_Qpm_99-lOQOOJ5R__oyIcA_4nd7t3un' };
   const cfg = () => data.meta.get('cloud');
   async function requete(url, opts) {
-    const taille = typeof opts?.body === 'string' ? opts.body.length : 0;
+    const taille = typeof opts?.body === 'string' ? opts.body.length : opts?.body instanceof Blob ? opts.body.size : 0;
     const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), DELAI_MAX + Math.ceil(taille / OCTETS_PAR_SECONDE) * 1000);
     try { return await fetch(url, { ...opts, signal: ctl.signal }); }
     catch (e) { throw new Error(e.name === 'AbortError' ? 'Réseau trop lent (délai dépassé)' : 'Serveur injoignable (réseau)'); }
@@ -130,6 +130,37 @@ const Sync = (() => {
     return t ? JSON.parse(t) : null;
   }
 
+  // ---------- fichiers joints (Supabase Storage, espace privé « fichiers ») ----------
+  const BUCKET = 'fichiers';
+  /** Dépose le contenu d'un fichier joint (une seule fois : un dépôt déjà fait est accepté comme réussi). */
+  async function deposerFichier(chemin, blob, mime) {
+    const c = cfg();
+    const r = await requete(`${c.url}/storage/v1/object/${BUCKET}/${chemin}`, { method: 'POST', body: blob,
+      headers: { apikey: c.cle, Authorization: 'Bearer ' + await jeton(), 'Content-Type': mime || blob.type || 'application/octet-stream', 'x-upsert': 'false' } });
+    if (r.ok) return;
+    const t = await r.text();
+    if (/duplicate|already exists|409/i.test(t)) return;   // déjà déposé (réponse perdue la fois précédente)
+    let m = ''; try { m = JSON.parse(t).message || ''; } catch { /* texte brut */ }
+    throw new Error(`Fichier refusé : ${m || r.status}`);
+  }
+  /** Lit le contenu d'un fichier joint (Blob). */
+  async function lireFichier(chemin) {
+    const c = cfg();
+    const r = await requete(`${c.url}/storage/v1/object/authenticated/${BUCKET}/${chemin}`, { headers: { apikey: c.cle, Authorization: 'Bearer ' + await jeton() } });
+    if (!r.ok) throw new Error(r.status === 400 || r.status === 404 ? 'Fichier introuvable ou non autorisé' : `Fichier indisponible (${r.status})`);
+    return r.blob();
+  }
+  /** Avant d'envoyer la fiche d'un fichier joint, son contenu doit être déposé (sinon la fiche pointerait vers rien). */
+  async function deposerContenus(lot) {
+    for (const s of lot) {
+      if (s.type !== 'photos' || !s.patch?.chemin) continue;
+      const b = await Store.blobLire(s.rid);
+      if (!b || b.envoye) continue;
+      await deposerFichier(s.patch.chemin, b.blob, s.patch.mime);
+      await Store.blobEcrire({ ...b, envoye: true });
+    }
+  }
+
   // ---------- envoi puis réception ----------
   async function envoyer() {
     let n = 0;
@@ -142,6 +173,7 @@ const Sync = (() => {
         lot.push(s); octets += t;
       }
       if (!lot.length) return n;
+      await deposerContenus(lot);
       const rep = await api('/rest/v1/rpc/push_fiches', { method: 'POST', body: JSON.stringify({ lot: lot.map(s => ({ id: s.rid, type: s.type, patch: s.patch })) }) });
       const refus = (Array.isArray(rep?.refuses) ? rep.refuses : [])
         .map(r => ({ ...r, patch: lot.filter(s => s.rid === r.id).reduce((p, s) => ({ ...p, ...s.patch }), {}) }));
@@ -298,5 +330,5 @@ const Sync = (() => {
   // Annonces de la plateforme et demande au support (tout compte connecté).
   const mesAnnonces = () => rpc('mes_annonces');
   const supportCreer = (nature, sujet, message) => rpc('support_creer', { p_nature: nature, p_sujet: sujet, p_message: message });
-  return { PROJET, pf, mesAnnonces, supportCreer, profil, chargerProfil, equipe, definirProfil, utilisation, affecterSites, inviter, connecter, deconnecter, synchroniser, planifier, demarrer, etatCourant, lireLienEmail, sessionDepuisLien, changerMotDePasse, demanderLien };
+  return { PROJET, pf, mesAnnonces, supportCreer, lireFichier, profil, chargerProfil, equipe, definirProfil, utilisation, affecterSites, inviter, connecter, deconnecter, synchroniser, planifier, demarrer, etatCourant, lireLienEmail, sessionDepuisLien, changerMotDePasse, demanderLien };
 })();

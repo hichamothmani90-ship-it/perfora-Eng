@@ -20,7 +20,7 @@ soient faites.
 
 | Ordre | Étape | Pourquoi à cette place | Durée indicative |
 |---|---|---|---|
-| 1 | **Fichiers joints** (photos et PDF dans le stockage de fichiers) — 1.2 | Socle des relevés avec photo (D3) et des factures PDF (D4) | 3 – 4 jours |
+| 1 | ✅ **Fait (v31, 7 nov. 2026)** — **Fichiers joints** (photos et PDF dans le stockage de fichiers) — 1.2 | Socle des relevés avec photo (D3) et des factures PDF (D4) | 3 – 4 jours |
 | 2 | **D3 Terrain énergie** : compteurs (ressources et équipements), QR, relevés à faire, saisie hors ligne avec contrôle immédiat, préventif selon les heures | Le cœur de l'usage quotidien | 1 semaine |
 | 3 | **D4 Écran Énergie** : consommations avec couverture, relevés à examiner, factures (PDF + montants) et rapprochement, sous-comptages, « créer une demande » depuis un écart | Ce que voit le responsable | 1 semaine |
 | 4 | **D5** : démo énergie (VITRINE / Perfora Démo), guide, tests hors ligne des relevés | Montrer et vérifier | 2 – 3 jours |

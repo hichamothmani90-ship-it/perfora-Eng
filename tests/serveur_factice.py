@@ -30,6 +30,7 @@ FICHES_CLIENT = {}        # centre de contrôle (supabase/centre_controle.sql)
 #   portail  : une page HTML répond à la place de l'API (Wi-Fi d'hôtel non connecté)
 RESEAU = {"mode": "normal", "delai": 25, "n": 0, "octets_max": 0, "requetes": 0}
 OBJETS, ANNONCES, NUM_TICKET = {}, {}, [0]   # CC2 (supabase/centre_controle_cc2.sql)
+FICHIERS = {}   # espace « fichiers » (supabase/fichiers.sql) : chemin -> (octets, type)
 for _i, (_n, _c, _t) in enumerate([("Bienvenue", "client", "Bonjour {contact}, bienvenue sur Perfora ! Votre espace {entreprise} est prêt : {lien}."),
                                    ("Rappel d'échéance", "client", "Bonjour {contact}, l'abonnement de {entreprise} arrive à échéance le {fin} ({montant})."),
                                    ("Proposition de démo", "prospect", "Bonjour {contact}, je vous propose une démonstration de Perfora de 20 minutes.")]):
@@ -236,6 +237,21 @@ def importer(code, b):
     return 200, {"essai": essai, "acceptes": len(nouveau), "refus": refus, "resume": resume, "importe": importe}
 
 
+def fichier_autorise(email, nom, ecrire):
+    """Miroir de public.fichier_autorise : <entreprise>/<site|commun>/<photos|documents|couts>/<id>.<ext>."""
+    r, p = role_de(email), PROFILS.get(email)
+    d = nom.split("/")
+    if not r or not p or len(d) != 4 or d[0] != ENTREPRISES[p["entreprise"]]["id"]:
+        return False
+    if d[2] not in ("photos", "documents", "couts") or (d[2] == "couts" and r not in VOIT_COUTS):
+        return False
+    if d[1] != "commun" and d[1] not in mes_sites(email):
+        return False
+    if ecrire and (r == "pilote" or not droits(p["entreprise"])["ecriture"] or not re.match(r"^[A-Za-z0-9_-]{6,80}\.(jpg|jpeg|png|webp|pdf)$", d[3])):
+        return False
+    return True
+
+
 def nouvelle_session(email):
     a, r = secrets.token_hex(16), secrets.token_hex(16)
     jetons[a] = (email, time.time() + 3600)
@@ -249,7 +265,7 @@ class H(BaseHTTPRequestHandler):
 
     def cors(self):
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Headers", "apikey, authorization, content-type")
+        self.send_header("Access-Control-Allow-Headers", "apikey, authorization, content-type, x-upsert, cache-control")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
 
     def repondre(self, code, obj):
@@ -344,6 +360,19 @@ class H(BaseHTTPRequestHandler):
         email = self.utilisateur()
         if not email:
             return self.repondre(401, {"message": "JWT expired"})
+        if u.path.startswith("/storage/v1/object/fichiers/"):
+            nom = u.path.removeprefix("/storage/v1/object/fichiers/")
+            n = int(self.headers.get("Content-Length") or 0)
+            octets = self.rfile.read(n)
+            RESEAU["octets_max"] = max(RESEAU["octets_max"], n)
+            if not fichier_autorise(email, nom, True):
+                return self.repondre(400, {"statusCode": "403", "error": "Unauthorized", "message": "new row violates row-level security policy"})
+            if n > 10485760 or self.headers.get("Content-Type") not in ("image/jpeg", "image/png", "image/webp", "application/pdf"):
+                return self.repondre(400, {"statusCode": "415", "error": "invalid_mime_type", "message": "Type ou taille refusé"})
+            if nom in FICHIERS:
+                return self.repondre(400, {"statusCode": "409", "error": "Duplicate", "message": "The resource already exists"})
+            FICHIERS[nom] = (octets, self.headers.get("Content-Type"))
+            return self.repondre(200, {"Key": "fichiers/" + nom})
         if u.path == "/rest/v1/rpc/push_fiches":
             return self.push(email)
         if u.path == "/rest/v1/rpc/mes_annonces":
@@ -793,6 +822,18 @@ class H(BaseHTTPRequestHandler):
             return self.repondre(401, {"message": "JWT expired"})
         if u.path == "/auth/v1/user":
             return self.repondre(200, {"id": "u-" + email, "email": email})
+        if u.path.startswith("/storage/v1/object/authenticated/fichiers/"):
+            nom = u.path.removeprefix("/storage/v1/object/authenticated/fichiers/")
+            if nom not in FICHIERS or not fichier_autorise(email, nom, False):
+                return self.repondre(400, {"statusCode": "404", "error": "not_found", "message": "Object not found"})
+            octets, mime = FICHIERS[nom]
+            self.send_response(200)
+            self.cors()
+            self.send_header("Content-Type", mime)
+            self.send_header("Content-Length", str(len(octets)))
+            self.end_headers()
+            self.wfile.write(octets)
+            return
         if u.path == "/rest/v1/profils":
             moi = PROFILS[email]
             vis = [(e, p) for e, p in PROFILS.items() if p["entreprise"] == moi["entreprise"]] if role_de(email) == "responsable" else [(email, moi)]

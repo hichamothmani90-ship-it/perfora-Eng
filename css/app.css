@@ -228,3 +228,7 @@ body.ecran-connexion { padding-bottom: 24px; }
 .connexion { max-width: 420px; margin: 0 auto; }
 .connexion-marque { display: flex; gap: 12px; align-items: center; margin: 12px 0 18px; font-size: 1.1rem; }
 .btn.block { width: 100%; }
+
+/* Fichiers joints : vignette en cours de chargement ou absente hors ligne */
+.thumbs img.attente { background: var(--line); min-height: 64px; }
+.thumbs img.absente { background: var(--bg); outline: 1px dashed var(--line); }
