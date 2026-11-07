@@ -53,3 +53,9 @@ connexion faite, synchro « À jour ».
 | T8 | iPhone : même essai **sans** installer (dans Safari) | Noter ce qui est perdu (attendu : risque d'effacement) — sert au guide utilisateur |
 
 Résultat attendu à noter pour chaque test : OK / KO + capture d'écran en cas de KO.
+
+## 5. Résultat sur vrais téléphones (7 nov. 2026)
+
+Après correction du flux de connexion (v29 – v30 : écran de connexion à l'ouverture, démo séparée jamais envoyée,
+réinitialisation des démos), essai réussi sur téléphone par Hicham avec le compte technicien de test (VITRINE).
+Reste en cours : **T7** (iPhone, appli installée, 8 jours sans ouverture) — à vérifier vers le 15 nov. 2026.
