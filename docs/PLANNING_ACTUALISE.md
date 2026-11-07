@@ -6,44 +6,68 @@ soient faites.
 
 ## 0. Où on en est (7 nov. 2026, appli v35 sur app.perfora.ma)
 
-| Domaine | État |
-|---|---|
-| Socle multi-entreprise, sites, packs, quotas, rôles, invitations | ✅ volet A |
-| Magasin relié au terrain, achats, seuils, valorisation | ✅ volets B et C |
-| Parcours demande → intervention simplifié, clôture validée par le responsable | ✅ v23 – v24 |
-| Domaine perfora.ma, app.perfora.ma, HTTPS, e-mails en français (Resend) | ✅ phase 1 du cadrage |
-| Kit Excel de démarrage + page Mise en service (import vérifié, lots annulables) | ✅ v25 |
-| Centre de contrôle `app.perfora.ma/console/` : tableau de bord, clients, abonnements, prospects, support, communication, annonces | ✅ v26 – v27 (facturation CC3 : après le comptable) |
-| **Hors ligne** : 12 scénarios testés, 4 défauts corrigés (envoi par lots ≤ 350 Ko, session conservée sur portail Wi-Fi, voyant « Hors réseau », texte refusé affiché) ; essai sur vrai téléphone réussi | ✅ v28 (reste T7 : iPhone 8 jours, vers le 15 nov.) |
-| **Connexion** : écran de connexion à l'ouverture, démo séparée jamais envoyée, pas de question d'envoi pour un technicien ; serveur : refus d'une fiche sur un équipement inconnu ; démos DEMO et VITRINE réinitialisées | ✅ v29 – v30 |
-| **Fichiers joints** : photos et PDF dans l'espace privé « fichiers » de Supabase, hors ligne, droits par entreprise / site / coûts / rôle | ✅ v31 |
-| **Énergie et eau** : calculs (D1), serveur (D2, D2 bis), **terrain (D3)** : compteurs, QR, relevés à faire, contrôle immédiat, remplacement, relevés à examiner, préventif selon les heures avec index à la clôture | ✅ v32 |
-| **Écran Énergie et eau (D4)** : consommations avec couverture, sous-comptages, à examiner, factures d'énergie avec PDF et rapprochement, « créer une demande » depuis un écart | ✅ v33 |
-| **Démo énergie (D5)** dans la démo de l'appli, VITRINE et Perfora Démo ; guide ; relevés hors ligne testés | ✅ v34 — **volet D terminé** (bilan des cuves à l'écran : après le pilote) |
+**Fait** : socle multi-entreprise (volet A), magasin et achats (B, C), parcours demande → intervention, domaine
+perfora.ma, kit Excel et mise en service, centre de contrôle, hors ligne éprouvé (v28), écran de connexion et démo
+séparée (v29 – v30), fichiers joints photos et PDF (v31), **énergie et eau complètes** (v32 – v34), **séquence SQL de
+production et sauvegarde chiffrée testées** (étape 5), **sécurité** (v35 : double authentification de l'administrateur
+**activée le 7 nov.**, journal des actions, limites d'envoi, règles de mot de passe, remontée des erreurs).
 
-Tests : 90 tests de calcul (`node --test tests/*.test.js`), tests SQL rejoués sur Supabase à chaque script, scénarios
-navigateur avec le serveur factice (réseau simulé : `tests/reseau.py`).
+**État de santé (contrôle du 7 nov.)** : 90 tests de calcul, 13 fichiers de tests SQL conformes sur une base neuve,
+serveur factice conforme (sécurité 14/14, fichiers 13/13, énergie 36/36) ; schéma de la recette identique à celui que
+construit la séquence (62 fonctions) ; conseiller sécurité Supabase : **0 erreur** (41 avertissements acceptés :
+fonctions appelables par un compte connecté qui vérifient elles-mêmes rôle, entreprise et site ; 1 réservé à l'offre
+Pro) ; aucune fonction appelable sans compte ; aucune erreur remontée par les appareils ; base 13 Mo.
+Seul bruit en ligne : le script de statistiques Cloudflare, bloqué par la politique de sécurité (voir A6).
 
-## 0 bis. Chemin vers le pilote (énergie et eau avant le pilote ; offre Supabase gratuite au départ)
+## 0 bis. Plan actualisé jusqu'au pilote
 
-| Ordre | Étape | État | Durée indicative |
+### A. Préparatifs (Hicham, courts, à faire maintenant — détails dans docs/SECURITE.md et docs/PRODUCTION_ET_SAUVEGARDE.md)
+
+| # | Action | Durée | Débloque |
 |---|---|---|---|
-| 1 | Fichiers joints (photos et PDF) | ✅ v31 | — |
-| 2 | D3 Énergie sur le terrain | ✅ v32 | — |
-| 3 | D4 Écran Énergie et eau (bilan des cuves reporté) | ✅ v33 | — |
-| 4 | D5 démo énergie, guide, tests hors ligne | ✅ v34 | — |
-| 5 | Scripts SQL numérotés (`supabase/production/`, schéma reconstruit identique à la recette) + sauvegarde chiffrée et restauration testées en local ; reste : dépôt privé + secrets (Hicham) et premier lancement réel | ✅ 7 nov. (mise en place côté Hicham) | — |
-| 6 | Sécurité : MFA administrateur (vérifiée par le serveur), journal des actions (ajout seulement), limites d'envoi, règles de mot de passe, remontée des erreurs + onglet Technique (docs/SECURITE.md) ; reste côté Hicham : activer la MFA, compte admin séparé, réglage mot de passe, sonde de disponibilité | ✅ v35 | — |
-| 7 | **Production** (projet Supabase gratuit) construite par les scripts, tests de sécurité rejoués, app.perfora.ma branchée | **prochaine étape** (1 à 2 semaines avant le pilote) | 1 – 2 jours |
-| 8 | **Pilote** | CNDP déposée + client pilote prêt (côté Hicham) | 4 – 6 semaines |
+| A1 | Dépôt GitHub **privé** des sauvegardes + 4 secrets, premier lancement manuel | 20 min | sauvegarde de nuit, test de restauration réelle |
+| A2 | Supabase → Authentication → Email : mot de passe 10 caractères, lettres et chiffres | 2 min | ✅ appli (v35) ; réglage Supabase : toi (A2) |
+| A3 | Sonde de disponibilité gratuite (UptimeRobot) sur app.perfora.ma | 5 min | alerte si le site tombe |
+| A4 | Adresse d'administration dédiée (ex. admin@perfora.ma, qui reçoit le courrier) | 10 min | compte admin séparé (2.1) |
+| A5 | **Créer le projet Supabase de production** (gratuit, Frankfurt) et me le dire | 10 min | étape B |
+| A6 | Cloudflare : désactiver Web Analytics sur app.perfora.ma (garder sur perfora.ma si voulu) ; supprimer les clés Resend inutilisées | 5 min | ménage 2.7 |
 
-Reste de mon côté : la **production** (1 – 2 jours, dès que tu crées le projet) puis la revue de sécurité avant le premier client.
-**En parallèle (Hicham)** : dépôt GitHub privé des sauvegardes + 4 secrets (docs/PRODUCTION_ET_SAUVEGARDE.md §2), activer la double authentification dans la console, adresse admin dédiée, réglage mot de passe Supabase, sonde de disponibilité (docs/SECURITE.md), dépôt CNDP (bloquant pour les données réelles), choix du client pilote (pack Entreprise ou
-module énergie accordé), prix des packs, contrat simple, modèle de facture avec le comptable (pour CC3), test T7 iPhone.
+### B. Production (moi, 1 – 2 jours, dès A5)
 
-Après le pilote : CC3 facturation, CC4 Payzone, classification du parc à l'écran, C bis (inventaire, conditionnement,
-fournisseurs, achats non stockés), volet E (rapports, ratios de production), avertissement en cas de modification d'un
-même champ sur deux téléphones, langue arabe selon les retours du pilote.
+1. Construire la base avec `supabase/production/construire_base.sql`, contrôles de fin, empreinte comparée à la recette.
+2. Réglages Auth (adresse du site, modèles d'e-mail en français, SMTP Resend, mots de passe) ; fonction d'invitation
+   déployée (clé secrète saisie par toi) ; administrateur = adresse dédiée + double authentification.
+3. Tests d'étanchéité et de sécurité rejoués sur la production, puis fonctions de test supprimées ; sauvegarde de nuit
+   branchée sur la production et **restauration réelle testée** en local.
+4. **Décision à prendre à ce moment** : app.perfora.ma → production ; la recette (démos, tests) passe sur une adresse à
+   part (ex. recette.perfora.ma) avec sa propre configuration.
+
+### C. Avant le premier client (moi, 4 – 5 jours)
+
+| # | Chantier | Pourquoi avant le pilote |
+|---|---|---|
+| C1 | **Revue de sécurité** (2.6) : conseiller à 0 erreur sur la production, tentatives d'accès entre entreprises et sans compte, petit test d'intrusion | données réelles |
+| C2 | **Première connexion guidée** (3.2) : mot de passe → « Ajouter à l'écran d'accueil » (**indispensable sur iPhone**, §7.1) → site → visite de 3 écrans | les techniciens du pilote s'installent seuls |
+| C3 | **Mon compte** (3.6) : changer son mot de passe, se déconnecter de partout, nom et téléphone | autonomie, sécurité |
+| C4 | **Export complet des données d'un client** (4.6, réversibilité) | promesse contractuelle |
+| C5 | Test T7 iPhone (8 jours hors usage, vers le 15 nov.) : vérifier qu'aucune donnée ne se perd | avec Hicham |
+
+### D. Conditions du pilote (Hicham, en parallèle)
+
+Dépôt **CNDP** (bloquant pour des données réelles), client pilote choisi (pack Entreprise ou module énergie accordé),
+CGU / confidentialité / contrat simple, prix des packs (grille du centre de contrôle), modèle de facture avec le comptable.
+
+### E. Pilote (4 – 6 semaines, gratuit, un site)
+
+Mise en service avec le kit Excel, formation courte par rôle, point hebdomadaire (onglet Technique, demandes de
+support), corrections rapides, indicateurs avant / après, premier témoignage.
+
+### F. Après le pilote (selon les retours)
+
+CC3 facturation (après le comptable) puis CC4 Payzone ; invitation par WhatsApp (3.3), premiers pas du responsable (3.4),
+« Demander un essai » sur perfora.ma (3.5) ; classification du parc à l'écran ; inventaire du magasin (C bis) ; volet E
+(rapports mensuels, ratios de production) ; bilan des cuves ; avertissement si deux téléphones modifient le même champ ;
+aide intégrée ; langue arabe ; passage de la production en **Supabase Pro** dès le premier client payant (§8).
 
 ## 1. Phase « Stabilité » (S1 – S3) — priorité 1
 
@@ -78,13 +102,13 @@ même champ sur deux téléphones, langue arabe selon les retours du pilote.
 
 | # | Chantier | Qui |
 |---|---|---|
-| 2.1 | **Compte administrateur séparé** : ton compte plateforme ne doit plus être aussi responsable de l'entreprise « Perfora Démo » | moi + toi |
-| 2.2 | **Double authentification (MFA)** obligatoire pour l'administrateur, proposée aux responsables | ✅ v35 (moi) |
+| 2.1 | **Compte administrateur séparé** : ton compte plateforme ne doit plus être aussi responsable de l'entreprise « Perfora Démo » | toi (A4) puis moi (B2) |
+| 2.2 | **Double authentification (MFA)** obligatoire pour l'administrateur, proposée aux responsables | ✅ v35, **activée le 7 nov.** pour ton compte |
 | 2.3 | **Règles de mot de passe** dans Supabase : 10 caractères minimum, refus des mots de passe compromis (offre Pro), durée de session, confirmation d'e-mail | toi (réglages) + moi (guide) |
 | 2.4 | **Journal des actions de l'administrateur** (création d'entreprise, changement d'abonnement, import, annulation de lot) | ✅ v35 (moi) |
 | 2.5 | **Limites d'envoi** : invitations et demandes de support par heure et par entreprise (anti-abus) | ✅ v35 (moi) |
-| 2.6 | **Revue de sécurité** avant le premier client : conseiller sécurité Supabase à 0 erreur, tests d'étanchéité rejoués sur la production, petit test d'intrusion | moi |
-| 2.7 | **Ménage** : supprimer les clés Resend inutilisées, retirer le script Cloudflare Web Analytics bloqué par la politique de sécurité (ou l'autoriser), DMARC « quarantine » après quelques semaines d'envois | toi + moi |
+| 2.6 | **Revue de sécurité** avant le premier client : conseiller sécurité Supabase à 0 erreur, tests d'étanchéité rejoués sur la production, petit test d'intrusion | moi (C1) ; conseiller sur la recette : 0 erreur le 7 nov. |
+| 2.7 | **Ménage** : supprimer les clés Resend inutilisées, retirer le script Cloudflare Web Analytics bloqué par la politique de sécurité (ou l'autoriser), DMARC « quarantine » après quelques semaines d'envois | toi (A6) + moi |
 
 ## 3. Phase « Inscription et connexion » (S2 – S4) — priorité 3
 
@@ -94,11 +118,11 @@ nouvel utilisateur arrive sur une appli vide qui propose « Charger la démo ».
 | # | Chantier |
 |---|---|
 | 3.1 | ✅ **Fait (v29, 7 nov. 2026)** : écran de connexion à l'ouverture, démo séparée (« Découvrir la démo », jamais envoyée, effacée à la connexion), plus de question d'envoi pour les comptes non responsables. **Écran de connexion dès l'ouverture** : e-mail + mot de passe, « Recevoir un lien de connexion », « Mot de passe oublié », messages d'erreur clairs ; plus aucun champ technique (le serveur est fixé) |
-| 3.2 | **Première connexion guidée** après invitation : choix du mot de passe → « Ajouter à l'écran d'accueil » (indispensable sur iPhone, voir §6) → choix du site → courte visite de 3 écrans selon le rôle |
+| 3.2 | (avant le pilote : C2) **Première connexion guidée** après invitation : choix du mot de passe → « Ajouter à l'écran d'accueil » (indispensable sur iPhone, voir §6) → choix du site → courte visite de 3 écrans selon le rôle |
 | 3.3 | **Invitation par WhatsApp** en plus de l'e-mail (lien à usage unique, valable 24 h) : beaucoup de techniciens n'ouvrent pas leurs e-mails |
 | 3.4 | **Premiers pas du responsable** : liste à cocher (inviter l'équipe, imprimer les QR, vérifier les criticités, créer 3 programmes préventifs) |
 | 3.5 | **« Demander un essai »** sur perfora.ma : formulaire court qui crée un **prospect** dans le centre de contrôle (avec protection anti-robot), en plus du bouton WhatsApp. Pas d'inscription libre au départ : tu ouvres chaque essai toi-même (décision à confirmer) |
-| 3.6 | **Changer son mot de passe, se déconnecter de tous les appareils, gérer son profil** (nom, téléphone) |
+| 3.6 | (avant le pilote : C3) **Changer son mot de passe, se déconnecter de tous les appareils, gérer son profil** (nom, téléphone) |
 | 3.7 | **Transition des téléphones** de l'ancienne adresse github.io vers app.perfora.ma, puis fermeture de l'ancienne adresse |
 
 ## 4. Conformité et offre (S3 – S6, en parallèle, surtout toi)
@@ -116,11 +140,11 @@ nouvel utilisateur arrive sur une appli vide qui propose « Charger la démo ».
 
 | # | Chantier |
 |---|---|
-| 5.0 | **Énergie et eau : avancées avant le pilote** (décision du 7 nov. 2026) — voir §0 bis, étapes 2 à 4. Calculs (D1) et serveur (D2, D2 bis) faits. |
-| 5.1 | **D3** : relevés de compteurs sur le terrain (QR, hors ligne, contrôle immédiat), compteurs d'équipement et **préventif selon l'usage** (heures) |
+| 5.0 | ✅ **Énergie et eau** : D1 – D5 faits (v32 – v34) |
+| 5.1 | ✅ D3 (v32) : relevés sur le terrain, compteurs d'équipement, préventif selon l'usage |
 | 5.2 | **Classification du parc** à l'écran (catalogue, criticité A/B/C guidée, parent, réglementaire, écran « À classer ») |
 | 5.3 | **Inventaire du magasin** (prioritaire dans C bis), puis emplacement, conditionnement, liste des fournisseurs, achats non stockés |
-| 5.4 | **D4 – D5** : écrans Énergie (consommations, à examiner, factures, rapprochement), démo et guide |
+| 5.4 | ✅ D4 – D5 (v33 – v34) : écran Énergie, démo, guide |
 | 5.5 | **Aide intégrée** : guide court par rôle, vidéos de 1 minute, page d'aide accessible depuis l'appli |
 
 ## 6. Pilote et croissance (S6 et après)

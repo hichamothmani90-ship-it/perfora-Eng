@@ -77,6 +77,9 @@ S'ajoutent les limites de Supabase Auth (e-mails par heure, liens « mot de pass
 - Aucune fonction du schéma public appelable sans compte (contrôle dans `securite.sql`, `99_controles.sql`, l'empreinte).
 - Les fonctions de test ne sont jamais appelables par l'API (droits retirés à la création ; `drop` après usage).
 - Empreinte du schéma recette / base reconstruite : identique (62 fonctions, 7 nov. 2026).
+- Conseiller sécurité Supabase (recette, 7 nov.) : 0 erreur ; 42 avertissements = 41 fonctions appelables par un compte
+  connecté (acceptées : chaque fonction vérifie rôle, entreprise et site) + 1 réservé à l'offre Pro (mots de passe compromis).
+- Double authentification de l'administrateur **activée le 7 nov.** (facteur TOTP confirmé, obligatoire, trace au journal).
 
 Reste de la phase sécurité (§2 du planning) : revue avant le premier client (conseiller sécurité Supabase à 0 erreur,
 tests d'étanchéité rejoués sur la production, petit test d'intrusion) et ménage (clés Resend, DMARC).

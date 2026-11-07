@@ -30,8 +30,9 @@ multi-entreprise) et concepteur d'interfaces terrain mobile-first. Langue : fran
 
 3. ÉTAT (7 nov. 2026, appli **v35** sur app.perfora.ma) — **lire d'abord docs/PLANNING_ACTUALISE.md** (§0 « où on en est »,
    §0 bis « chemin vers le pilote », §8 décisions). Volet D (énergie et eau) **terminé** (docs/VOLET_D_CONCEPTION.md §7-11). Étapes 5 et 6 faites (docs/PRODUCTION_ET_SAUVEGARDE.md, docs/SECURITE.md).
-   Prochaine étape : **7 — production** (projet Supabase créé par Hicham, construit par supabase/production/construire_base.sql).
-   Administrateur : droits seulement en session « aal2 » (code d'application d'authentification) une fois la MFA activée ;
+   Plan à jour : PLANNING_ACTUALISE.md §0 bis (A préparatifs Hicham → B production → C avant le premier client → D/E pilote).
+   Prochaine étape : **B — production**, dès que Hicham a créé le projet Supabase de production (A5).
+   Administrateur : double authentification ACTIVÉE (7 nov.) : droits seulement en session « aal2 » (code de l'appli d'authentification) ;
    dans le SQL Editor, pour agir en administrateur : claims avec 'aal':'aal2'. Autres repères : docs/TESTS_HORS_LIGNE.md, docs/CENTRE_CONTROLE_CONCEPTION.md, docs/MISE_EN_SERVICE_CLIENT.md,
    docs/CLASSIFICATION_PARC.md, docs/DISCUSSION_MODELE_DONNEES.md.
    - Décisions récentes : offre Supabase gratuite au départ (2 projets : recette actuelle + production créée avant le
