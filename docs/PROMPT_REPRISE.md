@@ -29,8 +29,8 @@ multi-entreprise) et concepteur d'interfaces terrain mobile-first. Langue : fran
    Si tu as besoin d'un passage précis, demande à lire le fichier.
 
 3. ÉTAT (7 nov. 2026, appli **v34** sur app.perfora.ma) — **lire d'abord docs/PLANNING_ACTUALISE.md** (§0 « où on en est »,
-   §0 bis « chemin vers le pilote », §8 décisions). Volet D (énergie et eau) **terminé** (docs/VOLET_D_CONCEPTION.md §7-11). Prochaine étape :
-   **scripts SQL numérotés + sauvegarde quotidienne chiffrée + test de restauration** (PLANNING_ACTUALISE.md §0 bis, étape 5). Autres repères : docs/TESTS_HORS_LIGNE.md, docs/CENTRE_CONTROLE_CONCEPTION.md, docs/MISE_EN_SERVICE_CLIENT.md,
+   §0 bis « chemin vers le pilote », §8 décisions). Volet D (énergie et eau) **terminé** (docs/VOLET_D_CONCEPTION.md §7-11). Étape 5 faite (docs/PRODUCTION_ET_SAUVEGARDE.md : séquence
+   `supabase/production/`, sauvegarde chiffrée, restauration testée). Prochaine étape : **6 — sécurité** (PLANNING_ACTUALISE.md §0 bis). Autres repères : docs/TESTS_HORS_LIGNE.md, docs/CENTRE_CONTROLE_CONCEPTION.md, docs/MISE_EN_SERVICE_CLIENT.md,
    docs/CLASSIFICATION_PARC.md, docs/DISCUSSION_MODELE_DONNEES.md.
    - Décisions récentes : offre Supabase gratuite au départ (2 projets : recette actuelle + production créée avant le
      pilote, sauvegarde maison) ; pas d'inscription libre (essais ouverts par l'administrateur) ; MFA administrateur
@@ -55,7 +55,8 @@ multi-entreprise) et concepteur d'interfaces terrain mobile-first. Langue : fran
      (site, dépôt perfora-site) en ligne ; DNS chez Cloudflare (docs/MISE_EN_LIGNE_PERFORA_MA.md). E-mails pro en place (contact@ → Gmail ; envois Supabase par Resend depuis no-reply@perfora.ma). Ensuite volet D (énergie et eau). Ou mise
      en production (docs/RECETTE_VOLET_A.md §4). Démo VITRINE à réinitialiser une fois (nouvelles données magasin).
    - Supabase « gmao-terrain » (réf. oihaqzkqhvyjybijsonc, Frankfurt). Scripts dans l'ordre :
-     schema.sql → roles.sql → multitenant.sql → quotas.sql → plateforme.sql → durcissement.sql → magasin.sql → achats.sql → energie.sql → mise_en_service.sql → centre_controle.sql → centre_controle_cc2.sql → references.sql → fichiers.sql → demo.sql → demo_energie.sql (généré : python scripts/generer_demo_energie.py) ; tests : tests_etancheite, tests_quotas, tests_plateforme, tests_magasin, tests_demo, tests_achats, tests_energie, tests_mise_en_service, tests_centre_controle, tests_centre_controle_cc2, tests_references, tests_fichiers ;
+     schema.sql → roles.sql → multitenant.sql → quotas.sql → plateforme.sql → durcissement.sql → magasin.sql → achats.sql → energie.sql → mise_en_service.sql → centre_controle.sql → centre_controle_cc2.sql → references.sql → fichiers.sql → demo.sql → demo_energie.sql (généré : python scripts/generer_demo_energie.py) ; séquence unique pour une base neuve :
+     supabase/production/construire_base.sql (générée : python scripts/assembler_sql.py ; --verifier avant un commit) ; tests : tests_etancheite, tests_quotas, tests_plateforme, tests_magasin, tests_demo, tests_achats, tests_energie, tests_mise_en_service, tests_centre_controle, tests_centre_controle_cc2, tests_references, tests_fichiers ;
      Edge Function supabase/functions/inviter. Entreprises : DEMO « Perfora Démo » (Site Tanger, pack Pro ;
      othmanihicham99@gmail.com responsable + administrateur plateforme ; hothmani36@outlook.fr magasinier)
      et VITRINE « Vitrine Perfora » (démo réinitialisable, **pack Entreprise** depuis le 6 nov. 2026 pour montrer les achats,
@@ -84,8 +85,8 @@ multi-entreprise) et concepteur d'interfaces terrain mobile-first. Langue : fran
    - Commits en français, terminés par la ligne Co-Authored-By habituelle.
 
 5. VOLET À TRAITER MAINTENANT :
-   Scripts SQL numérotés (une seule séquence propre pour construire la production) + sauvegarde quotidienne chiffrée vers
-   un dépôt GitHub PRIVÉ (secrets saisis par Hicham) + test de restauration.
+   Étape 6 — sécurité : compte administrateur séparé + MFA, règles de mot de passe, journal des actions administrateur,
+   limites d'envoi, supervision des erreurs et du stockage dans le centre de contrôle.
    Commence par me proposer le modèle de données, les règles serveur et le découpage en étapes,
    en citant les sections V3 concernées, puis attends ma validation.
 ```

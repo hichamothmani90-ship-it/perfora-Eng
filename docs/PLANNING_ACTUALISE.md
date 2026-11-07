@@ -32,13 +32,13 @@ navigateur avec le serveur factice (réseau simulé : `tests/reseau.py`).
 | 2 | D3 Énergie sur le terrain | ✅ v32 | — |
 | 3 | D4 Écran Énergie et eau (bilan des cuves reporté) | ✅ v33 | — |
 | 4 | D5 démo énergie, guide, tests hors ligne | ✅ v34 | — |
-| 5 | **Scripts SQL numérotés** (une seule séquence propre) + **sauvegarde quotidienne maison chiffrée** (dépôt GitHub privé) + test de restauration | **prochaine étape** | 3 – 4 jours |
-| 6 | **Sécurité** : compte administrateur séparé + MFA, règles de mot de passe, journal des actions administrateur, limites d'envoi, supervision des erreurs et du stockage dans le centre de contrôle | à faire | 1 semaine |
+| 5 | Scripts SQL numérotés (`supabase/production/`, schéma reconstruit identique à la recette) + sauvegarde chiffrée et restauration testées en local ; reste : dépôt privé + secrets (Hicham) et premier lancement réel | ✅ 7 nov. (mise en place côté Hicham) | — |
+| 6 | **Sécurité** : compte administrateur séparé + MFA, règles de mot de passe, journal des actions administrateur, limites d'envoi, supervision des erreurs et du stockage dans le centre de contrôle | **prochaine étape** | 1 semaine |
 | 7 | **Production** (projet Supabase gratuit) construite par les scripts, tests de sécurité rejoués, app.perfora.ma branchée | 1 à 2 semaines avant le pilote | 1 – 2 jours |
 | 8 | **Pilote** | CNDP déposée + client pilote prêt (côté Hicham) | 4 – 6 semaines |
 
-Reste environ **2 semaines de travail** de mon côté avant le pilote (scripts et sauvegarde → sécurité → production).
-**En parallèle (Hicham)** : dépôt CNDP (bloquant pour les données réelles), choix du client pilote (pack Entreprise ou
+Reste environ **1 semaine et demie de travail** de mon côté avant le pilote (sécurité → production).
+**En parallèle (Hicham)** : dépôt GitHub privé des sauvegardes + 4 secrets (docs/PRODUCTION_ET_SAUVEGARDE.md §2), dépôt CNDP (bloquant pour les données réelles), choix du client pilote (pack Entreprise ou
 module énergie accordé), prix des packs, contrat simple, modèle de facture avec le comptable (pour CC3), test T7 iPhone.
 
 Après le pilote : CC3 facturation, CC4 Payzone, classification du parc à l'écran, C bis (inventaire, conditionnement,

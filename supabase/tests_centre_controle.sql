@@ -50,4 +50,4 @@ begin
   n:=9; test:='nettoyage'; r := jsonb_build_object('entreprises', (select string_agg(code, ', ') from entreprises)); return next;
 end $$;
 select jsonb_object_agg(n::text || ' ' || test, r)::text as resultats from public.gmao_test_cc();
--- Puis : drop function if exists public.gmao_test_cc();
+-- Puis, OBLIGATOIREMENT (sinon la fonction reste appelable par l'API) : drop function if exists public.gmao_test_cc();

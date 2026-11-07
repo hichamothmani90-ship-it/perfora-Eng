@@ -14,10 +14,11 @@ Console plateforme (comme supabase/plateforme.sql) : rpc/pf_* ; test@gmao.test e
 Lancer : python tests/serveur_factice.py [port]   (8099 par défaut). Données en mémoire."""
 import json, re, secrets, sys, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, unquote
 
 PORT = next((int(a) for a in sys.argv[1:] if a.isdigit()), 8099)
 CLE = "cle-factice"
+CLE_SERVICE = "cle-service-factice"   # clé secrète du projet (sauvegarde des fichiers joints : scripts/sauvegarde/fichiers.py)
 APPEND_ONLY = {"journal", "mouvements", "photos"}
 TYPES = {"localisations", "equipements", "personnes", "demandes", "ots", "programmes", "articles", "mouvements", "journal", "photos", "besoins", "seuils", "achats", "valorisations", "compteurs", "releves", "factures_energie", "parametres", "fournisseurs"}
 COMMUNS = {"personnes", "articles", "parametres", "fournisseurs"}
@@ -323,10 +324,33 @@ class H(BaseHTTPRequestHandler):
         return e[0] if e and e[1] > time.time() else None
 
     # ---------- POST ----------
+    def service(self):
+        """Appel avec la clé secrète du projet (sauvegarde) : tous les droits sur l'espace « fichiers »."""
+        return self.headers.get("apikey") == CLE_SERVICE and self.headers.get("Authorization") == "Bearer " + CLE_SERVICE
+
     def do_POST(self):
         if self.reseau_coupe():
             return
         u = urlparse(self.path)
+        if self.service() and u.path == "/storage/v1/object/list/fichiers":
+            b = self.corps()
+            pre = (b.get("prefix") or "").strip("/")
+            enfants = {}
+            for nom in sorted(FICHIERS):
+                if pre and not nom.startswith(pre + "/"):
+                    continue
+                reste = nom[len(pre) + 1:] if pre else nom
+                tete, _, suite = reste.partition("/")
+                enfants[tete] = {"name": tete, "id": None if suite else "f-" + nom}
+            lot = list(enfants.values())[int(b.get("offset") or 0):][:int(b.get("limit") or 100)]
+            return self.repondre(200, lot)
+        if self.service() and u.path.startswith("/storage/v1/object/fichiers/"):
+            nom = unquote(u.path.removeprefix("/storage/v1/object/fichiers/"))
+            octets = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            if nom in FICHIERS:
+                return self.repondre(400, {"statusCode": "409", "error": "Duplicate", "message": "The resource already exists"})
+            FICHIERS[nom] = (octets, self.headers.get("Content-Type"))
+            return self.repondre(200, {"Key": "fichiers/" + nom})
         if u.path == "/auth/v1/token":
             if self.headers.get("apikey") != CLE:
                 return self.repondre(401, {"message": "Invalid API key"})
@@ -810,6 +834,17 @@ class H(BaseHTTPRequestHandler):
         if self.reseau_coupe():
             return
         u = urlparse(self.path)
+        if self.service() and u.path.startswith("/storage/v1/object/authenticated/fichiers/"):
+            nom = unquote(u.path.removeprefix("/storage/v1/object/authenticated/fichiers/"))
+            if nom not in FICHIERS:
+                return self.repondre(400, {"statusCode": "404", "error": "not_found", "message": "Object not found"})
+            octets, mime = FICHIERS[nom]
+            self.send_response(200)
+            self.send_header("Content-Type", mime or "application/octet-stream")
+            self.send_header("Content-Length", str(len(octets)))
+            self.end_headers()
+            self.wfile.write(octets)
+            return
         if u.path == "/etat":
             with verrou:
                 par = {}

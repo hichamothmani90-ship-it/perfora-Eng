@@ -1,0 +1,19 @@
+Séquence de construction d'une base Perfora neuve (générée par scripts/assembler_sql.py)
+
+01_schema.sql                supabase/schema.sql  sha256:fa48df188f3c8239
+02_roles.sql                 supabase/roles.sql  sha256:b24732eb200b2488
+03_multitenant.sql           supabase/multitenant.sql  sha256:82fc83cbdfaf1cf6
+04_quotas.sql                supabase/quotas.sql  sha256:d71d058d79dbab3c
+05_plateforme.sql            supabase/plateforme.sql  sha256:71ba3cdbc0aac34f
+06_durcissement.sql          supabase/durcissement.sql  sha256:89506e1ee37bfa6a
+07_magasin.sql               supabase/magasin.sql  sha256:9ec381d44a2c2442
+08_achats.sql                supabase/achats.sql  sha256:bec7170b8c2dd45c
+09_energie.sql               supabase/energie.sql  sha256:c790cb7436e182ad
+10_mise_en_service.sql       supabase/mise_en_service.sql  sha256:6c8c210c16e06f31
+11_centre_controle.sql       supabase/centre_controle.sql  sha256:d914ec7cc7249993
+12_centre_controle_cc2.sql   supabase/centre_controle_cc2.sql  sha256:8310155231f61cca
+13_references.sql            supabase/references.sql  sha256:10bd4e33877e7825
+14_fichiers.sql              supabase/fichiers.sql  sha256:6a2a3f29721b1996
+15_demo.sql                  supabase/demo.sql  sha256:8e724fa0fbc29b27
+16_demo_energie.sql          supabase/demo_energie.sql  sha256:7d45dd219704c0d0
+99_controles.sql             (contrôles de fin, généré)

@@ -1,0 +1,58 @@
+# Perfora — sauvegarde quotidienne chiffrée.
+# À COPIER dans le dépôt GitHub PRIVÉ des sauvegardes, sous .github/workflows/sauvegarde.yml
+# (jamais dans le dépôt public de l'appli). Procédure : docs/PRODUCTION_ET_SAUVEGARDE.md.
+# Secrets du dépôt privé (saisis par Hicham : Settings → Secrets and variables → Actions) :
+#   SUPABASE_DB_URL       chaîne « Session pooler » du projet (avec le mot de passe de la base)
+#   SUPABASE_URL          https://<projet>.supabase.co
+#   SUPABASE_SERVICE_KEY  clé secrète du projet (lecture des fichiers joints) — ne va JAMAIS dans l'appli
+#   BACKUP_PASSPHRASE     phrase de chiffrement (20 caractères et plus), gardée aussi hors de GitHub
+name: Sauvegarde Perfora
+on:
+  schedule:
+    - cron: "15 1 * * *"      # chaque nuit, 02:15 heure du Maroc (UTC+1)
+  workflow_dispatch: {}
+permissions:
+  contents: write
+concurrency: sauvegarde
+jobs:
+  sauvegarde:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Refuser un dépôt public
+        if: ${{ !github.event.repository.private }}
+        run: echo "Ce dépôt est public : sauvegarde refusée." && exit 1
+      - uses: actions/checkout@v4
+      - name: Scripts de sauvegarde (dépôt de l'appli)
+        uses: actions/checkout@v4
+        with:
+          repository: hichamothmani90-ship-it/perfora-Eng
+          path: appli
+          sparse-checkout: scripts/sauvegarde
+      - name: Client PostgreSQL 17
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSo /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client-17
+      - name: Sauvegarder
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          PHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+          PG_BIN: /usr/lib/postgresql/17/bin
+          SORTIE: sauvegardes
+        run: bash appli/scripts/sauvegarde/sauvegarder.sh
+      - name: Garder 30 jours + le premier de chaque mois
+        run: |
+          cd sauvegardes
+          ls perfora-*.tar.gz.gpg | sort -r | tail -n +31 | while read f; do
+            case "$f" in perfora-????-??-01-*) ;; *) git rm -q --ignore-unmatch "$f" "$f.sha256"; rm -f "$f" "$f.sha256" ;; esac
+          done
+      - name: Enregistrer
+        run: |
+          git config user.name "sauvegarde-perfora"
+          git config user.email "sauvegarde@users.noreply.github.com"
+          git add sauvegardes
+          git commit -q -m "Sauvegarde $(date -u +%Y-%m-%d)" && git push -q
