@@ -119,11 +119,19 @@ nouvel utilisateur arrive sur une appli vide qui propose « Charger la démo ».
    attente.
 9. **Comptes de test** sur la base actuelle (`test@`, `tech2@`…) : à ne pas recréer en production.
 
-## 8. Décisions à prendre (toi)
+## 8. Décisions (7 nov. 2026)
 
-1. Souscrire **Supabase Pro** pour la production (sauvegardes, mots de passe compromis, pas de mise en veille) : maintenant
-   ou au premier pilote ? (recommandé : maintenant, pour la phase 1)
-2. **Inscription libre** (essai créé automatiquement) ou **essais ouverts par toi** (recommandé au départ) ?
-3. **MFA** : obligatoire pour toi seul, ou aussi pour les responsables ?
-4. **Langue arabe** : à prévoir dans l'année ou non ?
-5. Date visée pour le **premier pilote** : elle fixe l'ordre fin des phases 1 à 3.
+1. **Supabase Pro** : 25 USD / mois (prix relevé sur supabase.com le 7 nov. 2026 ; 1 projet inclus, projet supplémentaire
+   à partir de 10 USD / mois) : sauvegardes quotidiennes conservées 7 jours, pas de mise en veille, 8 Go de base, support
+   par e-mail. **Pas obligatoire techniquement, recommandé dès le premier client réel.** Plan : le projet de production en
+   Pro ; la recette (démo, tests) dans une organisation gratuite (elle peut se mettre en veille, sans conséquence).
+   *En attente de ta souscription.*
+2. **Pas d'inscription libre** : les essais sont ouverts par l'administrateur ; le site propose « Demander un essai »
+   (prospect dans le centre de contrôle) et WhatsApp.
+3. **MFA** : obligatoire pour l'administrateur seulement.
+4. **Langues** : français au lancement ; l'arabe (interface de droite à gauche) décidé après le pilote selon les
+   retours des techniciens ; l'anglais à la demande d'un client. L'appli prépare dès maintenant la traduction (textes
+   regroupés) pour que l'ajout ne coûte pas une réécriture.
+5. **Premier pilote : au plus tôt.** Chemin le plus court vers le pilote : tests hors ligne → production séparée +
+   sauvegardes → photos en fichiers → écran de connexion → MFA administrateur → revue de sécurité ; **et, de ton côté,
+   le dépôt CNDP**, indispensable avant de saisir les données réelles d'un client.
