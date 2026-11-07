@@ -122,7 +122,7 @@ test('S07 : essai échoué (non résolu) sans suite = clôture refusée', () => 
 test('S07 : fin d’arrêt inconnue = aucune durée inventée', () => {
   const o = ot({ equipementId: 'P', nature: 'corrective', avecArret: 'oui', arretDebut: '2026-11-03T08:00', arretFin: null });
   const I = ind({ ots: [o] });
-  assert.deepEqual(I.arrets, { faits: 1, faitsBornes: 0, dureeConnue: null });
+  assert.deepEqual(I.arrets, { faits: 1, faitsBornes: 0, dureeConnue: null, nonPlanifies: 1, nonPlanifiesBornes: 0, planifies: 0 });
 });
 
 test('S07 : fin d’arrêt avant le début refusée', () => {

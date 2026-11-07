@@ -29,6 +29,12 @@
 
   // ---------- règles ----------
   /** Le besoin oriente la nature proposée ; « planifié » ne veut jamais dire préventif. */
+  /** Signalement allégé (R2) : l'état choisi remplit état, impact et besoin. */
+  const ETAT_SIGNALE = {
+    arret: { etat: 'indisponible', impact: 'interrompu', besoin: 'corriger' },
+    mal: { etat: 'degrade', impact: 'reduit', besoin: 'corriger' },
+    verifier: { etat: 'anomalie', impact: 'aucun_constate', besoin: 'verifier' },
+  };
   const NATURE_DU_BESOIN = { corriger: 'corrective', verifier: 'a_qualifier', entretien: 'preventive', serie: 'assistance_production', demarrage: 'assistance_production', derive: 'a_qualifier', travaux: 'travaux_techniques', autre: 'a_qualifier' };
   const ETAT_RANK = { indisponible: 0, degrade: 1, anomalie: 2, inconnu: 3, normal: 4 };
   const ETATS_DEFAUT = ['indisponible', 'degrade', 'anomalie'];
@@ -56,14 +62,35 @@
   }
 
   /** Conditions de clôture (V3 §31 « obligatoire au bon moment »). Retourne la liste des manques. */
+  // ---------- lot R2 : qualification proposée / validée, type d'arrêt ----------
+  /** Qualification effective. Une intervention sans le champ qualificationValidee (antérieure à R2, ou créée par le
+      responsable) est considérée validée ; sinon la nature proposée par le technicien sert en attendant la validation. */
+  function qualification(o) {
+    const validee = o.qualificationValidee !== false;
+    const nature = validee ? (o.nature || 'a_qualifier') : (o.natureProposee || o.nature || 'a_qualifier');
+    const priorite = validee ? (o.priorite || 'a_qualifier') : (o.prioriteProposee || o.priorite || 'a_qualifier');
+    return { nature, priorite, validee };
+  }
+  const ARRET_PLANIFIE = ['preventive', 'travaux_techniques'];
+  /** Type proposé selon la nature : préventive, travaux → planifié ; le reste → non planifié. */
+  const typeArretPropose = nature => ARRET_PLANIFIE.includes(nature) ? 'planifie' : 'non_planifie';
+  /** Type d'arrêt effectif (null sans arrêt) ; déduit de la nature s'il n'a pas été choisi (interventions antérieures). */
+  function typeArret(o) {
+    if (o.avecArret !== 'oui') return null;
+    return o.arretType || typeArretPropose(qualification(o).nature);
+  }
+  /** À qualifier par le responsable : qualification proposée, pas encore validée (interventions non annulées). */
+  const aQualifier = o => o.qualificationValidee === false && o.statut !== 'annulee';
+
   function verifierCloture(o) {
     const err = [];
     const ouvertes = (o.reserves || []).filter(r => r.statut === 'ouverte');
-    if (o.nature === 'a_qualifier') err.push('Qualifier la nature (corrective, préventive…).');
+    if (qualification(o).nature === 'a_qualifier') err.push('Qualifier la nature (corrective, préventive…).');
     if (!o.resultat) err.push('Indiquer le résultat du travail.');
     if (['partiel', 'non_resolu'].includes(o.resultat) && !ouvertes.length) err.push('Résultat partiel ou non résolu : ajouter une suite avec responsable.');
     if (ouvertes.some(r => r.bloquante)) err.push('Une réserve bloquante est encore ouverte.');
     if (o.arretDebut && o.arretFin && o.arretFin < o.arretDebut) err.push('La fin d’arrêt précède le début.');
+    if (typeArret(o) === 'non_planifie' && !o.arretFin && !o.arretHeuresInconnues) err.push('Arrêt non planifié : indiquer la remise à disposition, ou cocher « heures inconnues ».');
     return err;
   }
 
@@ -85,7 +112,7 @@
     const idx = indexOtsParDemande(tous);
 
     const parNature = {};
-    for (const o of ots) parNature[o.nature] = (parNature[o.nature] || 0) + 1;
+    for (const o of ots) { const n = qualification(o).nature; parNature[n] = (parNature[n] || 0) + 1; }
 
     const clos = tous.filter(o => o.statut === 'cloturee' && o.clotureLe && o.clotureLe.slice(0, 10) >= from);
     const delais = clos.map(o => minutesBetween(o.creeLe, o.clotureLe)).filter(x => x >= 0);
@@ -105,7 +132,7 @@
     for (const d of D.demandes) {
       if ((d.creeLe || "").slice(0, 10) >= from && !['annulee', 'close_sans_travail'].includes(d.statut) && ETATS_DEFAUT.includes(d.etat)) faits.set(d.equipementId, (faits.get(d.equipementId) || 0) + 1);
     }
-    for (const o of ots) if (o.nature === 'corrective' && !(o.demandeIds || []).length) faits.set(o.equipementId, (faits.get(o.equipementId) || 0) + 1);
+    for (const o of ots) if (qualification(o).nature === 'corrective' && !(o.demandeIds || []).length) faits.set(o.equipementId, (faits.get(o.equipementId) || 0) + 1);
 
     const avecArret = ots.filter(o => o.avecArret === 'oui');
     const bornees = avecArret.filter(o => o.arretDebut && o.arretFin && o.arretFin > o.arretDebut);
@@ -113,6 +140,9 @@
     for (const o of bornees) { if (!parEq.has(o.equipementId)) parEq.set(o.equipementId, []); parEq.get(o.equipementId).push([o.arretDebut, o.arretFin]); }
     let dureeArrets = 0;
     for (const iv of parEq.values()) dureeArrets += dureeUnion(iv);
+    // R2 (préparation de R4) : pannes = arrêts non planifiés ; le MTTR ne retiendra que celles aux heures connues.
+    const pannes = avecArret.filter(o => typeArret(o) === 'non_planifie');
+    const pannesBornees = pannes.filter(o => o.arretDebut && o.arretFin && o.arretFin > o.arretDebut);
 
     const ouvertes = D.demandes.filter(d => demandeOuverte(d, idx.get(d.id) || []));
 
@@ -123,7 +153,10 @@
       preventif: { dus: dus.length + nonLances, aTemps, nonLances },
       piecesParEquipement: [...pieces.entries()].sort((a, b) => b[1] - a[1]),
       repetitives: [...faits.entries()].filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1]),
-      arrets: { faits: new Set(avecArret.map(cleFait)).size, faitsBornes: new Set(bornees.map(cleFait)).size, dureeConnue: bornees.length ? dureeArrets : null },
+      arrets: { faits: new Set(avecArret.map(cleFait)).size, faitsBornes: new Set(bornees.map(cleFait)).size, dureeConnue: bornees.length ? dureeArrets : null,
+        nonPlanifies: new Set(pannes.map(cleFait)).size, nonPlanifiesBornes: new Set(pannesBornees.map(cleFait)).size,
+        planifies: new Set(avecArret.filter(o => typeArret(o) === 'planifie').map(cleFait)).size },
+      aQualifier: tous.filter(aQualifier).length,
       demandesOuvertes: { n: ouvertes.length, plusAncienneJours: ouvertes.length ? Math.max(...ouvertes.map(d => daysBetween(d.creeLe, today))) : 0 },
     };
   }
@@ -679,6 +712,6 @@
   }
 
   const Calculs = { demoEnergie, bornesMois, moisDecale, tableauEnergie, controleReleve, echeanceCompteur, UNITES, UNITES_RESSOURCE, ANOMALIES_CONFIRMABLES, analyserReleves, consommationPeriode, rapprochementFacture, residuSousComptage, totauxParUnite, relevesDus, bilanCombustible, totalFactures,
-    montantCommande, isolementsEnAttente, consommationHebdo, seuilIndicatif, seuilActif, besoinsNonCouverts, receptionLigne, etatAchat, qteEnCommande, qteIsolee, situationArticle, aReapprovisionner, prixMAD, valorisation, coutConsomme, besoinsAServir, attentesALever, piecesDetenues, stockPhysique, qteReservee, stockDisponible, etatBesoin, rapprochementBesoin, retraitsAVerifier, qteRemise, addDays, daysBetween, minutesBetween, dureeUnion, mediane, NATURE_DU_BESOIN, ETAT_RANK, otOuvert, demandeOuverte, indexOtsParDemande, etatEquipement, verifierCloture, echeanceSuivante, indicateurs };
+    montantCommande, isolementsEnAttente, consommationHebdo, seuilIndicatif, seuilActif, besoinsNonCouverts, receptionLigne, etatAchat, qteEnCommande, qteIsolee, situationArticle, aReapprovisionner, prixMAD, valorisation, coutConsomme, besoinsAServir, attentesALever, piecesDetenues, stockPhysique, qteReservee, stockDisponible, etatBesoin, rapprochementBesoin, retraitsAVerifier, qteRemise, addDays, daysBetween, minutesBetween, dureeUnion, mediane, NATURE_DU_BESOIN, ETAT_RANK, otOuvert, demandeOuverte, indexOtsParDemande, etatEquipement, verifierCloture, qualification, typeArret, typeArretPropose, aQualifier, ETAT_SIGNALE, echeanceSuivante, indicateurs };
   if (typeof module === 'object' && module.exports) module.exports = Calculs; else root.Calculs = Calculs;
 })(this);

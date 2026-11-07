@@ -232,3 +232,22 @@ body.ecran-connexion { padding-bottom: 24px; }
 /* Fichiers joints : vignette en cours de chargement ou absente hors ligne */
 .thumbs img.attente { background: var(--line); min-height: 64px; }
 .thumbs img.absente { background: var(--bg); outline: 1px dashed var(--line); }
+
+/* Lot R2 : fiche intervention en étapes */
+.frise { display: flex; gap: 6px; margin: 12px 0 4px; }
+.frise span { flex: 1; text-align: center; font-size: .82rem; font-weight: 600; padding: 7px 4px; border-radius: 999px; background: #eef1f5; color: var(--muted); }
+.frise span.fait { background: #dcfce7; color: #166534; }
+.frise span.cour { background: var(--blue); color: #fff; }
+section.etape { margin-top: 14px; }
+section.etape > h2 { margin-top: 6px; }
+details.etape { margin-top: 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; padding: 0 12px; }
+details.etape summary { padding: 11px 0; cursor: pointer; }
+details.etape[open] { padding-bottom: 12px; }
+.etape-actions { margin-top: 18px; }
+h3.sous { font-size: .95rem; margin: 18px 0 8px; color: var(--muted); text-transform: none; }
+.acts .chip.rare { display: none; }
+.acts.tout .chip.rare { display: inline-block; }
+.chip-plus { border: 1px dashed var(--line); background: transparent; border-radius: 999px; padding: 7px 12px; font: inherit; font-size: .88rem; color: var(--muted); cursor: pointer; }
+.acts.tout .chip-plus { display: none; }
+.chip.arret input:checked + span { background: var(--red); border-color: var(--red); }
+.chip.mal input:checked + span { background: #d97706; border-color: #d97706; }

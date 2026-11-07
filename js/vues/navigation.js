@@ -12,9 +12,9 @@
   // [adresse, icône, libellé, écrans qui l'allument, module requis]
   const PLUS = ['#/plus', '≡', 'Plus', ['plus']];
   const BARRES = {
-    technicien: [['#/accueil', '☀', 'Ma journée', ['accueil']], ['#/signaler', '＋', 'Signaler', ['signaler']],
+    technicien: [['#/accueil', '☀', 'Ma journée', ['accueil']], ['#/signaler', '＋', 'Signaler', ['signaler', 'rapide']],
       ['#/ots?f=mine', '⚒', 'Mes travaux', ['ots', 'ot']], ['#/parc', '▦', 'Parc', ['parc', 'eq']], PLUS],
-    prestataire: [['#/accueil', '⚒', 'Mes interventions', ['accueil', 'ots', 'ot']], ['#/signaler', '＋', 'Signaler', ['signaler']],
+    prestataire: [['#/accueil', '⚒', 'Mes interventions', ['accueil', 'ots', 'ot']], ['#/signaler', '＋', 'Signaler', ['signaler', 'rapide']],
       ['#/compte', '◯', 'Mon compte', ['compte', 'reglages']]],
     responsable: [['#/accueil', '◉', 'Aujourd’hui', ['accueil']], ['#/demandes', '✎', 'Demandes', ['demandes', 'demande']],
       ['#/ots', '⚒', 'Travaux', ['ots', 'ot']], ['#/preventif', '↻', 'Préventif', ['preventif'], 'preventif'], PLUS],

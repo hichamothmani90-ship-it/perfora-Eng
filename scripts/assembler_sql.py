@@ -1,7 +1,7 @@
 """Séquence SQL numérotée pour construire une base Perfora neuve (production) — étape 5 du chemin vers le pilote.
 
 Les scripts de supabase/ restent la source (historique, tests) ; ce programme en fait une séquence unique et ordonnée :
-  supabase/production/01_schema.sql … 16_demo_energie.sql, 99_controles.sql   (copies numérotées, générées)
+  supabase/production/01_schema.sql … 19_demo_energie.sql, 99_controles.sql   (copies numérotées, générées)
   supabase/production/construire_base.sql                                       (tout, dans l'ordre, en un seul fichier)
   supabase/production/MANIFESTE.txt                                             (ordre + empreinte SHA-256 de chaque source)
 
@@ -19,7 +19,7 @@ DEST = os.path.join(SRC, "production")
 
 # Ordre validé (docs/PROMPT_REPRISE.md) ; chaque script suppose les précédents.
 ORDRE = ["schema", "roles", "multitenant", "quotas", "plateforme", "durcissement", "magasin", "achats", "energie",
-         "mise_en_service", "centre_controle", "centre_controle_cc2", "references", "fichiers", "securite", "roles_r1", "demo", "demo_energie"]
+         "mise_en_service", "centre_controle", "centre_controle_cc2", "references", "fichiers", "securite", "roles_r1", "interventions_r2", "demo", "demo_energie"]
 
 CONTROLES = """-- 99 — contrôles de fin de construction (base neuve). Rejouable.
 -- 1) multitenant.sql a créé « Perfora Démo » pour migrer d'anciennes données : sur une base neuve elle est vide,
@@ -74,16 +74,26 @@ def construire():
     return fichiers
 
 
+def anciens(fichiers):
+    """Fichiers NN_*.sql du dossier qui ne font plus partie de la séquence (numérotation changée)."""
+    if not os.path.isdir(DEST):
+        return []
+    return sorted(n for n in os.listdir(DEST) if n[:2].isdigit() and n.endswith(".sql") and n not in fichiers)
+
+
 def main():
     fichiers = construire()
     if "--verifier" in sys.argv:
         perimes = [n for n, t in fichiers.items()
                    if not os.path.exists(os.path.join(DEST, n)) or open(os.path.join(DEST, n), encoding="utf-8").read() != t]
+        perimes += [n + " (en trop)" for n in anciens(fichiers)]
         if perimes:
             sys.exit("Séquence SQL périmée : python scripts/assembler_sql.py  (" + ", ".join(perimes) + ")")
         print("Séquence SQL à jour")
         return
     os.makedirs(DEST, exist_ok=True)
+    for n in anciens(fichiers):   # copies numérotées d'une séquence précédente : à ne jamais rejouer
+        os.remove(os.path.join(DEST, n))
     for n, t in fichiers.items():
         open(os.path.join(DEST, n), "w", encoding="utf-8", newline="\n").write(t)
     print(f"supabase/production : {len(fichiers)} fichiers, construire_base.sql = {len(fichiers['construire_base.sql']) // 1024} Ko")

@@ -5,7 +5,7 @@
 (() => {
   const { data } = Store;
   /** Version affichée dans Réglages : à incrémenter avec VERSION dans sw.js. */
-  const APP_VERSION = 'v36';
+  const APP_VERSION = 'v37';
   if (window.Erreurs) Erreurs.version = APP_VERSION;
   const $ = s => document.querySelector(s);
   // Multi-site : les listes de fiches de site ne montrent que le site actif (« tous » possible).
@@ -158,7 +158,7 @@
     const who = actifs(o).map(i => persNom(i.personneId)).join(', ');
     const quand = o.echeance ? `échéance ${fmt(o.echeance)}` : o.creneau ? `prévu ${fmt(o.creneau)}` : `créée ${fmt(o.creeLe)}`;
     return `<a class="card" href="#/ot/${o.id}"><div class="row"><span class="t grow">${esc(e?.designation || '—')}</span>${badgeOT(o)}</div>
-      <div class="s">${esc(o.ref)} · ${esc(L.nature[o.nature])}${o.priorite && o.priorite !== 'a_qualifier' ? ' · ' + esc(L.priorite[o.priorite]) : ''} · ${quand}</div>
+      <div class="s">${esc(o.ref)} · ${txtQualif(qualification(o))}${qualification(o).validee ? '' : ' <span class="muted">(proposée)</span>'} · ${quand}</div>
       ${who ? `<div class="s">👤 ${esc(who)}</div>` : ''}</a>`;
   }
   function eqCard(e) {
@@ -240,7 +240,7 @@
   /** Journal d'audit complet : responsable, direction, administrateur (le serveur ne renvoie aux autres que leurs lignes). */
   const voitJournal = () => !role() || ['responsable', 'pilote'].includes(role()) || estAdminClient();
   const DROITS = {
-    responsable: ['eq-new', 'eq-edit', 'loc-new', 'prog-new', 'prog-edit', 'pers-new', 'pers-edit', 'ot-rouvrir', 'sync-tout', 'equipe', 'param-cloture', 'cpt-new', 'cpt-edit', 'releve-qualifier', 'seuil-valider', 'seuil-refuser', 'achat-valider', 'achat-completer', 'achat-refuser'],
+    responsable: ['ot-valider-qualif', 'ot-qualifier', 'eq-new', 'eq-edit', 'loc-new', 'prog-new', 'prog-edit', 'pers-new', 'pers-edit', 'ot-rouvrir', 'sync-tout', 'equipe', 'param-cloture', 'cpt-new', 'cpt-edit', 'releve-qualifier', 'seuil-valider', 'seuil-refuser', 'achat-valider', 'achat-completer', 'achat-refuser'],
     terrain: ['ot-new', 'dem-intervenir', 'dem-planifier', 'prog-ot', 'dem-pec', 'dem-classer', 'ot-demarrer', 'ot-planifier', 'ot-annuler', 'ot-suspendre', 'ot-reprendre', 'ot-terminer', 'ot-cloturer',
       'ot-ajout-int', 'ot-retirer', 'ot-ajout-piece', 'ot-annuler-piece', 'ot-ajout-suite', 'ot-lever',
       'bes-new', 'bes-urgent', 'bes-utilise', 'bes-rendre', 'bes-annuler'],
@@ -277,7 +277,29 @@
     if (!ecritureOK()) return 'Abonnement suspendu ou expiré : consultation seule'; for (const [k, l] of Object.entries(DROITS)) if (l.includes(act)) return REFUS_TXT[k]; return 'Action non autorisée'; }
 
   // ---------- objets métier ----------
-  const { NATURE_DU_BESOIN } = Calculs;
+  const { NATURE_DU_BESOIN, qualification, typeArret, typeArretPropose } = Calculs;
+  // R2 (Q6) : le responsable qualifie ; le terrain propose (natureProposee, prioriteProposee), le responsable valide.
+  function qualifNouvelle(nature, priorite) {
+    if (estResp()) return { nature: nature || 'a_qualifier', priorite: priorite || 'a_qualifier' };
+    return { nature: 'a_qualifier', priorite: 'a_qualifier', natureProposee: nature || 'a_qualifier', prioriteProposee: priorite || 'a_qualifier', qualificationValidee: false };
+  }
+  /** Saisie rapide : techniciens et responsable (un prestataire ne crée pas d'intervention, R1). */
+  const peutRapide = () => autorise('ot-new') && role() !== 'prestataire';
+  const validation = () => ({ qualificationValidee: true, qualifieePar: Store.currentUserName(), qualifieeLe: Store.now() });
+  /** Champs liés à une saisie directe sur la fiche (R2). */
+  function complementBind(t, id, champ, v) {
+    const o = t === 'ots' && data.ots.get(id);
+    if (!o) return {};
+    const q = qualification(o);
+    // le responsable qui touche la nature ou la priorité valide la qualification (la proposée sert de base)
+    if (['nature', 'priorite'].includes(champ) && estResp() && !q.validee) return { nature: q.nature, priorite: q.priorite, ...validation() };
+    if (champ === 'avecArret' && v === 'oui') {
+      const d = data.demandes.get((o.demandeIds || [])[0]);
+      return { ...(o.arretType ? {} : { arretType: typeArretPropose(q.nature) }),
+        ...(['en_cours', 'suspendue'].includes(o.statut) && !o.arretDebut ? { arretDebut: d?.heureFait || Store.now() } : {}) };
+    }
+    return {};
+  }
   function moiIntervenant(role = 'intervenant') {
     const me = Store.currentUser();
     return me ? [{ id: Store.uid(), personneId: me.id, role, depuis: Store.now(), fin: null, par: me.nom }] : [];
@@ -297,9 +319,10 @@
     const me = Store.currentUser();
     const intervenants = demarrer ? moiIntervenant() : personneId ? [{ id: Store.uid(), personneId, role: 'intervenant', depuis: Store.now(), fin: null, par: me?.nom || null }] : [];
     const o = await newOT({
-      demandeIds: [d.id], equipementId: d.equipementId, nature: NATURE_DU_BESOIN[d.besoin] || 'a_qualifier',
-      priorite: indispo ? 'critique_service' : 'a_qualifier', statut: demarrer ? 'en_cours' : creneau ? 'planifiee' : 'a_planifier', creneau,
+      demandeIds: [d.id], equipementId: d.equipementId, ...qualifNouvelle(NATURE_DU_BESOIN[d.besoin] || 'a_qualifier', indispo ? 'critique_service' : 'a_qualifier'),
+      statut: demarrer ? 'en_cours' : creneau ? 'planifiee' : 'a_planifier', creneau,
       intervenants, avecArret: d.impact === 'interrompu' ? 'oui' : d.impact === 'aucun_constate' ? 'non' : 'inconnu',
+      ...(d.impact === 'interrompu' ? { arretType: typeArretPropose(NATURE_DU_BESOIN[d.besoin] || 'a_qualifier') } : {}),
       arretDebut: d.impact === 'interrompu' ? d.heureFait : null,
     });
     if (d.statut !== 'traitement_organise') await Store.update('demandes', d.id, { statut: 'traitement_organise' });
@@ -380,6 +403,7 @@
     const mine = me ? otsO.filter(o => actifs(o).some(i => i.personneId === me.id)) : [];
     const susp = otsO.filter(o => o.statut === 'suspendue');
     const aValider = estResp() ? otsO.filter(o => o.statut === 'travail_termine') : [];
+    const aQualif = estResp() ? list('ots').filter(Calculs.aQualifier) : [];
     const prev = preventifsSansOT(7);
     const rel = App.compteurs && autorise('releve-saisir') ? App.compteurs.dus() : [];
     const nrj = App.energie ? App.energie.aExaminer() : 0;
@@ -397,6 +421,7 @@
       ${rel.length ? `<h2>Relevés à faire aujourd’hui</h2>${rel.slice(0, 5).map(App.carteReleveDu).join('')}${rel.length > 5 ? `<a class="btn ghost" href="#/compteurs">Tous les relevés à faire (${rel.length})</a>` : ''}` : ''}
       ${indispo.length ? `<h2>Indisponibles</h2>${indispo.map(eqCard).join('')}` : ''}
       ${aValider.length ? `<h2>Interventions à valider</h2>${aValider.map(otCard).join('')}` : ''}
+      ${aQualif.length ? `<h2>À qualifier <span class="muted small" style="font-weight:400">· nature et priorité proposées par le terrain</span></h2>${aQualif.slice(0, 8).map(otCard).join('')}${aQualif.length > 8 ? `<a class="btn ghost" href="#/ots?f=a_qualifier">Toutes (${aQualif.length})</a>` : ''}` : ''}
       ${me ? `<h2>Mes travaux</h2>${mine.length ? mine.map(otCard).join('') : empty('Aucun travail affecté.')}` : ''}
       <h2>Demandes à examiner</h2>${aEx.length ? aEx.slice(0, 8).map(demCard).join('') : empty('Rien à examiner.')}
       ${susp.length ? `<h2>Travaux en attente</h2>${susp.map(otCard).join('')}` : ''}
@@ -539,14 +564,124 @@
       mine: o => otOuvert(o) && actifs(o).some(i => i.personneId === moi),
       ouverts: otOuvert, en_cours: o => ['en_cours', 'travail_termine'].includes(o.statut), suspendue: o => o.statut === 'suspendue',
       a_faire: o => ['a_preparer', 'a_planifier', 'planifiee', 'prete'].includes(o.statut), cloturee: o => o.statut === 'cloturee', tous: () => true,
+      a_qualifier: Calculs.aQualifier,
     };
     items = items.filter(F[f] || F.ouverts);
     items.sort((a, b) => f === 'cloturee' ? (b.clotureLe || '').localeCompare(a.clotureLe || '')
       : (PRIO_ORDER.indexOf(a.priorite) - PRIO_ORDER.indexOf(b.priorite)) || (b.creeLe || "").localeCompare(a.creeLe || ""));
-    return `<h1>${f === 'mine' ? (role() === 'prestataire' ? 'Mes interventions' : 'Mes travaux') : 'Travaux'}</h1>${seg([['#/ots?f=mine', 'Les miens', 'mine'], ['#/ots', 'Ouverts', 'ouverts'], ['#/ots?f=a_faire', 'À faire', 'a_faire'], ['#/ots?f=en_cours', 'En cours', 'en_cours'], ['#/ots?f=suspendue', 'En attente', 'suspendue'], ['#/ots?f=cloturee', 'Clôturés', 'cloturee'], ['#/ots?f=tous', 'Tous', 'tous']], f)}
+    return `<h1>${f === 'mine' ? (role() === 'prestataire' ? 'Mes interventions' : 'Mes travaux') : 'Travaux'}</h1>${seg([['#/ots?f=mine', 'Les miens', 'mine'], ['#/ots', 'Ouverts', 'ouverts'], ['#/ots?f=a_faire', 'À faire', 'a_faire'], ['#/ots?f=en_cours', 'En cours', 'en_cours'], ['#/ots?f=suspendue', 'En attente', 'suspendue'], ['#/ots?f=cloturee', 'Clôturés', 'cloturee'], ...(estResp() ? [['#/ots?f=a_qualifier', 'À qualifier', 'a_qualifier']] : []), ['#/ots?f=tous', 'Tous', 'tous']], f)}
       ${search('#lst', 'Rechercher')}<div id="lst">${items.length ? items.map(otCard).join('') : empty('Aucune intervention.')}</div>
-      <div class="actions"><button class="btn" data-act="ot-new">Nouvelle intervention sans demande</button></div>`;
+      <div class="actions"><button class="btn" data-act="ot-new">Nouvelle intervention sans demande</button>${peutRapide() ? '<a class="btn ghost" href="#/rapide">Saisie rapide</a>' : ''}</div>`;
   };
+
+  // ---------- lot R2 : fiche intervention en trois étapes (docs/MAQUETTES_R2.md) ----------
+  // Préparer (responsable) · Réaliser (technicien, prestataire) · Terminer ; une seule étape ouverte, boutons en bas.
+  const ETAPE = { a_preparer: 0, a_planifier: 0, planifiee: 0, prete: 0, en_cours: 1, suspendue: 1, travail_termine: 2, cloturee: 2 };
+  const ETAPES = ['Préparer', 'Réaliser', 'Terminer'];
+  const ACT_FREQ = { autre: ['diagnostic', 'reglage', 'remplacement', 'reparation', 'nettoyage_technique', 'essai'],
+    preventive: ['inspection', 'mesure', 'graissage', 'nettoyage_technique', 'reglage', 'essai'] };
+  const ARRET_TYPE = { planifie: 'Planifié', non_planifie: 'Non planifié' };
+  const OUI_NON = { oui: 'Oui', non: 'Non' };
+  const NATURES = Object.fromEntries(Object.entries(L.nature).filter(([k]) => k !== 'a_qualifier'));
+  const PRIORITES = Object.fromEntries(Object.entries(L.priorite).filter(([k]) => k !== 'a_qualifier'));
+  const txtQualif = q => `${esc(L.nature[q.nature])}${q.priorite && q.priorite !== 'a_qualifier' ? ' · ' + esc(L.priorite[q.priorite]) : ''}`;
+
+  function bandeauQualif(o) {
+    const q = qualification(o);
+    if (q.validee || o.statut === 'annulee') return '';
+    if (estResp()) return `<div class="warn row" style="flex-wrap:wrap"><span class="grow">Proposé par ${esc(o.creePar || 'le terrain')} : <b>${txtQualif(q)}</b></span>
+      <button class="btn sm primary" data-act="ot-valider-qualif" data-id="${o.id}">Valider</button><button class="btn sm" data-act="ot-qualifier" data-id="${o.id}">Changer</button></div>`;
+    return `<p class="info small">Qualification proposée : <b>${txtQualif(q)}</b> · validée ensuite par le responsable.</p>`;
+  }
+  const frise = k => `<div class="frise">${ETAPES.map((l, i) => `<span class="${i < k ? 'fait' : i === k ? 'cour' : ''}">${i < k ? '✓ ' : ''}${l}</span>`).join('')}</div>`;
+  const intervenantsTxt = o => actifs(o).map(i => persNom(i.personneId)).join(', ') || 'personne';
+  function texteArret(o) {
+    if (o.avecArret === 'non') return 'sans arrêt';
+    if (o.avecArret !== 'oui') return 'arrêt : non renseigné';
+    const ty = ARRET_TYPE[typeArret(o)].toLowerCase();
+    if (o.arretHeuresInconnues) return `arrêt ${ty} · heures inconnues`;
+    if (o.arretDebut && o.arretFin) return `arrêt ${ty} · ${fmt(o.arretDebut)} → ${fmt(o.arretFin)} (<b>${fmtDuree(minutesBetween(o.arretDebut, o.arretFin))}</b>)`;
+    if (o.arretDebut) return `arrêt ${ty} · depuis ${fmt(o.arretDebut)}`;
+    if (o.arretPrevuDebut) return `arrêt ${ty} prévu ${fmt(o.arretPrevuDebut)}${o.arretPrevuFin ? ' → ' + fmt(o.arretPrevuFin) : ''}`;
+    return `arrêt ${ty}`;
+  }
+  /** Activités : les fréquentes visibles, les autres derrière « Autres… » (un seul groupe : la liaison lit toutes les cases). */
+  function chipsActivites(o, b) {
+    const freq = ACT_FREQ[qualification(o).nature === 'preventive' ? 'preventive' : 'autre'];
+    const vals = o.activites || [];
+    const ordre = [...freq, ...Object.keys(L.activite).filter(k => !freq.includes(k))];
+    return `<div class="chips acts">${ordre.map(k => `<label class="chip ${freq.includes(k) || vals.includes(k) ? '' : 'rare'}"><input type="checkbox" name="activites" value="${k}" ${vals.includes(k) ? 'checked' : ''} data-bind="${b}activites"><span>${esc(L.activite[k])}</span></label>`).join('')}
+      <button type="button" class="chip-plus" data-act="ui-autres">Autres…</button></div>`;
+  }
+  function blocIntervenants(o, modif) {
+    return `<ul class="lines">${(o.intervenants || []).map(i => `<li class="${i.fin ? 'off' : ''}"><span class="grow">${esc(persNom(i.personneId))} <span class="muted small">· ${esc(L.roleOT[i.role])}</span></span>${!i.fin && modif ? `<button class="btn sm ghost" data-act="ot-retirer" data-id="${o.id}" data-sub="${i.id}">Retirer</button>` : i.fin ? `<span class="small">jusqu’au ${fmt(i.fin)}</span>` : ''}</li>`).join('') || '<li class="muted">Personne n’est affecté.</li>'}</ul>
+      ${modif ? `<button class="btn sm" data-act="ot-ajout-int" data-id="${o.id}">+ Ajouter</button>` : ''}`;
+  }
+  function blocReserves(o) {
+    return `<ul class="lines">${(o.reserves || []).map(s => `<li class="${s.statut !== 'ouverte' ? 'off' : ''}"><span class="grow">${s.bloquante ? badge('Bloquante', 'red') + ' ' : ''}${esc(L.typeSuite[s.type] || '')} : ${esc(s.texte)}<span class="muted small">${s.responsableId ? ' · ' + esc(persNom(s.responsableId)) : ''}${s.echeance ? ' · avant ' + fmt(s.echeance) : ''}</span></span>${s.statut === 'ouverte' ? `<button class="btn sm" data-act="ot-lever" data-id="${o.id}" data-sub="${s.id}">Lever</button>` : `<span class="small">levée ${fmt(s.leveeLe)}</span>`}</li>`).join('') || '<li class="muted">Aucune.</li>'}</ul>
+      <button class="btn sm" data-act="ot-ajout-suite" data-id="${o.id}">+ Réserve / suite</button>`;
+  }
+  const dt = (b, champ, v, label, rr = true) => `<label class="f">${label}</label><input type="datetime-local" value="${esc(v)}" data-bind="${b}${champ}" ${rr ? 'data-rerender' : ''}>`;
+
+  /** Préparer : le responsable qualifie, planifie, affecte, prévoit l'arrêt et les pièces ; les autres voient un résumé. */
+  function etapePreparer(o, b, prog, pieces = true) {
+    const q = qualification(o);
+    if (!estResp()) return `<dl class="kv">
+        <dt>Qualification</dt><dd>${txtQualif(q)}</dd>
+        <dt>Prévu</dt><dd>${o.creneau ? fmtY(o.creneau) : o.echeance ? 'échéance ' + fmtY(o.echeance) : '<span class="muted">non planifiée</span>'}</dd>
+        <dt>Intervenants</dt><dd>${esc(intervenantsTxt(o))}</dd>
+        <dt>Arrêt</dt><dd>${texteArret(o)}</dd>
+        ${o.consignes ? `<dt>Consignes</dt><dd style="white-space:pre-wrap">${esc(o.consignes)}</dd>` : ''}</dl>
+      ${prog?.instruction ? `<p class="small" style="white-space:pre-wrap">${esc(prog.instruction)}</p>` : ''}
+      ${pieces && besoinsDe(o).length ? blocPieces(o) : ''}`;
+    return `<label class="f" style="margin-top:0">Nature</label>${chipGroup('nature', NATURES, q.nature, { bind: b + 'nature' })}
+      <label class="f">Priorité</label>${chipGroup('priorite', PRIORITES, q.priorite, { bind: b + 'priorite' })}
+      <label class="f">Créneau prévu <span class="opt">(facultatif)</span></label><input type="datetime-local" value="${esc(o.creneau)}" data-bind="${b}creneau">
+      <label class="f">Intervenants</label>${blocIntervenants(o, true)}
+      <label class="f">Arrêt de production prévu ?</label>${chipGroup('avecArret', OUI_NON, o.avecArret, { bind: b + 'avecArret' })}
+      ${o.avecArret === 'oui' ? `<div style="margin-top:8px">${chipGroup('arretType', ARRET_TYPE, typeArret(o), { bind: b + 'arretType' })}</div>
+        ${dt(b, 'arretPrevuDebut', o.arretPrevuDebut, 'Arrêt prévu du <span class="opt">(facultatif)</span>', false)}${dt(b, 'arretPrevuFin', o.arretPrevuFin, 'au <span class="opt">(facultatif)</span>', false)}` : ''}
+      <label class="f">Consignes <span class="opt">(facultatif)</span></label><textarea data-bind="${b}consignes" placeholder="Consignes de sécurité, accès, outillage…">${esc(o.consignes)}</textarea>
+      ${prog?.instruction ? `<p class="small muted" style="white-space:pre-wrap">Instruction du programme : ${esc(prog.instruction)}</p>` : ''}
+      ${pieces ? blocPieces(o, 'Pièces à prévoir') : ''}`;
+  }
+  /** Réaliser : arrêt de la machine, ce qui a été fait, activités, pièces, photos. */
+  function etapeRealiser(o, b) {
+    const ty = typeArret(o);
+    return `<label class="f" style="margin-top:0">Machine à l’arrêt ?</label>${chipGroup('avecArret', OUI_NON, o.avecArret, { bind: b + 'avecArret' })}
+      ${o.avecArret === 'oui' ? `<div style="margin-top:8px">${chipGroup('arretType', ARRET_TYPE, ty, { bind: b + 'arretType' })}</div>
+        ${dt(b, 'arretDebut', o.arretDebut, 'Arrêtée depuis')}` : ''}
+      <label class="f">Ce qui a été fait</label><textarea data-bind="${b}travaux" placeholder="Constats, travaux, essais…">${esc(o.travaux)}</textarea>
+      <label class="f">Activités</label>${chipsActivites(o, b)}
+      ${blocPieces(o, 'Pièces')}
+      ${blocPhotos('ots', o.id)}
+      <h3 class="sous">Intervenants</h3>${blocIntervenants(o, true)}
+      ${(o.reserves || []).length ? `<h3 class="sous">Réserves et suites</h3>${blocReserves(o)}` : ''}`;
+  }
+  /** Terminer : résultat, cause, remise à disposition, réserves, ce qui manque. */
+  function etapeTerminer(o, b, modif) {
+    const ty = typeArret(o);
+    const manque = o.statut === 'cloturee' ? [] : Calculs.verifierCloture(o);
+    const champs = `<label class="f" style="margin-top:0">Résultat</label>${chipGroup('resultat', L.resultat, o.resultat, { bind: b + 'resultat' })}
+      <label class="f">Certitude de la cause</label>${chipGroup('certitudeCause', L.certitude, o.certitudeCause, { bind: b + 'certitudeCause' })}
+      <label class="f">Cause <span class="opt">(laisser vide si inconnue)</span></label><textarea data-bind="${b}cause">${esc(o.cause)}</textarea>
+      <label class="f">Famille du défaut <span class="opt">(facultatif)</span></label><select data-bind="${b}familleDefaut"><option value="">—</option>${opts(L.famille).map(([k, l]) => `<option value="${k}" ${o.familleDefaut === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
+      ${o.avecArret === 'oui' ? `${dt(b, 'arretDebut', o.arretDebut, 'Arrêt : début')}${dt(b, 'arretFin', o.arretFin, `Remise à disposition${ty === 'non_planifie' ? '' : ' <span class="opt">(facultatif)</span>'}`)}
+        ${ty === 'non_planifie' ? `<label class="check"><input type="checkbox" ${o.arretHeuresInconnues ? 'checked' : ''} data-bind="${b}arretHeuresInconnues" data-rerender> Heures inconnues</label>` : ''}` : ''}
+      <label class="f">Ce qui a été fait</label><textarea data-bind="${b}travaux">${esc(o.travaux)}</textarea>`;
+    const resume = `<dl class="kv"><dt>Résultat</dt><dd>${o.resultat ? esc(L.resultat[o.resultat]) : '<span class="muted">non renseigné</span>'}</dd>
+      <dt>Cause</dt><dd>${o.cause ? esc(o.cause) + (o.certitudeCause ? ` <span class="muted small">(${esc(L.certitude[o.certitudeCause].toLowerCase())})</span>` : '') : '<span class="muted">inconnue</span>'}</dd>
+      <dt>Arrêt</dt><dd>${texteArret(o)}</dd>
+      ${o.indexCompteur != null ? `<dt>Index</dt><dd>${esc(o.indexCompteur)}</dd>` : ''}</dl>`;
+    return `${o.statut === 'cloturee' ? `${resume}${modif ? `<details class="more"><summary>Corriger (motif demandé)</summary>${champs}</details>` : ''}` : modif ? champs : resume}
+      <h3 class="sous">Réserves et suites</h3>${blocReserves(o)}
+      ${manque.length ? `<div class="warn"><b>Ce qui manque pour clôturer</b><br>${manque.map(e => '• ' + esc(e)).join('<br>')}</div>` : ''}`;
+  }
+  function resumeEtape(o, i) {
+    if (i === 0) return `${txtQualif(qualification(o))} · ${o.creneau ? 'prévu ' + fmt(o.creneau) : 'non planifiée'} · ${esc(intervenantsTxt(o))}`;
+    const n = besoinsDe(o).length + (o.pieces || []).filter(p => !p.annulee && !p.besoinId).length;
+    return `${o.travaux ? esc(trunc(o.travaux, 70)) : '<span class="muted">rien de saisi</span>'} · ${texteArret(o)}${n ? ` · ${n} pièce(s)` : ''}`;
+  }
 
   V.ot = r => {
     const o = data.ots.get(r.id);
@@ -557,54 +692,31 @@
     const prog = o.programmeId ? data.programmes.get(o.programmeId) : null;
     const dems = (o.demandeIds || []).map(id => data.demandes.get(id)).filter(Boolean);
     const clos = o.statut === 'cloturee';
+    const k = ETAPE[o.statut] ?? -1;
+    const modif = peutModifierOT(o);
     const sAct = {
       a_preparer: ['demarrer', 'planifier', 'annuler'], a_planifier: ['demarrer', 'planifier', 'annuler'], planifiee: ['demarrer', 'planifier', 'annuler'], prete: ['demarrer', 'planifier', 'annuler'],
       en_cours: ['terminer', 'suspendre'], suspendue: ['reprendre', 'terminer'], travail_termine: ['cloturer', 'reprendre'],
       cloturee: ['rouvrir'], annulee: [],
-    }[o.statut];
-    const LBL = { demarrer: ['Démarrer', 'primary'], planifier: ['Planifier', ''], annuler: ['Annuler', 'ghost danger'], suspendre: ['Mettre en attente', ''], terminer: ['Terminer', 'primary'], cloturer: ['Clôturer', 'primary'], reprendre: ['Reprendre', 'primary'], rouvrir: ['Rouvrir', 'ghost'] };
-    let duree = '';
-    if (o.avecArret === 'oui') {
-      duree = o.arretDebut && o.arretFin ? `<p class="info">Durée d’arrêt : <b>${fmtDuree(minutesBetween(o.arretDebut, o.arretFin))}</b> (bornes renseignées)</p>`
-        : `<p class="small muted">Durée non calculée tant que début et fin ne sont pas tous deux connus.</p>`;
-    }
+    }[o.statut] || [];
+    const LBL = { demarrer: ['Démarrer', 'primary'], planifier: ['Planifier', ''], annuler: ['Annuler', 'ghost danger'], suspendre: ['Mettre en attente', ''], terminer: ['Terminer', 'primary'], cloturer: ['Clôturer', 'primary'], reprendre: ['Reprendre', ''], rouvrir: ['Rouvrir', 'ghost'] };
+    const boutons = `<div class="actions etape-actions">${sAct.map(a => `<button class="btn ${LBL[a][1]}" data-act="ot-${a}" data-id="${o.id}">${LBL[a][0]}</button>`).join('')}</div>`;
+    const contenu = [() => etapePreparer(o, b, prog), () => etapeRealiser(o, b), () => etapeTerminer(o, b, modif)];
+    const etapes = k < 0 ? `<div class="card">${resumeEtape(o, 0)}<br>${resumeEtape(o, 1)}</div>`
+      : ETAPES.slice(0, k + 1).map((l, i) => i < k
+        ? `<details class="etape faite"><summary><b>✓ ${l}</b><span class="small muted"> · ${resumeEtape(o, i)}</span></summary>${i === 1 ? `<dl class="kv"><dt>Fait</dt><dd style="white-space:pre-wrap">${esc(o.travaux || '—')}</dd><dt>Activités</dt><dd>${(o.activites || []).map(a => esc(L.activite[a])).join(', ') || '—'}</dd></dl>${blocPieces(o, 'Pièces')}${blocPhotos('ots', o.id)}` : etapePreparer(o, b, prog, false)}</details>`
+        : `<section class="etape cour"><h2>${l}</h2>${contenu[i]()}${boutons}</section>`).join('');
     return `<div class="row"><h1 class="grow">${esc(o.ref)}</h1>${badgeOT(o)}</div>
       <a class="card" href="#/eq/${e?.id}"><div class="row"><span class="dot ${etatEquipement(o.equipementId)}"></span><span class="t">${esc(e?.designation)}</span></div><div class="s">${esc(e?.code)} · ${esc(locPath(e?.localisationId))}</div>
         ${dems.length ? `<div class="s">Demande : ${dems.map(d => esc(d.ref) + ' — ' + esc(trunc(d.constat, 60))).join(' ; ')}</div>` : ''}
         ${prog ? `<div class="s">Programme : ${esc(prog.libelle)} · échéance ${fmtY(o.echeance)}</div>` : ''}</a>
+      ${bandeauQualif(o)}
+      ${k >= 0 ? frise(k) : ''}
       ${att ? `<p class="warn">En attente : <b>${esc(L.attente[att.motif])}</b>${att.detail ? ' — ' + esc(att.detail) : ''} · depuis ${fmt(att.depuis)}${att.responsableId ? ' · levée : ' + esc(persNom(att.responsableId)) : ''}</p>` : ''}
-      ${clos ? `<p class="info">Clôturée le ${fmtY(o.clotureLe)} par ${esc(o.cloturePar)}. Toute modification demande un motif.</p>` : ''}
-      <div class="actions">${sAct.map(a => `<button class="btn ${LBL[a][1]}" data-act="ot-${a}" data-id="${o.id}">${LBL[a][0]}</button>`).join('')}</div>
-      ${prog?.instruction ? `<div class="card"><div class="t">Instruction</div><p class="small" style="white-space:pre-wrap;margin:6px 0 0">${esc(prog.instruction)}</p></div>` : ''}
-
-      <h2>Intervenants</h2><div class="card"><ul class="lines">${(o.intervenants || []).map(i => `<li class="${i.fin ? 'off' : ''}"><span class="grow">${esc(persNom(i.personneId))} <span class="muted small">· ${esc(L.roleOT[i.role])}</span></span>${!i.fin ? `<button class="btn sm ghost" data-act="ot-retirer" data-id="${o.id}" data-sub="${i.id}">Retirer</button>` : `<span class="small">jusqu’au ${fmt(i.fin)}</span>`}</li>`).join('') || '<li class="muted">Personne n’est affecté.</li>'}</ul>
-        <button class="btn sm" data-act="ot-ajout-int" data-id="${o.id}">+ Ajouter</button></div>
-
-      <h2>Arrêt de production</h2><div class="card">${chipGroup('avecArret', L.arret, o.avecArret, { bind: b + 'avecArret' })}
-        ${o.avecArret === 'oui' ? `<label class="f">Début <span class="opt">(facultatif)</span></label><input type="datetime-local" value="${esc(o.arretDebut)}" data-bind="${b}arretDebut" data-rerender>
-        <label class="f">Remise à disposition <span class="opt">(facultatif)</span></label><input type="datetime-local" value="${esc(o.arretFin)}" data-bind="${b}arretFin" data-rerender>${duree}` : ''}</div>
-
-      <h2>Travail réalisé</h2><div class="card">
-        <label class="f" style="margin-top:0">Activités</label>${chipGroup('activites', L.activite, o.activites, { multi: true, bind: b + 'activites' })}
-        <label class="f">Ce qui a été fait</label><textarea data-bind="${b}travaux" placeholder="Constats, travaux, essais…">${esc(o.travaux)}</textarea>
-        <label class="f">Résultat</label>${chipGroup('resultat', L.resultat, o.resultat, { bind: b + 'resultat' })}</div>
-
-      <h2>Cause</h2><div class="card">
-        ${chipGroup('certitudeCause', L.certitude, o.certitudeCause, { bind: b + 'certitudeCause' })}
-        <label class="f">Famille du défaut <span class="opt">(facultatif)</span></label><select data-bind="${b}familleDefaut"><option value="">—</option>${opts(L.famille).map(([k, l]) => `<option value="${k}" ${o.familleDefaut === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
-        <label class="f">Cause <span class="opt">(laisser vide si inconnue)</span></label><textarea data-bind="${b}cause">${esc(o.cause)}</textarea></div>
-
-      ${blocPieces(o)}
-
-      <h2>Réserves et suites</h2><div class="card"><ul class="lines">${(o.reserves || []).map(s => `<li class="${s.statut !== 'ouverte' ? 'off' : ''}"><span class="grow">${s.bloquante ? badge('Bloquante', 'red') + ' ' : ''}${esc(L.typeSuite[s.type] || '')} : ${esc(s.texte)}<span class="muted small">${s.responsableId ? ' · ' + esc(persNom(s.responsableId)) : ''}${s.echeance ? ' · avant ' + fmt(s.echeance) : ''}</span></span>${s.statut === 'ouverte' ? `<button class="btn sm" data-act="ot-lever" data-id="${o.id}" data-sub="${s.id}">Lever</button>` : `<span class="small">levée ${fmt(s.leveeLe)}</span>`}</li>`).join('') || '<li class="muted">Aucune.</li>'}</ul>
-        <button class="btn sm" data-act="ot-ajout-suite" data-id="${o.id}">+ Réserve / suite</button></div>
-      ${blocPhotos('ots', o.id)}
-
-      <h2>Qualification</h2><div class="card">
-        <label class="f" style="margin-top:0">Nature</label>${chipGroup('nature', L.nature, o.nature, { bind: b + 'nature' })}
-        <label class="f">Priorité</label>${chipGroup('priorite', L.priorite, o.priorite, { bind: b + 'priorite' })}
-        <label class="f">Créneau prévu <span class="opt">(facultatif)</span></label><input type="datetime-local" value="${esc(o.creneau)}" data-bind="${b}creneau"></div>
-      ${(o.attentes || []).length ? `<h2>Attentes</h2><div class="card"><ul class="lines">${o.attentes.map(a => `<li><span class="grow">${esc(L.attente[a.motif])}${a.detail ? ' — ' + esc(a.detail) : ''}</span><span class="small muted">${fmt(a.depuis)} → ${a.fin ? fmt(a.fin) : 'en cours'}</span></li>`).join('')}</ul></div>` : ''}
+      ${clos ? `<p class="info">Clôturée le ${fmtY(o.clotureLe)} par ${esc(o.cloturePar)}.</p>` : ''}
+      ${etapes}
+      ${k < 0 ? boutons : ''}
+      ${(o.attentes || []).length ? `<details class="more"><summary>Attentes (${o.attentes.length})</summary><ul class="lines">${o.attentes.map(a => `<li><span class="grow">${esc(L.attente[a.motif])}${a.detail ? ' — ' + esc(a.detail) : ''}</span><span class="small muted">${fmt(a.depuis)} → ${a.fin ? fmt(a.fin) : 'en cours'}</span></li>`).join('')}</ul></details>` : ''}
       ${historique(o.id)}`;
   };
 
@@ -615,7 +727,8 @@
   // Stock par site : celui de l'intervention, pas le site affiché sur l'appareil.
   const dispo = (id, siteId) => Calculs.stockDisponible([...data.besoins.values()], [...data.mouvements.values()], id, siteId);
   const optsArticles = siteId => list('articles').filter(a => a.actif !== false).map(a => [a.id, `${a.designation} · disponible ${dispo(a.id, siteId)} ${a.unite || ''}`]);
-  function blocPieces(o) {
+  /** R2 : une seule liste — chaque pièce montre son état (demandée → réservée → remise / en main → utilisée ou rendue). */
+  function blocPieces(o, titre = 'Pièces') {
     const mvts = [...data.mouvements.values()];
     const lignes = besoinsDe(o).map(b => {
       const e = Calculs.etatBesoin(b, mvts), r = Calculs.rapprochementBesoin(b, mvts, o.pieces), actif = e !== 'annule';
@@ -626,16 +739,16 @@
         ['demande', 'reserve'].includes(e) ? `<button class="btn sm ghost" data-act="bes-annuler" ${k}>Annuler</button>` : ''].join('');
       const suivi = [r.remis && `remis ${r.remis}`, r.utilise && `utilisé ${r.utilise}`, r.retourne && `rendu ${r.retourne}`, r.detenu > 0 && `<b>en main ${r.detenu}</b>`,
         r.ecart && '<b>écart à expliquer</b>', b.delai && `délai annoncé ${esc(fmtY(b.delai))}`].filter(Boolean).join(' · ');
-      return `<li class="${actif ? '' : 'off'}" style="display:block"><div>${esc(b.qte)} × ${esc(desigBesoin(b))}${b.articleId ? '' : ' <span class="muted small">(hors catalogue)</span>'} ${b.urgent ? badge('Urgent', 'red') : ''} ${badge(L.etatBesoin[e], CLS_BESOIN[e] || '')}</div>
+      return `<li class="${actif ? '' : 'off'}" style="display:block"><div>${esc(b.qte)} × ${esc(desigBesoin(b))}${b.articleId ? '' : ' <span class="muted small">(hors catalogue)</span>'} ${b.urgent ? badge('Urgent', 'red') : ''} ${badge(r.utilise && !r.detenu ? 'Utilisée' : L.etatBesoin[e], r.utilise && !r.detenu ? 'green' : CLS_BESOIN[e] || '')}</div>
         <div class="small muted">Demandée ${esc(fmtY(b.demandeLe || b.creeLe))} par ${esc(b.demandeur || b.creePar)}${suivi ? ' · ' + suivi : ''}</div>
         ${btn ? `<div class="actions" style="margin:8px 0 0">${btn}</div>` : ''}</li>`;
     });
-    const utilisees = (o.pieces || []).map(p => `<li class="${p.annulee ? 'off' : ''}"><span class="grow">${esc(p.qte)} × ${esc(p.articleId ? data.articles.get(p.articleId)?.designation : p.libelle)}${p.articleId || p.besoinId ? '' : ' <span class="muted small">(hors stock)</span>'}</span>${!p.annulee ? `<button class="btn sm ghost" data-act="ot-annuler-piece" data-id="${o.id}" data-sub="${p.id}">${p.articleId && !p.besoinId ? 'Retour' : 'Annuler'}</button>` : ''}</li>`);
-    return `<h2>Pièces</h2><div class="card">
-      ${lignes.length ? `<ul class="lines">${lignes.join('')}</ul>` : '<p class="muted small" style="margin:0 0 8px">Aucune pièce demandée. Une demande ne retire rien du stock : le magasin réserve puis remet.</p>'}
-      <div class="actions" style="margin-bottom:0"><button class="btn sm" data-act="bes-new" data-id="${o.id}">Demander une pièce</button><button class="btn sm" data-act="bes-urgent" data-id="${o.id}">Retrait urgent</button></div></div>
-      <h2>Pièces utilisées</h2><div class="card"><ul class="lines">${utilisees.join('') || '<li class="muted">Aucune pièce déclarée utilisée.</li>'}</ul>
-        <button class="btn sm" data-act="ot-ajout-piece" data-id="${o.id}">+ Pièce hors stock</button></div>`;
+    // Pièces déclarées sans demande au magasin : hors stock, ou sorties directement (avant le volet B).
+    const directes = (o.pieces || []).filter(p => !p.besoinId).map(p => `<li class="${p.annulee ? 'off' : ''}"><span class="grow">${esc(p.qte)} × ${esc(p.articleId ? data.articles.get(p.articleId)?.designation : p.libelle)}${p.articleId ? '' : ' <span class="muted small">(hors stock)</span>'} ${p.annulee ? '' : badge('Utilisée', 'green')}</span>${!p.annulee ? `<button class="btn sm ghost" data-act="ot-annuler-piece" data-id="${o.id}" data-sub="${p.id}">${p.articleId ? 'Retour' : 'Annuler'}</button>` : ''}</li>`);
+    const toutes = [...lignes, ...directes];
+    return `<h3 class="sous">${esc(titre)}</h3>
+      ${toutes.length ? `<ul class="lines">${toutes.join('')}</ul>` : '<p class="muted small" style="margin:0 0 8px">Aucune pièce. Une demande ne retire rien du stock : le magasin réserve puis remet.</p>'}
+      <div class="actions" style="margin-bottom:0"><button class="btn sm" data-act="bes-new" data-id="${o.id}">Demander une pièce</button><button class="btn sm" data-act="bes-urgent" data-id="${o.id}">Retrait urgent</button></div>`;
   }
 
   function historique(id) {
@@ -686,7 +799,7 @@
       <div class="card"><dl class="kv"><dt>Code</dt><dd>${esc(e.code)}</dd><dt>Lieu</dt><dd>${esc(locPath(e.localisationId))}</dd>
         ${e.famille ? `<dt>Famille</dt><dd>${esc(e.famille)}</dd>` : ''}<dt>Criticité</dt><dd>${esc(e.criticite || '—')}${['A', 'B', 'C'].includes(e.criticite) ? '' : ' / 4'}</dd></dl>
         <div class="row" style="margin-top:12px;align-items:flex-start">${QR.svg(lien, 104)}<p class="small muted grow" style="margin:0">Scanner ce code ouvre « Signaler » sur cet équipement.<br><span style="word-break:break-all">${esc(lien)}</span><br><button class="btn sm ghost" data-act="copy" data-v="${esc(lien)}">Copier le lien</button> <a class="btn sm ghost" href="#/qr?eq=${e.id}">Imprimer</a></p></div></div>
-      <div class="actions"><a class="btn primary" href="#/signaler?eq=${encodeURIComponent(e.code)}">Signaler sur cet équipement</a><button class="btn ghost" data-act="eq-edit" data-id="${e.id}">Modifier</button></div>
+      <div class="actions"><a class="btn primary" href="#/signaler?eq=${encodeURIComponent(e.code)}">Signaler sur cet équipement</a>${peutRapide() ? `<a class="btn" href="#/rapide?eq=${encodeURIComponent(e.code)}">Intervention rapide</a>` : ''}<button class="btn ghost" data-act="eq-edit" data-id="${e.id}">Modifier</button></div>
       <h2>En cours</h2>${ouverts.length ? ouverts.map(([k, x]) => k === 'd' ? demCard(x) : otCard(x)).join('') : empty('Rien en cours.')}
       ${(() => { const cs = App.compteurs ? App.compteurs.visibles().filter(c => c.equipementId === e.id) : []; return cs.length ? `<h2>Compteurs</h2><div class="card"><ul class="lines">${cs.map(c => { const d = App.compteurs.dernierRetenu(c); return `<li><a class="grow" href="#/compteur/${c.id}"><b>${esc(c.libelle || c.code)}</b><br><span class="small muted">${d ? `${Number(d.valeur).toLocaleString('fr-FR')} ${esc(c.unite)} le ${fmt(d.le)}` : 'jamais relevé'}</span></a>${autorise('releve-saisir') ? `<a class="btn sm" href="#/releve?c=${c.id}">Relever</a>` : ''}</li>`; }).join('')}</ul></div>` : ''; })()}
       ${progs.length ? `<h2>Préventif</h2>${progs.map(progCard).join('')}` : ''}
@@ -880,31 +993,6 @@
         ${s.connecte ? `<button class="btn ghost" data-act="sync-deconnecter">Se déconnecter</button>` : ''}</div></div>`;
   }
 
-  V.signaler = r => {
-    const me = Store.currentUser();
-    return `<h1>Signaler</h1><form id="sig" novalidate>
-      <label class="f" style="margin-top:0">Équipement ou lieu</label>
-      <input type="hidden" name="equipementId">
-      <div id="eqpick"></div>
-      <div id="dupl"></div>
-      <label class="f">État constaté</label>${chipGroup('etat', L.etat, null, { colored: true, required: true })}
-      <label class="f">Besoin</label>${chipGroup('besoin', L.besoin, r.q.get('constat') ? 'verifier' : null, { required: true })}
-      <label class="f" for="constat">Constat</label><textarea id="constat" name="constat" required placeholder="Ce que vous avez observé (bruit, fuite, défaut…)">${esc(r.q.get('constat') || '')}</textarea>
-      <label class="f">Impact sur l’exploitation</label>${chipGroup('impact', L.impact, 'a_confirmer')}
-      <label class="f">Photos <span class="opt">(facultatif)</span></label>
-      <input type="file" id="photoIn" accept="image/*" class="hidden">
-      <div class="thumbs" id="thumbs"></div><button type="button" class="btn sm" id="photoBtn">📷 Ajouter une photo</button>
-      <details class="more"><summary>Heure du fait, demandeur</summary>
-        <label class="f">Heure du fait</label>${chipGroup('quand', { maintenant: 'Maintenant', autre: 'Autre heure', inconnue: 'Inconnue' }, 'maintenant')}
-        <div id="quandAutre" class="hidden"><input type="datetime-local" name="heureFait" style="margin-top:8px"><div style="margin-top:8px">${chipGroup('precisionHeure', L.precision, 'estimee')}</div></div>
-        <label class="f">Origine</label>${chipGroup('origine', L.origine, 'observation')}
-        <div id="tiers" class="hidden"><label class="f">Demandeur <span class="opt">(facultatif)</span></label><input type="text" name="tiersNom" placeholder="Nom"><input type="text" name="tiersService" placeholder="Service" style="margin-top:8px"></div>
-      </details>
-      ${me && me.role !== 'exploitation' ? `<label class="check"><input type="checkbox" name="jInterviens"> Je prends en charge et j’interviens maintenant</label>` : ''}
-      <div class="sticky-save"><button class="btn primary block" type="submit">Enregistrer le signalement</button></div>
-    </form>`;
-  };
-
   // ---------- comportements après affichage ----------
   const AFTER = {};
   AFTER.connexion = apresConnexion;
@@ -1059,15 +1147,61 @@
       });
     } catch (e) { box.innerHTML = `<p class="warn">Console indisponible : ${esc(e.message)}</p>`; }
   };
-  AFTER.signaler = r => {
-    const form = $('#sig');
+  // R2 : signalement allégé — trois questions ; l'état choisi remplit état, impact et besoin (Calculs.ETAT_SIGNALE).
+  const ETAT_SIG = { arret: 'À l’arrêt', mal: 'Fonctionne mal', verifier: 'Fonctionne, à vérifier' };
+  const blocPhotosForm = () => `<input type="file" id="photoIn" accept="image/*" class="hidden">
+      <div class="thumbs" id="thumbs"></div><button type="button" class="btn sm" id="photoBtn">📷 Ajouter une photo</button>`;
+  V.signaler = r => {
+    const me = Store.currentUser();
+    const terrain = peutRapide() && me;
+    return `<h1>Signaler</h1>
+      ${terrain ? `<p class="small"><a href="#/rapide${r.q.get('eq') ? '?eq=' + encodeURIComponent(r.q.get('eq')) : ''}">J’ai déjà réglé le problème → saisie rapide</a></p>` : ''}
+      <form id="sig" novalidate>
+      <label class="f" style="margin-top:0">Quelle machine ?</label>
+      <input type="hidden" name="equipementId">
+      <div id="eqpick"></div>
+      <div id="dupl"></div>
+      <label class="f" for="constat">Que se passe-t-il ?</label><textarea id="constat" name="constat" required placeholder="Ce que vous avez observé (bruit, fuite, défaut…)">${esc(r.q.get('constat') || '')}</textarea>
+      <div style="margin-top:8px">${blocPhotosForm()}</div>
+      <label class="f">Dans quel état ?</label>${chipGroup('etatSig', ETAT_SIG, r.q.get('constat') ? 'verifier' : null, { colored: true, required: true })}
+      <details class="more"><summary>Plus de détails</summary>
+        <label class="f">Besoin <span class="opt">(déduit de l’état si vide)</span></label>${chipGroup('besoin', L.besoin, null)}
+        <label class="f">Heure du fait</label>${chipGroup('quand', { maintenant: 'Maintenant', autre: 'Autre heure', inconnue: 'Inconnue' }, 'maintenant')}
+        <div id="quandAutre" class="hidden"><input type="datetime-local" name="heureFait" style="margin-top:8px"><div style="margin-top:8px">${chipGroup('precisionHeure', L.precision, 'estimee')}</div></div>
+        <label class="f">Origine</label>${chipGroup('origine', L.origine, 'observation')}
+        <div id="tiers" class="hidden"><label class="f">Demandeur <span class="opt">(facultatif)</span></label><input type="text" name="tiersNom" placeholder="Nom"><input type="text" name="tiersService" placeholder="Service" style="margin-top:8px"></div>
+      </details>
+      ${me && me.role !== 'exploitation' ? `<label class="check"><input type="checkbox" name="jInterviens"> Je prends en charge et j’interviens maintenant</label>` : ''}
+      <div class="sticky-save"><button class="btn primary block" type="submit">Enregistrer le signalement</button></div>
+    </form>`;
+  };
+
+  // R2 : saisie rapide — un petit travail fait sur le moment, en un écran : intervention corrective créée et clôturée.
+  const DUREES = { 10: '≈ 10 min', 30: '≈ 30 min', 60: '≈ 1 h', 120: '≈ 2 h', 240: '≈ 4 h', 480: '≈ 8 h' };
+  V.rapide = r => {
+    if (!peutRapide()) return `<h1>Saisie rapide</h1>${empty('Réservé aux techniciens et au responsable.')}`;
+    return `<h1>Saisie rapide</h1><p class="small muted" style="margin-top:-6px">Un petit travail déjà fait : il est enregistré et clôturé en une fois.</p>
+      <form id="rapide" novalidate>
+      <label class="f" style="margin-top:0">Quelle machine ?</label>
+      <input type="hidden" name="equipementId">
+      <div id="eqpick"></div><div id="dupl"></div>
+      <label class="f" for="travaux">Ce qui a été fait</label><textarea id="travaux" name="travaux" required placeholder="ex. capteur nettoyé, courroie retendue"></textarea>
+      <label class="f">Résultat</label>${chipGroup('resultat', L.resultat, 'resolu', { required: true })}
+      <label class="f">La machine a-t-elle été arrêtée ?</label>${chipGroup('avecArret', OUI_NON, 'non')}
+      <div id="duree" class="hidden"><label class="f">Durée approximative de l’arrêt</label>${chipGroup('duree', DUREES, '30')}</div>
+      <label class="f">Photo <span class="opt">(facultatif)</span></label>${blocPhotosForm()}
+      <div class="sticky-save"><button class="btn primary block" type="submit">Enregistrer${clotureParResp() ? ' (à valider)' : ' et clôturer'}</button></div>
+    </form>`;
+  };
+  /** Choix de l'équipement (recherche ou QR), commun à Signaler et à la saisie rapide. */
+  function choixEquipement(form, preCode, { doublons = true } = {}) {
     const pick = id => {
       const e = eq(id);
       form.equipementId.value = id || '';
       if (e) {
         $('#eqpick').innerHTML = `<div class="picked"><span class="dot ${etatEquipement(e.id)}"></span><div class="grow"><b>${esc(e.designation)}</b><div class="small muted">${esc(e.code)} · ${esc(locPath(e.localisationId))}</div></div><button type="button" class="btn sm ghost" id="eqchange">Changer</button></div>`;
         $('#eqchange').onclick = () => pick(null);
-        const ouv = list('demandes').filter(d => d.equipementId === id && demandeOuverte(d));
+        const ouv = doublons ? list('demandes').filter(d => d.equipementId === id && demandeOuverte(d)) : [];
         $('#dupl').innerHTML = ouv.length ? `<p class="warn">Déjà signalé sur cet équipement : ${ouv.map(d => `<a href="#/demande/${d.id}">${esc(d.ref)}</a> (${esc(trunc(d.constat, 40))})`).join(', ')}. Vérifiez qu’il ne s’agit pas du même fait.</p>` : '';
       } else {
         const canScan = 'BarcodeDetector' in window && isSecureContext && navigator.mediaDevices;
@@ -1084,6 +1218,12 @@
         if (canScan) $('#scan').onclick = async () => { const code = await scanQR(); if (!code) return; const e = byCode(code); e ? pick(e.id) : toast('QR non reconnu : ' + code); };
       }
     };
+    const preE = preCode && byCode(preCode);
+    pick(preE ? preE.id : null);
+    if (preCode && !preE) $('#dupl').innerHTML = `<p class="warn">Le QR désigne l’équipement <b>${esc(preCode)}</b>, inconnu sur cet appareil. Choisissez l’équipement ci-dessus.</p>`;
+  }
+  /** Photos d'un formulaire (4 au plus, compressées sur l'appareil). */
+  function photosForm() {
     const photos = [];
     const showThumbs = () => {
       $('#thumbs').innerHTML = photos.map((u, i) => `<button type="button" data-rm="${i}" title="Retirer"><img src="${u}" alt="Photo ${i + 1}"><span class="rm">×</span></button>`).join('');
@@ -1096,9 +1236,48 @@
       try { photos.push(await compresserPhoto(f)); showThumbs(); } catch { toast('Image illisible'); }
     };
     $('#thumbs').onclick = ev => { const b = ev.target.closest('[data-rm]'); if (b) { photos.splice(Number(b.dataset.rm), 1); showThumbs(); } };
-    const pre = r.q.get('eq'); const preE = pre && byCode(pre);
-    pick(preE ? preE.id : null);
-    if (pre && !preE) $('#dupl').innerHTML = `<p class="warn">Le QR désigne l’équipement <b>${esc(pre)}</b>, inconnu sur cet appareil. Les données ne sont pas encore partagées entre appareils : importez une sauvegarde du PC (Réglages → Importer), ou choisissez l’équipement ci-dessus.</p>`;
+    return photos;
+  }
+  const minutesAvant = (iso, m) => { const d = new Date(iso); d.setMinutes(d.getMinutes() - m); const p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
+  AFTER.rapide = r => {
+    const form = $('#rapide');
+    if (!form) return;
+    choixEquipement(form, r.q.get('eq'), { doublons: false });
+    const photos = photosForm();
+    form.addEventListener('change', () => $('#duree').classList.toggle('hidden', form.avecArret.value !== 'oui'));
+    form.addEventListener('submit', async ev => {
+      ev.preventDefault();
+      const v = Object.fromEntries(new FormData(form).entries());
+      const miss = [];
+      if (!v.equipementId) miss.push('la machine');
+      if (!(v.travaux || '').trim()) miss.push('ce qui a été fait');
+      if (miss.length) { toast('À renseigner : ' + miss.join(', ')); return; }
+      const me = Store.currentUser();
+      if (!me) { toast('Choisissez d’abord qui utilise cet appareil'); return A.who(); }
+      const now = Store.now(), arret = v.avecArret === 'oui';
+      const o = await newOT({
+        equipementId: v.equipementId, ...qualifNouvelle('corrective', null), statut: 'en_cours', intervenants: moiIntervenant(),
+        travaux: v.travaux.trim(), resultat: v.resultat || 'resolu', saisieRapide: true,
+        avecArret: arret ? 'oui' : 'non', ...(arret ? { arretType: 'non_planifie', arretDebut: minutesAvant(now, Number(v.duree) || 30), arretFin: now, arretPrecision: 'estimee' } : {}),
+      });
+      for (const u of photos) await ajouterFichier('ots', o.id, await (await fetch(u)).blob(), 'photo.jpg');
+      if (clotureParResp()) {
+        const err = Calculs.verifierCloture(o);
+        if (!err.length) await Store.save('ots', { ...data.ots.get(o.id), statut: 'travail_termine' }, { action: 'travail_termine' });
+        toast(err.length ? `${o.ref} enregistrée : à compléter` : `${o.ref} enregistrée : clôture à valider par le responsable`);
+        location.hash = '#/ot/' + o.id;
+        return;
+      }
+      const ok = await cloturer(data.ots.get(o.id));
+      location.hash = '#/ot/' + o.id;
+      if (ok) toast(`${o.ref} enregistrée et clôturée`);
+    });
+  };
+
+  AFTER.signaler = r => {
+    const form = $('#sig');
+    choixEquipement(form, r.q.get('eq'));
+    const photos = photosForm();
     form.addEventListener('change', () => {
       $('#quandAutre').classList.toggle('hidden', form.quand.value !== 'autre');
       $('#tiers').classList.toggle('hidden', form.origine.value !== 'tiers');
@@ -1107,18 +1286,18 @@
       ev.preventDefault();
       const v = Object.fromEntries(new FormData(form).entries());
       const miss = [];
-      if (!v.equipementId) miss.push('l’équipement');
-      if (!v.etat) miss.push('l’état');
-      if (!v.besoin) miss.push('le besoin');
-      if (!(v.constat || '').trim()) miss.push('le constat');
+      if (!v.equipementId) miss.push('la machine');
+      if (!(v.constat || '').trim()) miss.push('ce qui se passe');
+      if (!v.etatSig) miss.push('l’état');
       if (v.quand === 'autre' && !v.heureFait) miss.push('l’heure du fait');
       if (miss.length) { toast('À renseigner : ' + miss.join(', ')); return; }
       const me = Store.currentUser();
       const now = Store.now();
+      const sig = Calculs.ETAT_SIGNALE[v.etatSig];
       const heureFait = v.quand === 'maintenant' ? now : v.quand === 'autre' ? v.heureFait : null;
       const d = {
-        id: Store.uid(), ref: await Store.nextRef('DEM'), origine: v.origine, equipementId: v.equipementId, besoin: v.besoin,
-        constat: v.constat.trim(), etat: v.etat, impact: v.impact || 'a_confirmer', heureFait,
+        id: Store.uid(), ref: await Store.nextRef('DEM'), origine: v.origine, equipementId: v.equipementId, besoin: v.besoin || sig.besoin,
+        constat: v.constat.trim(), etat: sig.etat, impact: sig.impact, heureFait,
         precisionHeure: v.quand === 'maintenant' ? 'exacte' : v.quand === 'autre' ? v.precisionHeure : 'inconnue',
         tiers: v.origine === 'tiers' && (v.tiersNom || v.tiersService) ? { nom: v.tiersNom || null, service: v.tiersService || null } : null,
         statut: 'a_examiner', priseEnChargePar: null, priseEnChargeLe: null, motifClassement: null,
@@ -1255,10 +1434,11 @@
   A['ot-new'] = async () => {
     const v = await askForm({ title: 'Nouvelle intervention', ok: 'Créer', fields: [
       { name: 'equipementId', label: 'Équipement', type: 'select', required: true, empty: '— Choisir —', options: list('equipements').filter(e => e.actif !== false).map(e => [e.id, `${e.designation} (${e.code})`]) },
-      { name: 'nature', label: 'Nature', type: 'chips', options: L.nature, default: 'a_qualifier', required: true },
+      { name: 'nature', label: estResp() ? 'Nature' : 'Nature (proposée au responsable)', type: 'chips', options: L.nature, default: 'a_qualifier', required: true },
       { name: 'travaux', label: 'Objet du travail', type: 'textarea' }] });
     if (!v) return;
-    const o = await newOT({ ...v, intervenants: moiIntervenant('coordinateur') });
+    const { nature, ...reste } = v;
+    const o = await newOT({ ...reste, ...qualifNouvelle(nature, null), intervenants: moiIntervenant('coordinateur') });
     location.hash = '#/ot/' + o.id;
   };
   A['ot-demarrer'] = async el => {
@@ -1330,23 +1510,26 @@
     const progO = o.programmeId ? data.programmes.get(o.programmeId) : null;
     const cptProg = progO?.compteurId ? data.compteurs.get(progO.compteurId) : null;
     const fields = [
-      ...(o.nature === 'a_qualifier' ? [{ name: 'nature', label: 'Nature', type: 'chips', options: Object.fromEntries(Object.entries(L.nature).filter(([k]) => k !== 'a_qualifier')), required: true }] : []),
+      ...(qualification(o).nature === 'a_qualifier' ? [{ name: 'nature', label: estResp() ? 'Nature' : 'Nature (proposée au responsable)', type: 'chips', options: NATURES, required: true }] : []),
       { name: 'travaux', label: 'Ce qui a été fait', type: 'textarea', required: true },
       { name: 'resultat', label: 'Résultat', type: 'chips', options: L.resultat, required: true },
       { name: 'certitudeCause', label: 'Certitude de la cause', type: 'chips', options: L.certitude },
       { name: 'cause', label: 'Cause, si connue', type: 'textarea' },
-      ...(o.avecArret === 'oui' && !o.arretFin ? [{ name: 'arretFin', label: 'Remise à disposition (fin d’arrêt)', type: 'datetime-local' }] : []),
+      ...(o.avecArret === 'oui' && !o.arretFin ? [{ name: 'arretFin', label: `Remise à disposition (fin d’arrêt ${typeArret(o) === 'planifie' ? 'planifié' : 'non planifié'})`, type: 'datetime-local' },
+        ...(typeArret(o) === 'non_planifie' ? [{ name: 'arretHeuresInconnues', label: 'Heures inconnues (la panne compte, sans durée)', type: 'checkbox' }] : [])] : []),
       ...(cptProg ? [{ name: 'indexCompteur', label: `Index du compteur à la réalisation (${cptProg.unite}) — dernier relevé : ${App.compteurs?.dernierRetenu(cptProg)?.valeur ?? '—'}`, type: 'number', required: true }] : []),
       ...(sansSuite ? [{ name: 'suite', label: 'Suite à donner, si partiel ou non résolu', type: 'text' },
         { name: 'suiteResp', label: 'Responsable de la suite', type: 'select', options: personnesOpts(), empty: '—' }] : []),
     ];
     const valider = clotureParResp();
     if (valider) fields.push({ type: 'info', text: 'Le responsable valide la clôture.' });
-    const v = await askForm({ title: 'Terminer l’intervention', ok: valider ? 'Terminer' : 'Clôturer', values: { travaux: o.travaux, resultat: o.resultat, certitudeCause: o.certitudeCause, cause: o.cause, indexCompteur: o.indexCompteur }, fields });
+    const v = await askForm({ title: 'Terminer l’intervention', ok: valider ? 'Terminer' : 'Clôturer', values: { travaux: o.travaux, resultat: o.resultat, certitudeCause: o.certitudeCause, cause: o.cause, indexCompteur: o.indexCompteur, arretFin: o.avecArret === 'oui' && !o.arretFin ? Store.now() : null, arretHeuresInconnues: o.arretHeuresInconnues }, fields });
     if (!v) return;
     const patch = { travaux: v.travaux, resultat: v.resultat, certitudeCause: v.certitudeCause || o.certitudeCause, cause: v.cause || null };
-    if (v.nature) patch.nature = v.nature;
-    if (v.arretFin) patch.arretFin = v.arretFin;
+    if (v.nature) Object.assign(patch, estResp() ? { nature: v.nature, ...(qualification(o).validee ? {} : { priorite: qualification(o).priorite, ...validation() }) }
+      : { natureProposee: v.nature, prioriteProposee: qualification(o).priorite, qualificationValidee: false });
+    if (v.arretHeuresInconnues) { patch.arretHeuresInconnues = true; if (o.avecArret === 'oui' && !o.arretType) patch.arretType = typeArret(o); }
+    else if (v.arretFin) { patch.arretFin = v.arretFin; if (o.avecArret === 'oui' && !o.arretType) patch.arretType = typeArret(o); }
     if (v.indexCompteur != null) patch.indexCompteur = v.indexCompteur;
     if (v.suite) patch.reserves = [...(o.reserves || []), { id: Store.uid(), type: 'suite', texte: v.suite, responsableId: v.suiteResp || null, echeance: null, bloquante: false, statut: 'ouverte', creeLe: Store.now() }];
     if (valider) {
@@ -1359,6 +1542,22 @@
     // Si la clôture n'aboutit pas, la saisie est gardée et l'intervention reste ouverte.
     if (!(await cloturer({ ...o, ...patch }))) await edit('ots', o.id, patch, { action: 'saisie_fin' });
   };
+  A['ot-valider-qualif'] = async el => {
+    const o = data.ots.get(el.dataset.id), q = qualification(o);
+    if (q.nature === 'a_qualifier') return A['ot-qualifier'](el);
+    await edit('ots', o.id, { nature: q.nature, priorite: q.priorite, ...validation() }, { action: 'qualification' });
+    toast('Qualification validée');
+  };
+  A['ot-qualifier'] = async el => {
+    const o = data.ots.get(el.dataset.id), q = qualification(o);
+    const v = await askForm({ title: 'Qualifier l’intervention', ok: 'Valider', values: { nature: q.nature === 'a_qualifier' ? null : q.nature, priorite: q.priorite === 'a_qualifier' ? null : q.priorite }, fields: [
+      { name: 'nature', label: 'Nature', type: 'chips', options: NATURES, required: true },
+      { name: 'priorite', label: 'Priorité', type: 'chips', options: PRIORITES, required: true }] });
+    if (!v) return;
+    await edit('ots', o.id, { nature: v.nature, priorite: v.priorite, ...validation() }, { action: 'qualification' });
+    toast('Qualification validée');
+  };
+  A['ui-autres'] = el => el.closest('.acts')?.classList.toggle('tout');
   A['ot-rouvrir'] = async el => {
     const m = await askText('Rouvrir l’intervention', 'Motif de la réouverture');
     if (m) await edit('ots', el.dataset.id, { statut: 'en_cours', clotureLe: null, cloturePar: null }, { motif: m, action: 'reouverture' });
@@ -1406,8 +1605,14 @@
       { name: 'qte', label: 'Quantité', type: 'number', required: true },
       { name: 'urgent', label: 'Urgent', type: 'checkbox' },
       { name: 'note', label: 'Précision pour le magasin', type: 'text' },
-      ...(enAttente ? [] : [{ name: 'attente', label: 'Mettre l’intervention en attente de cette pièce', type: 'checkbox' }])] });
+      ...(enAttente ? [] : [{ name: 'attente', label: 'Mettre l’intervention en attente de cette pièce', type: 'checkbox' }]),
+      { name: 'horsStock', label: 'Pièce hors stock déjà utilisée (rien à demander au magasin)', type: 'checkbox' }] });
     if (!v || !(v.qte > 0)) return;
+    if (v.horsStock) {
+      if (v.articleId || !v.description) { toast('Pièce hors stock : décrivez-la (sans choisir d’article du magasin)'); return; }
+      await edit('ots', o.id, { pieces: [...(o.pieces || []), { id: Store.uid(), articleId: null, libelle: v.description, qte: v.qte, mouvementId: null, annulee: false }] }, { action: 'piece' });
+      return;
+    }
     if (!v.articleId && !v.description) { toast('Choisissez un article ou décrivez la pièce'); return; }
     const art = v.articleId ? data.articles.get(v.articleId) : null;
     // Pas de qteReservee ni de délai : la réservation appartient au magasin.
@@ -1977,7 +2182,7 @@
       await Store.persistMeta({ ...(data.meta.get(id) || {}), id, [field]: v }); render(); return;
     }
     const rr = el.type === 'radio' || el.tagName === 'SELECT' || 'rerender' in el.dataset;
-    await edit(t, id, { [field]: v }, { render: rr });
+    await edit(t, id, { ...complementBind(t, id, field, v), [field]: v }, { render: rr });
   });
   document.addEventListener('input', e => {
     const f = e.target.dataset?.filter;

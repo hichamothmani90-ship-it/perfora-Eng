@@ -238,6 +238,28 @@ def visible(f, email):
             and (f["type"] != "journal" or journal_visible(f, email)))
 
 
+def r2_qualif_terrain(pa, d, nouvelle):
+    """R2 (miroir de supabase/interventions_r2.sql) : nature / priorité écrites par le terrain = proposition."""
+    if nouvelle and pa.get("programmeId"):
+        return pa
+    q = dict(pa)
+    for champ, prop in (("nature", "natureProposee"), ("priorite", "prioriteProposee")):
+        if champ in pa and pa[champ] != ((d or {}).get(champ) or "a_qualifier"):
+            del q[champ]
+            q[prop], q["qualificationValidee"] = pa[champ], False
+            if nouvelle:
+                q[champ] = "a_qualifier"
+    return q
+
+
+def r2_arret_incomplet(d):
+    if d.get("avecArret") != "oui" or "arretType" not in d:
+        return False
+    nat = (d.get("natureProposee") or d.get("nature")) if d.get("qualificationValidee") is False else d.get("nature")
+    typ = d.get("arretType") or ("planifie" if nat in ("preventive", "travaux_techniques") else "non_planifie")
+    return typ == "non_planifie" and not d.get("arretFin") and d.get("arretHeuresInconnues") is not True
+
+
 def prestataire_refus(t, fid, pa, email):
     x = fiches.get(fid)
     if t == "ots":
@@ -645,6 +667,8 @@ class H(BaseHTTPRequestHandler):
                 cible = pa.get("entite") if t == "journal" else t
                 ex = fiches.get(f["id"])
                 motif, s = None, None
+                if t == "ots" and terrain:
+                    pa = r2_qualif_terrain(pa, ex and ex["data"], not ex)
                 if t in ("mouvements", "releves") and ex and ex["entreprise"] == ent and all(ex["data"].get(k) == v for k, v in pa.items()):
                     acceptes += 1  # renvoi identique (réponse perdue, envoi complet) : rien à changer
                     continue
@@ -696,6 +720,12 @@ class H(BaseHTTPRequestHandler):
                     motif = "un prix se rattache à une entrée de stock"
                 elif t == "valorisations" and ex and r != "responsable":
                     motif = "correction d'un prix : réservée au responsable"
+                elif t == "ots" and terrain and (pa.get("qualificationValidee") is True or "qualifieePar" in pa or "qualifieeLe" in pa):
+                    motif = "validation de la qualification : réservée au responsable"
+                elif t == "ots" and terrain and ex and ex["data"].get("qualificationValidee") is True and any(k in pa for k in ("natureProposee", "prioriteProposee", "qualificationValidee")):
+                    motif = "qualification déjà validée par le responsable : demandez-lui de la changer"
+                elif t == "ots" and pa.get("statut") in ("cloturee", "travail_termine") and (ex and ex["data"].get("statut")) != pa.get("statut")                         and r2_arret_incomplet({**(ex["data"] if ex else {}), **pa}):
+                    motif = "arrêt non planifié : indiquer la remise à disposition ou « heures inconnues »"
                 elif t == "ots" and r != "responsable" and ex and ex["data"].get("statut") == "cloturee":
                     motif = "intervention clôturée : modification réservée au responsable"
                 elif t == "ots" and r != "responsable" and pa.get("statut") == "cloturee" and cloture_par_responsable(ent):
