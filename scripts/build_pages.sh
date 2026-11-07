@@ -14,6 +14,9 @@ if [ "$cible" = "app" ]; then
   cp deploy/app/_headers dist/_headers
   mkdir -p dist/kit && cp kit/Kit_demarrage_Perfora.xlsx dist/kit/   # kit vide, téléchargeable depuis la console
   cp -r console dist/                                                  # centre de contrôle (administrateur) : app.perfora.ma/console/
+  # Adresses versionnées : le cache navigateur de Cloudflare (4 h sur le domaine) ne sert jamais une ancienne console.
+  version=$(grep -o "gmao-terrain-v[0-9]*" sw.js | head -1)
+  sed -i "s/?v=dev/?v=$version/g" dist/console/index.html
 else
   echo "Cible inconnue : $cible (seule « app » existe ; le site est dans le dépôt perfora-site)" >&2; exit 1
 fi
