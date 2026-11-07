@@ -79,6 +79,7 @@ Matériel : un PC (vidéoprojecteur) + un téléphone, connectés au même compt
 | 8-9 | **Indicateurs** : pannes répétitives (le convoyeur), préventif à l'échéance, arrêts « 2 sur 3 renseignés » | « Des chiffres honnêtes : on montre ce qu'on sait, et ce qui manque. » |
 | + 4 min | **Achats** (option, pack Entreprise) : **Magasin → À réapprovisionner** : le joint est sous son point de commande, 6 proposés → **Créer la demande d'achat** → Soumettre ; en responsable **Valider**. Puis **Plus → Achats** : la commande de filtres DA-DEMO-0001 → **Réceptionner** 2 dont 1 isolée → décision **Libérer**. Finir par **Valeur du stock** | « Le stock se pilote : seuils validés, rien n'est commandé sans décision, une livraison partielle reste visible, et les prix restent invisibles aux techniciens. » |
 | + 3 min | **Magasin** (option) : sur l'intervention du convoyeur, la pièce « Rouleau tendeur » est demandée en urgence ; ouvrir **Magasin → À servir** → **Remettre**. Sur le téléphone du technicien : « Pièce remise : … peut reprendre ». Puis **À vérifier** : le retrait urgent d'huile → **Vérifié** | « Demande, réservation, remise, utilisation, retour : cinq faits distincts, un stock juste, sans ressaisie. » |
+| + 4 min | **Énergie et eau** (option, pack Entreprise) : sur le téléphone du technicien, l'accueil montre **1 relevé à faire** (heures du compresseur) → **Relever** : on tape l'index, contrôle immédiat « ✓ Cohérent : +… h » ; taper un chiffre plus bas pour montrer l'alerte « index plus bas » et le choix « compteur remplacé ». Sur le PC : **Plus → Énergie et eau**, mois dernier : électricité totale **sur l'arrivée générale seulement**, sous-compteurs en retrait, couverture « 28 j sur 31 », résidu **≈ 7 % à expliquer** → **Créer une demande**. Onglet **À examiner** : l'eau lue 4 718 au lieu de 3 718 (exclue des calculs) → **Invalider** ; la facture ONEE en **écart +6,3 %**. Onglet **Factures** : la facture du 2 au 30 (dates exactes, pas le mois civil). Enfin **Préventif** : la vidange selon les heures est **en alerte** (reste 48 h) | « Des chiffres d'énergie honnêtes : jamais d'addition entre unités ni de valeur inventée ; un écart déclenche une vérification, pas une accusation. » |
 | 9-10 | Montrer un compte **technicien** : pas de bouton de configuration ; une intervention clôturée est en lecture seule | « Chacun son rôle, contrôlé par le serveur. » |
 
 Conseils : préparer la planche de QR **depuis l'adresse en ligne** ; charger les données de démonstration
@@ -91,8 +92,9 @@ la veille ; avoir un deuxième téléphone en secours.
 - **Où sont les données ?** Sur un serveur en Europe (Frankfurt) ; chaque client sera isolé (multi-entreprise, à venir). Formalités CNDP à valider avant mise en production.
 - **Peut-on importer nos équipements ?** Prévu (import Excel contrôlé, volet F).
 - **Suivez-vous le temps des techniciens ?** Non, volontairement : on suit les machines, pas la productivité individuelle.
-- **Et le magasin, les achats, l'énergie ?** Le magasin est relié au terrain (demande de pièce, réservation, remise, retrait urgent vérifié, retour, stock par site) et aux achats : seuils validés, liste « à réapprovisionner », demande d'achat, commande saisie, réceptions partielles, pièces isolées, valeur du stock. Énergie / eau est le prochain volet.
-- **Les techniciens voient-ils les prix ?** Non : le serveur ne leur envoie ni les demandes d'achat, ni les prix, ni l'historique de ces montants.
+- **Et le magasin, les achats, l'énergie ?** Le magasin est relié au terrain (demande de pièce, réservation, remise, retrait urgent vérifié, retour, stock par site) et aux achats : seuils validés, liste « à réapprovisionner », demande d'achat, commande saisie, réceptions partielles, pièces isolées, valeur du stock. L'énergie et l'eau aussi : compteurs avec QR, relevés hors ligne avec contrôle immédiat, consommations par mois avec couverture, sous-comptages, factures d'énergie (PDF joint) rapprochées des relevés, préventif selon les heures de marche.
+- **Les techniciens voient-ils les prix ?** Non : le serveur ne leur envoie ni les demandes d'achat, ni les prix, ni les factures d'énergie, ni l'historique de ces montants.
+- **L'appli lit-elle nos factures ou nos compteurs automatiquement ?** Pas encore : on saisit la facture (période, quantité, montant) et on joint le PDF ; les relevés se font au QR. Les compteurs connectés viendront ensuite.
 - **Perfora passe-t-il les commandes ?** Non, volontairement : on suit le besoin, la décision et la livraison ; la commande reste dans votre circuit fournisseur habituel.
 
 ## 8 bis. Préparer et réinitialiser la démo commerciale
@@ -102,6 +104,9 @@ la veille ; avoir un deuxième téléphone en secours.
 - **Avant** la présentation : sur votre compte principal, **Plus → Console plateforme → Vitrine Perfora →
   Réinitialiser la démo** ; sur l'appareil de présentation, **Réglages → Synchroniser maintenant**.
 - **Achats et valeur du stock** : visibles seulement si l'abonnement de la démo inclut le module « achats » (pack Entreprise).
+- **Énergie et eau** : la réinitialisation ajoute 6 compteurs, 9 semaines de relevés (le dernier la veille), un remplacement de compteur,
+  une lecture d'eau erronée, 3 factures et la vidange selon les heures. Les dates suivent le jour de la réinitialisation :
+  **réinitialiser la veille ou le matin** de la présentation. Module « energie » requis (pack Entreprise).
 - Pour montrer le multi-site ou un client : la console permet aussi de créer une entreprise d'essai
   (pack, premier site, invitation du responsable) en une minute, devant le prospect.
 
@@ -109,10 +114,11 @@ la veille ; avoir un deuxième téléphone en secours.
 
 | Disponible aujourd'hui | Prochains volets |
 |---|---|
-| Demandes, interventions, préventif, QR codes, photos | Énergie et eau |
+| Demandes, interventions, préventif (dates et heures de marche), QR codes, photos et PDF | Bilan des cuves (combustible) |
 | Hors ligne + synchronisation, rôles et droits, multi-entreprise et multi-site, packs et quotas, invitations, console plateforme | Rapports mensuels, imports Excel |
 | Indicateurs par équipement, journal d'audit, export CSV | Pilotage avancé |
 | Magasin relié au terrain : demandes de pièces, réservation, remise, retrait urgent, retour, stock par site, accueil magasinier | Fiche fournisseurs, emplacements et transferts |
 | Achats : seuils, à réapprovisionner (CSV), demandes d'achat, commande, réceptions partielles, isolés, valeur du stock (CUMP) | |
+| Énergie et eau : compteurs et QR, relevés hors ligne, consommations avec couverture, sous-comptages, factures et rapprochement | Compteurs connectés, ratios de production (kWh par tonne) |
 
 Feuille de route détaillée : [`FEUILLE_DE_ROUTE.md`](FEUILLE_DE_ROUTE.md).

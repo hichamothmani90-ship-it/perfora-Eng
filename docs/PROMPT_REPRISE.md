@@ -28,15 +28,15 @@ multi-entreprise) et concepteur d'interfaces terrain mobile-first. Langue : fran
      (décision du 6 nov. 2026 : traçabilité légère, pas de chronomètre).
    Si tu as besoin d'un passage précis, demande à lire le fichier.
 
-3. ÉTAT (7 nov. 2026, appli **v33** sur app.perfora.ma) — **lire d'abord docs/PLANNING_ACTUALISE.md** (§0 « où on en est »,
-   §0 bis « chemin vers le pilote », §8 décisions). Prochaine étape : **D5 démo énergie** (docs/VOLET_D_CONCEPTION.md ; D3 fait §9,
-   D4 fait §10). Autres repères : docs/TESTS_HORS_LIGNE.md, docs/CENTRE_CONTROLE_CONCEPTION.md, docs/MISE_EN_SERVICE_CLIENT.md,
+3. ÉTAT (7 nov. 2026, appli **v34** sur app.perfora.ma) — **lire d'abord docs/PLANNING_ACTUALISE.md** (§0 « où on en est »,
+   §0 bis « chemin vers le pilote », §8 décisions). Volet D (énergie et eau) **terminé** (docs/VOLET_D_CONCEPTION.md §7-11). Prochaine étape :
+   **scripts SQL numérotés + sauvegarde quotidienne chiffrée + test de restauration** (PLANNING_ACTUALISE.md §0 bis, étape 5). Autres repères : docs/TESTS_HORS_LIGNE.md, docs/CENTRE_CONTROLE_CONCEPTION.md, docs/MISE_EN_SERVICE_CLIENT.md,
    docs/CLASSIFICATION_PARC.md, docs/DISCUSSION_MODELE_DONNEES.md.
    - Décisions récentes : offre Supabase gratuite au départ (2 projets : recette actuelle + production créée avant le
      pilote, sauvegarde maison) ; pas d'inscription libre (essais ouverts par l'administrateur) ; MFA administrateur
      seulement ; français au lancement (arabe décidé après le pilote) ; énergie et eau avant le pilote ; rester sur
      Supabase (pas Neon).
-   - Comptes de recette : DEMO « Perfora Démo » et VITRINE sont des **démos** (demo = true, réinitialisables, 39 fiches) ;
+   - Comptes de recette : DEMO « Perfora Démo » et VITRINE sont des **démos** (demo = true, réinitialisables, 110 fiches dont l’énergie) ;
      compte technicien de test hicham.othmani90.tech@gmail.com (VITRINE). Faux serveur actuel : port 8093 (comptes test@,
      tech2@, tech3@ technicien Tanger, mag@, achat@, expl@, autre@ ; mot de passe test-gmao ; réseau simulé par
      `python tests/reseau.py 8093 panne|normal|lent|coupures|portail`). Appli locale : ports 8081 et 8082 (deux appareils).
@@ -55,12 +55,12 @@ multi-entreprise) et concepteur d'interfaces terrain mobile-first. Langue : fran
      (site, dépôt perfora-site) en ligne ; DNS chez Cloudflare (docs/MISE_EN_LIGNE_PERFORA_MA.md). E-mails pro en place (contact@ → Gmail ; envois Supabase par Resend depuis no-reply@perfora.ma). Ensuite volet D (énergie et eau). Ou mise
      en production (docs/RECETTE_VOLET_A.md §4). Démo VITRINE à réinitialiser une fois (nouvelles données magasin).
    - Supabase « gmao-terrain » (réf. oihaqzkqhvyjybijsonc, Frankfurt). Scripts dans l'ordre :
-     schema.sql → roles.sql → multitenant.sql → quotas.sql → plateforme.sql → durcissement.sql → magasin.sql → achats.sql → energie.sql → mise_en_service.sql → centre_controle.sql → centre_controle_cc2.sql → references.sql → fichiers.sql → demo.sql ; tests : tests_etancheite, tests_quotas, tests_plateforme, tests_magasin, tests_demo, tests_achats, tests_energie, tests_mise_en_service, tests_centre_controle, tests_centre_controle_cc2, tests_references, tests_fichiers ;
+     schema.sql → roles.sql → multitenant.sql → quotas.sql → plateforme.sql → durcissement.sql → magasin.sql → achats.sql → energie.sql → mise_en_service.sql → centre_controle.sql → centre_controle_cc2.sql → references.sql → fichiers.sql → demo.sql → demo_energie.sql (généré : python scripts/generer_demo_energie.py) ; tests : tests_etancheite, tests_quotas, tests_plateforme, tests_magasin, tests_demo, tests_achats, tests_energie, tests_mise_en_service, tests_centre_controle, tests_centre_controle_cc2, tests_references, tests_fichiers ;
      Edge Function supabase/functions/inviter. Entreprises : DEMO « Perfora Démo » (Site Tanger, pack Pro ;
      othmanihicham99@gmail.com responsable + administrateur plateforme ; hothmani36@outlook.fr magasinier)
      et VITRINE « Vitrine Perfora » (démo réinitialisable, **pack Entreprise** depuis le 6 nov. 2026 pour montrer les achats,
      réinitialisée avec la démo du volet C ; hicham.othmani90@gmail.com responsable). DEMO reste en pack Pro.
-   - Tests : node --test tests/*.test.js (89) ; supabase/tests_*.sql (à rejouer dans le SQL Editor).
+   - Tests : node --test tests/*.test.js (90) ; supabase/tests_*.sql (à rejouer dans le SQL Editor).
      Faux serveur : python tests/serveur_factice.py 8094 (comptes test@ responsable, tech2@ technicien,
      mag@ magasinier, achat@ achats, autre@ autre entreprise ; mot de passe test-gmao ; pack de DEMO modifiable par
      POST /test/abonnement) ; appli : python serveur.py 8081 ;
@@ -84,8 +84,8 @@ multi-entreprise) et concepteur d'interfaces terrain mobile-first. Langue : fran
    - Commits en français, terminés par la ligne Co-Authored-By habituelle.
 
 5. VOLET À TRAITER MAINTENANT :
-   D5 — démo énergie (compteurs, relevés dont un suspect et un remplacement, sous-compteur, facture du 15 au 15 avec PDF)
-   dans VITRINE et Perfora Démo, guide, tests hors ligne des relevés.
+   Scripts SQL numérotés (une seule séquence propre pour construire la production) + sauvegarde quotidienne chiffrée vers
+   un dépôt GitHub PRIVÉ (secrets saisis par Hicham) + test de restauration.
    Commence par me proposer le modèle de données, les règles serveur et le découpage en étapes,
    en citant les sections V3 concernées, puis attends ma validation.
 ```

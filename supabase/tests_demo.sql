@@ -1,7 +1,8 @@
 -- Test de la démo commerciale (pf_reinitialiser_demo, avec les données du volet B). Supabase → SQL Editor.
 -- Crée une entreprise de démonstration temporaire TDEMO, la réinitialise au nom de l'administrateur
 -- plateforme, contrôle le contenu, puis supprime tout. Résultat attendu (6 nov. 2026) :
--- 39 fiches (ots 2, besoins 2, articles 4, demandes 4, personnes 4, mouvements 6, programmes 2,
+-- Avec demo_energie.sql (7 nov. 2026) : 110 fiches dont 71 d'énergie (compteurs 6, releves 61, factures_energie 3, programmes +1).
+-- Avant : 39 fiches (ots 2, besoins 2, articles 4, demandes 4, personnes 4, mouvements 6, programmes 2,
 -- equipements 4, localisations 4, valorisations 4, seuils 2, achats 1) · attente_liee_au_besoin 1 · piece_huile 2 ·
 -- retrait_a_verifier 1 · stock_rouleau 2 · besoins_sur_site true · volet_c : seuil_valide 1, seuil_propose 1,
 -- achat_commande 1, valorisations_liees 4, couts_sur_site true · nettoyage « DEMO, VITRINE ».

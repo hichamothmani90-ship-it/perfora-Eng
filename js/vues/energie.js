@@ -22,9 +22,10 @@
   const piecesDe = f => [...data.photos.values()].filter(p => p.parentType === 'factures_energie' && p.parentId === f.id);
   const rapprocher = f => Calculs.rapprochementFacture(f, list('compteurs'), tousReleves(), { maintenant: Store.now() });
 
-  /** Période affichée : un mois ; le mois en cours s'arrête à aujourd'hui (rien n'est compté dans le futur). */
+  /** Période affichée : un mois, par défaut le dernier mois complet (on analyse des mois clos, comme les factures) ;
+   *  le mois en cours s'arrête à aujourd'hui (rien n'est compté dans le futur). */
   function periode(r) {
-    const cur = today().slice(0, 7), ym = /^\d{4}-\d{2}$/.test(r.q.get('m') || '') ? r.q.get('m') : cur;
+    const cur = today().slice(0, 7), ym = /^\d{4}-\d{2}$/.test(r.q.get('m') || '') ? r.q.get('m') : Calculs.moisDecale(cur, -1);
     const b = Calculs.bornesMois(ym);
     return { ym, cur, du: b.du, au: ym === cur ? today().slice(0, 10) : b.au, enCours: ym === cur };
   }

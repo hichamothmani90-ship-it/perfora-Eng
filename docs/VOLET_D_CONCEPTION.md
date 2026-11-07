@@ -163,3 +163,25 @@ Vérifié : 89 tests ; navigateur avec le serveur factice (responsable : scénar
 inhabituel, facture du 1er au 29 oct. avec écart +3 % et PDF, facture du 15 au 15 « incomplète », demande créée depuis
 un résidu ; technicien : ni page, ni factures, ni PDF reçus) ; envoi au serveur sans refus ; affichage téléphone.
 Reste pour plus tard : bilan des cuves à l'écran (calcul prêt).
+
+## 11. Fait en D5 (7 nov. 2026, v34)
+
+- **Données de démo énergie** définies une seule fois : `Calculs.demoEnergie` (js/calculs.js), utilisées par la démo de
+  l'appli (« Découvrir la démo ») et par les démos du serveur via `supabase/demo_energie.sql`, **généré** par
+  `python scripts/generer_demo_energie.py` (ne pas modifier le SQL à la main ; régénérer après tout changement).
+  `demo_energie.sql` crée `pf_demo_energie` et redéfinit `pf_reinitialiser_demo` (version de demo.sql + appel) : à
+  exécuter **après fichiers.sql**. Exécuté sur Supabase, DEMO et VITRINE réinitialisées (110 fiches chacune).
+- Scénario : arrivée générale + 3 sous-compteurs (résidu ≈ 7 % à expliquer), compteur de la ligne remplacé il y a
+  31 jours (pas de fausse baisse), eau lue 4 718 au lieu de 3 718 (à examiner), heures du compresseur relevées chaque jour
+  (un relevé à faire pour le technicien) et vidange 2 000 h en alerte (reste 48 h), factures ONEE concordante puis en
+  écart (+6,3 %), facture d'eau concordante. Dernier relevé **la veille** : jamais d'heure future le jour du chargement
+  (défaut trouvé au test d'une démo chargée à 2 h du matin).
+- Écran Énergie : ouvre par défaut le **dernier mois complet** (le mois en cours, sur des relevés hebdomadaires, est
+  presque vide en début de mois).
+- Tests : 90 (démo : totaux, résidu, remplacement, lecture erronée seule à examiner à 0 h et 6 h 30, factures, vidange,
+  relevé à faire). Serveur : données relues de DEMO et VITRINE et passées dans les mêmes calculs (résultats identiques).
+- **Hors ligne** (serveur factice coupé) : technicien, 2 relevés + 1 correction → « Hors réseau · 6 en attente », ancien
+  relevé « remplacé » ; au retour du réseau, tout est envoyé sans refus, le responsable voit relevés et correction.
+- Guide : scénario de démonstration énergie (4 min), questions de prospects, réinitialisation (docs/GUIDE_FONCTIONNEMENT.md).
+- Pas fait : facture de démo avec PDF côté serveur (un fichier dans l'espace de stockage ne se crée pas par SQL ;
+  le PDF se montre en saisissant une facture pendant la démo).

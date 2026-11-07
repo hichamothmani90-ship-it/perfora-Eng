@@ -4,7 +4,7 @@ Priorités fixées : **1. stabilité, 2. sécurité, 3. expérience d'inscriptio
 Les semaines (S1 = semaine qui suit la validation) sont indicatives. Les fonctions nouvelles attendent que les phases 1 et 2
 soient faites.
 
-## 0. Où on en est (7 nov. 2026, appli v33 sur app.perfora.ma)
+## 0. Où on en est (7 nov. 2026, appli v34 sur app.perfora.ma)
 
 | Domaine | État |
 |---|---|
@@ -18,9 +18,10 @@ soient faites.
 | **Connexion** : écran de connexion à l'ouverture, démo séparée jamais envoyée, pas de question d'envoi pour un technicien ; serveur : refus d'une fiche sur un équipement inconnu ; démos DEMO et VITRINE réinitialisées | ✅ v29 – v30 |
 | **Fichiers joints** : photos et PDF dans l'espace privé « fichiers » de Supabase, hors ligne, droits par entreprise / site / coûts / rôle | ✅ v31 |
 | **Énergie et eau** : calculs (D1), serveur (D2, D2 bis), **terrain (D3)** : compteurs, QR, relevés à faire, contrôle immédiat, remplacement, relevés à examiner, préventif selon les heures avec index à la clôture | ✅ v32 |
-| **Écran Énergie et eau (D4)** : consommations avec couverture, sous-comptages, à examiner, factures d'énergie avec PDF et rapprochement, « créer une demande » depuis un écart | ✅ v33 — reste D5 (démo) |
+| **Écran Énergie et eau (D4)** : consommations avec couverture, sous-comptages, à examiner, factures d'énergie avec PDF et rapprochement, « créer une demande » depuis un écart | ✅ v33 |
+| **Démo énergie (D5)** dans la démo de l'appli, VITRINE et Perfora Démo ; guide ; relevés hors ligne testés | ✅ v34 — **volet D terminé** (bilan des cuves à l'écran : après le pilote) |
 
-Tests : 89 tests de calcul (`node --test tests/*.test.js`), tests SQL rejoués sur Supabase à chaque script, scénarios
+Tests : 90 tests de calcul (`node --test tests/*.test.js`), tests SQL rejoués sur Supabase à chaque script, scénarios
 navigateur avec le serveur factice (réseau simulé : `tests/reseau.py`).
 
 ## 0 bis. Chemin vers le pilote (énergie et eau avant le pilote ; offre Supabase gratuite au départ)
@@ -30,13 +31,13 @@ navigateur avec le serveur factice (réseau simulé : `tests/reseau.py`).
 | 1 | Fichiers joints (photos et PDF) | ✅ v31 | — |
 | 2 | D3 Énergie sur le terrain | ✅ v32 | — |
 | 3 | D4 Écran Énergie et eau (bilan des cuves reporté) | ✅ v33 | — |
-| 4 | **D5** : démo énergie (compteurs, relevés dont un suspect et un remplacement, facture du 15 au 15) dans VITRINE et Perfora Démo, guide, tests hors ligne des relevés | **prochaine étape** | 2 – 3 jours |
-| 5 | **Scripts SQL numérotés** (une seule séquence propre) + **sauvegarde quotidienne maison chiffrée** (dépôt GitHub privé) + test de restauration | à faire | 3 – 4 jours |
+| 4 | D5 démo énergie, guide, tests hors ligne | ✅ v34 | — |
+| 5 | **Scripts SQL numérotés** (une seule séquence propre) + **sauvegarde quotidienne maison chiffrée** (dépôt GitHub privé) + test de restauration | **prochaine étape** | 3 – 4 jours |
 | 6 | **Sécurité** : compte administrateur séparé + MFA, règles de mot de passe, journal des actions administrateur, limites d'envoi, supervision des erreurs et du stockage dans le centre de contrôle | à faire | 1 semaine |
 | 7 | **Production** (projet Supabase gratuit) construite par les scripts, tests de sécurité rejoués, app.perfora.ma branchée | 1 à 2 semaines avant le pilote | 1 – 2 jours |
 | 8 | **Pilote** | CNDP déposée + client pilote prêt (côté Hicham) | 4 – 6 semaines |
 
-Reste environ **2 semaines et demie de travail** de mon côté avant le pilote (D5 → production).
+Reste environ **2 semaines de travail** de mon côté avant le pilote (scripts et sauvegarde → sécurité → production).
 **En parallèle (Hicham)** : dépôt CNDP (bloquant pour les données réelles), choix du client pilote (pack Entreprise ou
 module énergie accordé), prix des packs, contrat simple, modèle de facture avec le comptable (pour CC3), test T7 iPhone.
 
