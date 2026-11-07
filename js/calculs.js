@@ -81,7 +81,7 @@
   /** Tous les indicateurs de pilotage sur [from ; today]. D = { demandes, ots, programmes } (tableaux). */
   function indicateurs(D, { from, today }) {
     const tous = D.ots;
-    const ots = tous.filter(o => o.statut !== 'annulee' && o.creeLe.slice(0, 10) >= from);
+    const ots = tous.filter(o => o.statut !== 'annulee' && (o.creeLe || "").slice(0, 10) >= from);
     const idx = indexOtsParDemande(tous);
 
     const parNature = {};
@@ -103,7 +103,7 @@
 
     const faits = new Map();
     for (const d of D.demandes) {
-      if (d.creeLe.slice(0, 10) >= from && !['annulee', 'close_sans_travail'].includes(d.statut) && ETATS_DEFAUT.includes(d.etat)) faits.set(d.equipementId, (faits.get(d.equipementId) || 0) + 1);
+      if ((d.creeLe || "").slice(0, 10) >= from && !['annulee', 'close_sans_travail'].includes(d.statut) && ETATS_DEFAUT.includes(d.etat)) faits.set(d.equipementId, (faits.get(d.equipementId) || 0) + 1);
     }
     for (const o of ots) if (o.nature === 'corrective' && !(o.demandeIds || []).length) faits.set(o.equipementId, (faits.get(o.equipementId) || 0) + 1);
 

@@ -5,7 +5,7 @@
 (() => {
   const { data } = Store;
   /** Version affichée dans Réglages : à incrémenter avec VERSION dans sw.js. */
-  const APP_VERSION = 'v35';
+  const APP_VERSION = 'v36';
   if (window.Erreurs) Erreurs.version = APP_VERSION;
   const $ = s => document.querySelector(s);
   // Multi-site : les listes de fiches de site ne montrent que le site actif (« tous » possible).
@@ -68,7 +68,7 @@
     famille: { mecanique: 'Mécanique', electrique: 'Électrique', automatisme: 'Automatisme', instrumentation: 'Instrumentation', pneumatique: 'Pneumatique', hydraulique: 'Hydraulique', utilite_externe: 'Utilité externe', autre: 'Autre' },
     activite: { inspection: 'Inspection', mesure: 'Mesure', diagnostic: 'Diagnostic', reglage: 'Réglage', nettoyage_technique: 'Nettoyage', graissage: 'Graissage', depannage: 'Dépannage', reparation: 'Réparation', remplacement: 'Remplacement', montage_demontage: 'Montage / démontage', installation: 'Installation', modification: 'Modification', essai: 'Essai', verification_externe: 'Vérif. externe', autre: 'Autre' },
     attente: { piece: 'Pièce', acces_exploitation: 'Accès / exploitation', autorisation: 'Autorisation', specialiste: 'Spécialiste', outillage_moyen: 'Outillage / moyen', verification_essai: 'Vérification / essai', autre: 'Autre' },
-    role: { technicien: 'Technicien', responsable: 'Responsable', magasinier: 'Magasinier', achats: 'Achats', prestataire: 'Prestataire', exploitation: 'Exploitation', pilote: 'Pilote' },
+    role: { technicien: 'Technicien', responsable: 'Responsable', magasinier: 'Magasinier', achats: 'Achats', prestataire: 'Prestataire', exploitation: 'Exploitation', pilote: 'Direction' },
     roleOT: { coordinateur: 'Coordinateur', intervenant: 'Intervenant', renfort: 'Renfort', prestataire: 'Prestataire' },
     arret: { oui: 'Oui', non: 'Non', inconnu: 'Inconnu' },
     modele: { entretien: 'Entretien', inspection: 'Inspection', test: 'Test', verification_externe: 'Vérification externe', autre: 'Autre' },
@@ -111,7 +111,7 @@
   }
   const actifs = o => (o.intervenants || []).filter(i => !i.fin);
   const attenteOuverte = o => (o.attentes || []).find(a => !a.fin);
-  function journalDe(id) { return list('journal').filter(j => j.entiteId === id).reverse().sort((a, b) => b.le.localeCompare(a.le)); }
+  function journalDe(id) { return list('journal').filter(j => j.entiteId === id).reverse().sort((a, b) => (b.le || '').localeCompare(a.le || '')); }
   function refDe(t, id) { const o = data[t]?.get(id); return o ? (o.ref || o.code || o.designation || o.nom || o.libelle || '') : ''; }
 
   /** État d'un programme selon compteur (heures, cycles…) : null si le programme n'est pas lié à un compteur. */
@@ -235,6 +235,10 @@
   // Sans compte cloud : appli locale, aucune restriction.
   const role = () => Sync.profil()?.role || null;
   const estResp = () => !role() || role() === 'responsable';
+  /** Lot R1 : administrateur de l'entreprise (droit cumulable) ; sans compte, l'appareil est son propre administrateur. */
+  const estAdminClient = () => !Sync.profil() || !!Sync.profil().adminClient;
+  /** Journal d'audit complet : responsable, direction, administrateur (le serveur ne renvoie aux autres que leurs lignes). */
+  const voitJournal = () => !role() || ['responsable', 'pilote'].includes(role()) || estAdminClient();
   const DROITS = {
     responsable: ['eq-new', 'eq-edit', 'loc-new', 'prog-new', 'prog-edit', 'pers-new', 'pers-edit', 'ot-rouvrir', 'sync-tout', 'equipe', 'param-cloture', 'cpt-new', 'cpt-edit', 'releve-qualifier', 'seuil-valider', 'seuil-refuser', 'achat-valider', 'achat-completer', 'achat-refuser'],
     terrain: ['ot-new', 'dem-intervenir', 'dem-planifier', 'prog-ot', 'dem-pec', 'dem-classer', 'ot-demarrer', 'ot-planifier', 'ot-annuler', 'ot-suspendre', 'ot-reprendre', 'ot-terminer', 'ot-cloturer',
@@ -358,6 +362,9 @@
   V.accueil = () => {
     if (role() === 'magasinier' && aModule('magasin') && V.accueilMagasin) return V.accueilMagasin();
     if (role() === 'achats' && aModule('achats') && V.accueilAchats) return V.accueilAchats();
+    if (['technicien', 'prestataire'].includes(role()) && V.accueilTerrain) return V.accueilTerrain();
+    if (role() === 'exploitation' && V.accueilExploitation) return V.accueilExploitation();
+    if (role() === 'pilote' && V.accueilDirection) return V.accueilDirection();
     if (!data.equipements.size) {
       if (Sync.etatCourant().connecte) return `<h1>Bienvenue</h1><div class="card"><p>${Sync.etatCourant().dernier ? 'Aucun équipement dans votre entreprise pour l’instant.' : 'Chargement de vos données…'}</p>
         <p class="small muted">${estResp() ? 'Créez vos équipements (Parc), ou demandez à Perfora d’importer votre liste.' : 'Votre responsable prépare le parc : il apparaîtra ici automatiquement.'}</p>
@@ -366,7 +373,7 @@
         <div class="actions"><button class="btn primary" data-act="demo-decouvrir">Découvrir la démo</button></div></div>`;
     }
     const dem = list('demandes').filter(demandeOuverte);
-    const aEx = dem.filter(d => d.statut === 'a_examiner').sort((a, b) => b.creeLe.localeCompare(a.creeLe));
+    const aEx = dem.filter(d => d.statut === 'a_examiner').sort((a, b) => (b.creeLe || "").localeCompare(a.creeLe || ""));
     const indispo = list('equipements').filter(e => etatEquipement(e.id) === 'indisponible');
     const otsO = list('ots').filter(otOuvert);
     const me = Store.currentUser();
@@ -405,6 +412,7 @@
   function rappelSauvegarde() {
     const s = etatSauvegarde(), c = Sync.etatCourant();
     if (c.connecte && !c.attente && !c.erreur) return ''; // tout est déjà sur le serveur
+    if (Sync.profil() || modeDemo()) return '';           // compte connecté : le serveur sauvegarde ; démo : rien à garder
     if (!s.modifs || (s.depuis && s.jours < 7 && s.modifs < 100)) return '';
     return `<p class="warn">💾 ${s.depuis ? `Dernière sauvegarde il y a ${s.jours} j` : 'Aucune sauvegarde exportée'} · ${s.modifs} modification(s) présentes uniquement sur cet appareil. <a href="#" data-act="export">Exporter maintenant</a></p>`;
   }
@@ -481,8 +489,9 @@
     let items = list('demandes');
     if (f === 'ouvertes') items = items.filter(demandeOuverte);
     if (f === 'a_examiner') items = items.filter(d => d.statut === 'a_examiner');
-    items.sort((a, b) => b.creeLe.localeCompare(a.creeLe));
-    return `<h1>Demandes</h1>${seg([['#/demandes', 'Ouvertes', 'ouvertes'], ['#/demandes?f=a_examiner', 'À examiner', 'a_examiner'], ['#/demandes?f=toutes', 'Toutes', 'toutes']], f)}
+    if (f === 'miennes') items = items.filter(d => d.creePar === Store.currentUserName());
+    items.sort((a, b) => (b.creeLe || "").localeCompare(a.creeLe || ""));
+    return `<h1>${f === 'miennes' ? 'Mes signalements' : 'Demandes'}</h1>${seg([['#/demandes?f=miennes', 'Les miennes', 'miennes'], ['#/demandes', 'Ouvertes', 'ouvertes'], ['#/demandes?f=a_examiner', 'À examiner', 'a_examiner'], ['#/demandes?f=toutes', 'Toutes', 'toutes']], f)}
       ${search('#lst', 'Rechercher (équipement, constat, réf.)')}<div id="lst">${items.length ? items.map(demCard).join('') : empty('Aucune demande.')}</div>`;
   };
 
@@ -523,16 +532,18 @@
   };
 
   V.ots = r => {
-    const f = r.q.get('f') || 'ouverts';
+    const f = r.q.get('f') || (role() === 'prestataire' ? 'mine' : 'ouverts');
     let items = list('ots');
+    const moi = Store.currentUser()?.id;
     const F = {
+      mine: o => otOuvert(o) && actifs(o).some(i => i.personneId === moi),
       ouverts: otOuvert, en_cours: o => ['en_cours', 'travail_termine'].includes(o.statut), suspendue: o => o.statut === 'suspendue',
       a_faire: o => ['a_preparer', 'a_planifier', 'planifiee', 'prete'].includes(o.statut), cloturee: o => o.statut === 'cloturee', tous: () => true,
     };
     items = items.filter(F[f] || F.ouverts);
     items.sort((a, b) => f === 'cloturee' ? (b.clotureLe || '').localeCompare(a.clotureLe || '')
-      : (PRIO_ORDER.indexOf(a.priorite) - PRIO_ORDER.indexOf(b.priorite)) || b.creeLe.localeCompare(a.creeLe));
-    return `<h1>Travaux</h1>${seg([['#/ots', 'Ouverts', 'ouverts'], ['#/ots?f=a_faire', 'À faire', 'a_faire'], ['#/ots?f=en_cours', 'En cours', 'en_cours'], ['#/ots?f=suspendue', 'En attente', 'suspendue'], ['#/ots?f=cloturee', 'Clôturés', 'cloturee'], ['#/ots?f=tous', 'Tous', 'tous']], f)}
+      : (PRIO_ORDER.indexOf(a.priorite) - PRIO_ORDER.indexOf(b.priorite)) || (b.creeLe || "").localeCompare(a.creeLe || ""));
+    return `<h1>${f === 'mine' ? (role() === 'prestataire' ? 'Mes interventions' : 'Mes travaux') : 'Travaux'}</h1>${seg([['#/ots?f=mine', 'Les miens', 'mine'], ['#/ots', 'Ouverts', 'ouverts'], ['#/ots?f=a_faire', 'À faire', 'a_faire'], ['#/ots?f=en_cours', 'En cours', 'en_cours'], ['#/ots?f=suspendue', 'En attente', 'suspendue'], ['#/ots?f=cloturee', 'Clôturés', 'cloturee'], ['#/ots?f=tous', 'Tous', 'tous']], f)}
       ${search('#lst', 'Rechercher')}<div id="lst">${items.length ? items.map(otCard).join('') : empty('Aucune intervention.')}</div>
       <div class="actions"><button class="btn" data-act="ot-new">Nouvelle intervention sans demande</button></div>`;
   };
@@ -667,7 +678,7 @@
     const dems = list('demandes').filter(d => d.equipementId === e.id);
     const ots = list('ots').filter(o => o.equipementId === e.id);
     const ouverts = [...dems.filter(demandeOuverte).map(d => ['d', d]), ...ots.filter(otOuvert).map(o => ['o', o])];
-    const hist = [...dems.map(d => ['d', d]), ...ots.map(o => ['o', o])].sort((a, b) => b[1].creeLe.localeCompare(a[1].creeLe));
+    const hist = [...dems.map(d => ['d', d]), ...ots.map(o => ['o', o])].sort((a, b) => (b[1].creeLe || "").localeCompare(a[1].creeLe || ""));
     const progs = list('programmes').filter(p => p.equipementId === e.id);
     const conso = consoParArticle(ots.map(o => o.id));
     const lien = lienSignaler(e);
@@ -738,8 +749,9 @@
   };
 
   V.journal = r => {
+    if (!voitJournal()) return empty('Journal d’audit : réservé au responsable, à la direction et à l’administrateur de l’entreprise. L’historique de vos fiches reste visible sur chaque fiche.');
     const f = r.q.get('f') || '';
-    let j = list('journal').reverse().sort((a, b) => b.le.localeCompare(a.le));
+    let j = list('journal').reverse().sort((a, b) => (b.le || '').localeCompare(a.le || ''));
     if (f) j = j.filter(x => x.entite === f);
     return `<h1>Journal d’audit</h1><p class="small muted">Append-only : chaque création et modification est conservée avec auteur, date et motif.</p>
       ${seg([['#/journal', 'Tout', ''], ...['demandes', 'ots', 'equipements', 'mouvements', 'programmes'].map(k => [`#/journal?f=${k}`, L.entite[k], k])], f)}
@@ -793,31 +805,44 @@
     .filter(([h]) => !(h === '#/energie' && !App.energie?.voitEnergie()) && !(h === '#/magasin' && !aModule('magasin')) && !(h === '#/preventif' && !aModule('preventif')) && !(['#/achats', '#/valeur'].includes(h) && !(aModule('achats') && App.voitCouts?.())))
     .map(([h, t, s]) => `<a class="card" href="${h}"><div class="t">${t}</div><div class="s">${s}</div></a>`).join('')}`;
 
-  V.reglages = () => {
-    const dev = Store.device();
-    const swState = !('serviceWorker' in navigator) ? 'Navigateur sans mode hors ligne.'
-      : !isSecureContext ? 'Mode hors ligne indisponible à cette adresse (il faut localhost ou HTTPS). Les données restent enregistrées sur l’appareil.'
-        : navigator.serviceWorker.controller ? 'Actif : l’application s’ouvre sans réseau.' : 'En cours d’activation (rechargez la page une fois).';
-    return `<h1>Réglages</h1>
-      <h2>Cet appareil</h2><div class="card">${Sync.profil() ? `<p style="margin-top:0">Connecté : <b>${esc(Store.currentUser()?.nom || Sync.profil().nom || Sync.profil().email)}</b> · ${badge(L.role[Sync.profil().role] || Sync.profil().role, 'blue')}<br><span class="small muted">${esc(Sync.profil().email)} — identité et droits fixés par le compte.</span></p>` : `<label class="f" style="margin-top:0">Qui utilise cet appareil ?</label>
-        <select data-bind="meta|device|personneId"><option value="">— Choisir —</option>${list('personnes').filter(p => p.actif !== false).map(p => `<option value="${p.id}" ${dev.personneId === p.id ? 'selected' : ''}>${esc(p.nom)} (${esc(L.role[p.role])})</option>`).join('')}</select>`}
-        <p class="small muted">Version de l’appli : <b>${APP_VERSION}</b> · ${Sync.etatCourant().configure ? (Sync.etatCourant().connecte ? 'connectée au cloud' : 'cloud configuré, non connectée') : '<b>non connectée au cloud</b> (données sur cet appareil uniquement)'}<br>Code appareil : <b>${esc(dev.code)}</b> (dans les références, évite les doublons entre appareils).<br>Hors ligne : ${esc(swState)}</p></div>
-      ${blocEntreprise()}
-      ${blocSynchro()}
-      ${estResp() ? `<h2>Règles de l’entreprise</h2><div class="card"><div class="row"><span class="grow"><b>Clôture des interventions validée par le responsable</b><br><span class="small muted">${parametres()?.clotureParResponsable ? 'Activé : les techniciens terminent, vous validez la clôture (accueil « Interventions à valider »).' : 'Désactivé : les techniciens clôturent eux-mêmes leurs interventions.'}</span></span>${badge(parametres()?.clotureParResponsable ? 'Activé' : 'Désactivé', parametres()?.clotureParResponsable ? 'green' : '')}</div>
-        <div class="actions" style="margin-bottom:0"><button class="btn sm" data-act="param-cloture">${parametres()?.clotureParResponsable ? 'Désactiver' : 'Activer'}</button></div></div>` : ''}
-      ${Sync.profil()?.role === 'responsable' ? `<h2>Équipe et droits</h2><div class="card" id="equipe"><p class="muted small" style="margin:0">Chargement de l’équipe…</p></div>` : ''}
-      ${Sync.profil() ? `<h2>Support Perfora</h2><div class="card"><p class="small muted" style="margin-top:0">Une question, une anomalie, une idée d’amélioration ? Le support vous répond.</p>
+  // ---------- Mon compte (tout le monde) et Entreprise (administrateur) — lot R1 ----------
+  const etatHorsLigne = () => !('serviceWorker' in navigator) ? 'Navigateur sans mode hors ligne.'
+    : !isSecureContext ? 'Mode hors ligne indisponible à cette adresse (il faut localhost ou HTTPS). Les données restent enregistrées sur l’appareil.'
+      : navigator.serviceWorker.controller ? 'Actif : l’application s’ouvre sans réseau.' : 'En cours d’activation (rechargez la page une fois).';
+  V.compte = () => {
+    const dev = Store.device(), p = Sync.profil();
+    return `<h1>Mon compte</h1>
+      <div class="card">${p ? `<p style="margin-top:0"><b>${esc(Store.currentUser()?.nom || p.nom || p.email)}</b> · ${badge(L.role[p.role] || p.role, 'blue')}${p.adminClient ? ' ' + badge('administrateur', 'green') : ''}<br>
+          <span class="small muted">${esc(p.email)}${p.entreprise ? ' · ' + esc(p.entreprise.nom) : ''}</span></p>
+          ${mesSites().length > 1 ? '<button class="btn sm" data-act="site">Changer de site</button>' : ''}`
+        : `<label class="f" style="margin-top:0">Qui utilise cet appareil ?</label>
+        <select data-bind="meta|device|personneId"><option value="">— Choisir —</option>${list('personnes').filter(x => x.actif !== false).map(x => `<option value="${x.id}" ${dev.personneId === x.id ? 'selected' : ''}>${esc(x.nom)} (${esc(L.role[x.role])})</option>`).join('')}</select>`}</div>
+      ${p ? `<div class="card"><ul class="lines">
+          <li><span class="grow">Changer mon mot de passe</span><button class="btn sm" data-act="mdp-changer">Changer</button></li>
+          <li><span class="grow">Se déconnecter de tous les appareils<br><span class="small muted">Téléphone perdu ou prêté : ferme toutes vos sessions.</span></span><button class="btn sm ghost" data-act="deco-partout">Tout fermer</button></li>
+          <li><span class="grow">Se déconnecter de cet appareil</span><button class="btn sm ghost" data-act="sync-deconnecter">Se déconnecter</button></li></ul></div>` : ''}
+      <h2>Cet appareil</h2><div class="card"><p class="small muted" style="margin-top:0">Version de l’appli : <b>${APP_VERSION}</b> · ${Sync.etatCourant().configure ? (Sync.etatCourant().connecte ? 'connectée' : 'non connectée') : '<b>sans compte</b> (données sur cet appareil uniquement)'}<br>Code appareil : <b>${esc(dev.code)}</b><br>Hors ligne : ${esc(etatHorsLigne())}</p>
+        ${blocSynchro()}
+        <details class="more"><summary>Effacer cet appareil</summary><p class="small muted">Efface toutes les données de ce téléphone (pas celles du serveur ni des autres appareils). Les saisies non envoyées seraient perdues.</p><button class="btn danger" data-act="wipe">Effacer cet appareil</button></details></div>
+      ${p ? `<h2>Aide et support</h2><div class="card"><p class="small muted" style="margin-top:0">Une question, une anomalie, une idée d’amélioration ? Le support vous répond.</p>
         <div class="actions" style="margin-bottom:0"><button class="btn primary" type="button" data-act="support">Contacter le support</button><a class="btn" target="_blank" rel="noopener" href="https://wa.me/212680032888">WhatsApp</a></div></div>` : ''}
-      <h2>Adresse de l’application</h2><div class="card"><p class="small muted" style="margin-top:0">Adresse utilisée dans les QR codes. Elle doit être accessible depuis les téléphones (HTTPS).</p>
-        <input type="text" value="${esc(adressePublique())}" data-bind="meta|adresse|url" inputmode="url"></div>
-      <h2>Personnes</h2><div class="card"><ul class="lines">${list('personnes').map(p => `<li><span class="grow">${esc(p.nom)} <span class="muted small">· ${esc(L.role[p.role])}${p.societe ? ' · ' + esc(p.societe) : ''}</span></span><button class="btn sm ghost" data-act="pers-edit" data-id="${p.id}">Modifier</button></li>`).join('') || '<li class="muted">Aucune personne.</li>'}</ul><button class="btn sm" data-act="pers-new">+ Personne</button></div>
-      <h2>Lieux</h2><div class="card"><ul class="lines">${list('localisations').map(l => `<li><span class="grow">${esc(locPath(l.id))} <span class="muted small">· ${esc(l.code)}</span></span></li>`).join('') || '<li class="muted">Aucun lieu.</li>'}</ul><button class="btn sm" data-act="loc-new">+ Lieu</button></div>
-      <h2>Sauvegarde et partage entre appareils</h2><div class="card"><p style="margin-top:0">Dernière sauvegarde : <b>${(s => s.depuis ? fmtY(s.depuis) + ` (${s.modifs} modification(s) depuis)` : 'jamais')(etatSauvegarde())}</b></p><p class="small muted">Exportez sur le téléphone, importez sur le PC (ou l’inverse) : les fiches sont fusionnées, la version la plus récente est gardée, rien n’est supprimé.</p>
-        <div class="actions"><button class="btn primary" data-act="export">Exporter (JSON)</button><button class="btn" data-act="import">Importer</button><button class="btn" data-act="csv">Interventions (CSV Excel)</button></div>
-        <input type="file" id="importFile" accept=".json,application/json" class="hidden"></div>
       ${modeDemo() ? `<h2>Démonstration</h2><div class="card"><p class="small muted" style="margin-top:0">Données fictives sur cet appareil uniquement.</p><button class="btn" data-act="demo-quitter">Quitter la démo et se connecter</button></div>` : ''}
-      <h2>Zone sensible</h2><div class="card"><button class="btn danger" data-act="wipe">Effacer toutes les données de cet appareil</button><p class="small muted">Exportez d’abord une sauvegarde.</p></div>`;
+      ${estAdminClient() ? '<div class="actions"><a class="btn" href="#/entreprise">Entreprise : membres, sites, règles, abonnement</a></div>' : ''}`;
+  };
+  V.reglages = r => V.compte(r);   // anciens liens « #/reglages »
+  V.entreprise = () => {
+    if (!estAdminClient()) return empty('Entreprise : réservé à l’administrateur de l’entreprise.');
+    const connecte = !!Sync.profil();
+    return `<h1>Entreprise</h1>
+      ${blocEntreprise()}
+      ${connecte ? `<h2>Membres et droits</h2><div class="card" id="equipe"><p class="muted small" style="margin:0">Chargement de l’équipe…</p></div>` : ''}
+      <h2>Règles de l’entreprise</h2><div class="card"><div class="row"><span class="grow"><b>Clôture des interventions validée par le responsable</b><br><span class="small muted">${parametres()?.clotureParResponsable ? 'Activé : les techniciens terminent, le responsable valide la clôture.' : 'Désactivé : les techniciens clôturent eux-mêmes leurs interventions.'}</span></span>${badge(parametres()?.clotureParResponsable ? 'Activé' : 'Désactivé', parametres()?.clotureParResponsable ? 'green' : '')}</div>
+        <div class="actions" style="margin-bottom:0"><button class="btn sm" data-act="param-cloture">${parametres()?.clotureParResponsable ? 'Désactiver' : 'Activer'}</button></div></div>
+      <h2>Lieux</h2><div class="card"><ul class="lines">${list('localisations').map(l => `<li><span class="grow">${esc(locPath(l.id))} <span class="muted small">· ${esc(l.code)}</span></span></li>`).join('') || '<li class="muted">Aucun lieu.</li>'}</ul><button class="btn sm" data-act="loc-new">+ Lieu</button></div>
+      <h2>Personnes sans compte</h2><div class="card"><p class="small muted" style="margin-top:0">Intervenants qui n’utilisent pas l’appli (affectation, signature). Les comptes sont dans « Membres et droits ».</p><ul class="lines">${list('personnes').map(x => `<li><span class="grow">${esc(x.nom)} <span class="muted small">· ${esc(L.role[x.role])}${x.societe ? ' · ' + esc(x.societe) : ''}</span></span><button class="btn sm ghost" data-act="pers-edit" data-id="${x.id}">Modifier</button></li>`).join('') || '<li class="muted">Aucune personne.</li>'}</ul><button class="btn sm" data-act="pers-new">+ Personne</button></div>
+      <h2>Données</h2><div class="card"><p class="small muted" style="margin-top:0">${connecte ? 'Le serveur sauvegarde chaque nuit. Export pour vos archives ou un tableur.' : `Dernière sauvegarde : <b>${(x => x.depuis ? fmtY(x.depuis) + ` (${x.modifs} modification(s) depuis)` : 'jamais')(etatSauvegarde())}</b>. Exportez sur le téléphone, importez sur le PC (ou l’inverse) : les fiches sont fusionnées.`}</p>
+        <div class="actions"><button class="btn" data-act="export">Exporter (JSON)</button>${connecte ? '' : '<button class="btn" data-act="import">Importer</button>'}<button class="btn" data-act="csv">Interventions (CSV Excel)</button></div>
+        <input type="file" id="importFile" accept=".json,application/json" class="hidden"></div>`;
   };
 
   const MODULES = { base: 'Demandes et interventions', preventif: 'Préventif', magasin: 'Magasin', rapports: 'Rapports', achats: 'Achats', energie: 'Énergie et eau', imports: 'Imports Excel' };
@@ -883,7 +908,7 @@
   // ---------- comportements après affichage ----------
   const AFTER = {};
   AFTER.connexion = apresConnexion;
-  AFTER.reglages = async () => {
+  AFTER.entreprise = async () => {
     const box = $('#equipe');
     if (!box) return;
     try {
@@ -898,8 +923,8 @@
         <div class="actions" style="margin-top:0"><button class="btn primary" type="button" id="inviter" ${plein(u.actifs, u.maxTotal) ? 'disabled title="Plus de place dans le pack"' : ''}>+ Inviter un membre</button></div>
         ${plein(u.actifs, u.maxTotal) ? '<p class="warn small">Toutes les places du pack sont prises : désactivez un compte ou changez de pack.</p>' : ''}
         <ul class="lines">${liste.map(p => `<li style="flex-wrap:wrap"><span class="grow"><b>${esc(p.nom || p.email)}</b>${p.actif ? '' : ' ' + badge('désactivé', 'red')}<br><span class="small muted">${esc(p.email)}</span><br><span class="small">📍 ${esc(sitesDe(p.user_id).join(', ') || 'aucun site')}</span></span>
-          <select data-profil="${p.user_id}" ${p.user_id === moi ? 'disabled title="Votre propre rôle"' : ''} style="width:auto;min-height:38px">${['responsable', 'technicien', 'prestataire', 'magasinier', 'exploitation', 'pilote'].map(r => `<option value="${r}" ${p.role === r ? 'selected' : ''}>${L.role[r]}</option>`).join('')}</select>
-          ${p.user_id === moi ? '' : `<button class="btn sm ghost" data-sites="${p.user_id}">Sites</button><button class="btn sm ghost" data-equipe="${p.user_id}" data-nom="${esc(p.nom || '')}" data-role="${p.role}" data-actif="${p.actif}">Modifier</button>`}</li>`).join('')}</ul>
+          <select data-profil="${p.user_id}" ${p.user_id === moi ? 'disabled title="Votre propre rôle"' : ''} style="width:auto;min-height:38px">${['responsable', 'technicien', 'prestataire', 'magasinier', 'achats', 'exploitation', 'pilote'].map(r => `<option value="${r}" ${p.role === r ? 'selected' : ''}>${L.role[r]}</option>`).join('')}</select>
+          <button class="btn sm ${p.admin_client ? '' : 'ghost'}" data-admin="${p.user_id}" data-valeur="${p.admin_client ? '0' : '1'}" title="Administrateur de l’entreprise : membres, sites, règles">${p.admin_client ? '★ Admin' : '☆ Admin'}</button>${p.user_id === moi ? '' : `<button class="btn sm ghost" data-sites="${p.user_id}">Sites</button><button class="btn sm ghost" data-equipe="${p.user_id}" data-nom="${esc(p.nom || '')}" data-role="${p.role}" data-actif="${p.actif}">Modifier</button>`}</li>`).join('')}</ul>
         <p class="small muted">Les limites du pack sont vérifiées par le serveur à chaque invitation, activation ou affectation de site. Désactiver un compte libère sa place.</p>`;
       const optsSites = Object.fromEntries(u.sites.map(s => [s.id, `${s.nom} (${places(s.actifs, u.maxSite)})`]));
       $('#inviter')?.addEventListener('click', async () => {
@@ -916,19 +941,27 @@
           const rep = await Sync.inviter({ ...v, redirectTo: adressePublique() });
           await alertBox('Invitation', [rep.emailEnvoye ? `E-mail envoyé à ${v.email}.` : `${v.email} avait déjà un compte : il est maintenant rattaché à l’équipe (connexion avec son mot de passe, ou « mot de passe oublié »).`]);
         } catch (e) { await alertBox('Invitation refusée', [e.message]); }
-        AFTER.reglages();
+        AFTER.entreprise();
+      });
+      box.querySelectorAll('[data-admin]').forEach(b => b.onclick = async () => {
+        const donner = b.dataset.valeur === '1', p = liste.find(x => x.user_id === b.dataset.admin);
+        if (!(await askConfirm(donner ? 'Donner le droit administrateur' : 'Retirer le droit administrateur',
+          `${p.nom || p.email} ${donner ? 'pourra' : 'ne pourra plus'} inviter des membres, changer les rôles et les sites, modifier les règles de l’entreprise.`, donner ? 'Donner' : 'Retirer'))) return;
+        try { await Sync.definirAdminClient(p.user_id, donner); toast(donner ? 'Droit administrateur donné' : 'Droit administrateur retiré'); if (p.user_id === Sync.profil()?.userId) await Sync.chargerProfil(); }
+        catch (e) { await alertBox('Modification refusée', [e.message]); }
+        AFTER.entreprise();
       });
       box.querySelectorAll('[data-sites]').forEach(b => b.onclick = async () => {
         const actuels = (u.affectations || []).filter(a => a.userId === b.dataset.sites).map(a => a.siteId);
         const v = await askForm({ title: 'Sites du membre', values: { sites: actuels }, fields: [{ name: 'sites', label: 'Sites autorisés', type: 'chipsMulti', options: optsSites }] });
         if (!v) return;
         try { await Sync.affecterSites(b.dataset.sites, v.sites); toast('Sites mis à jour'); } catch (e) { await alertBox('Affectation refusée', [e.message]); }
-        AFTER.reglages();
+        AFTER.entreprise();
       });
       box.querySelectorAll('[data-profil]').forEach(sel => sel.onchange = async () => {
         const p = liste.find(x => x.user_id === sel.dataset.profil);
         try { await Sync.definirProfil(p.user_id, sel.value, p.nom, p.actif); toast('Rôle mis à jour'); Sync.planifier(200); } catch (e) { toast('Échec : ' + e.message); }
-        AFTER.reglages();
+        AFTER.entreprise();
       });
       box.querySelectorAll('[data-equipe]').forEach(b => b.onclick = async () => {
         const v = await askForm({ title: 'Membre de l’équipe', values: { nom: b.dataset.nom, actif: b.dataset.actif === 'true' }, fields: [
@@ -936,7 +969,7 @@
           { name: 'actif', label: 'Compte actif (décocher pour retirer l’accès)', type: 'checkbox' }] });
         if (!v) return;
         try { await Sync.definirProfil(b.dataset.equipe, b.dataset.role, v.nom, v.actif); toast('Membre mis à jour'); Sync.planifier(200); } catch (e) { await alertBox('Modification refusée', [e.message]); }
-        AFTER.reglages();
+        AFTER.entreprise();
       });
     } catch (e) { box.innerHTML = `<p class="warn" style="margin:0">Équipe indisponible : ${esc(e.message)}</p>`; }
   };
@@ -1147,7 +1180,7 @@
     render();
   };
   A.who = async () => {
-    if (Sync.profil()) { location.hash = '#/reglages'; return; }
+    if (Sync.profil()) { location.hash = '#/compte'; return; }
     const v = await askForm({ title: 'Qui utilise cet appareil ?', ok: 'Valider', values: { p: Store.device().personneId }, fields: [
       { name: 'p', label: 'Personne', type: 'select', options: personnesOpts(), empty: '— Choisir —' },
       { name: 'nom', label: 'Ou nouvelle personne : nom', type: 'text' },
@@ -1616,7 +1649,7 @@
   }
   A.csv = () => {
     const head = ['Référence', 'Code équipement', 'Équipement', 'Nature', 'Priorité', 'Statut', 'Créée le', 'Clôturée le', 'Intervenants', 'Activités', 'Travaux', 'Résultat', 'Cause', 'Certitude', 'Avec arrêt', 'Début arrêt', 'Fin arrêt', 'Demandes'];
-    const rows = list('ots').sort((a, b) => a.creeLe.localeCompare(b.creeLe)).map(o => [o.ref, eq(o.equipementId)?.code, eq(o.equipementId)?.designation, L.nature[o.nature], L.priorite[o.priorite], L.statutOT[o.statut], o.creeLe, o.clotureLe,
+    const rows = list('ots').sort((a, b) => (a.creeLe || "").localeCompare(b.creeLe || "")).map(o => [o.ref, eq(o.equipementId)?.code, eq(o.equipementId)?.designation, L.nature[o.nature], L.priorite[o.priorite], L.statutOT[o.statut], o.creeLe, o.clotureLe,
       (o.intervenants || []).map(i => persNom(i.personneId)).join(', '), (o.activites || []).map(a => L.activite[a]).join(', '), o.travaux, L.resultat[o.resultat], o.cause, L.certitude[o.certitudeCause], L.arret[o.avecArret], o.arretDebut, o.arretFin,
       (o.demandeIds || []).map(id => refDe('demandes', id)).join(', ')]);
     exportCsv(head, rows, `gmao-interventions-${today()}.csv`);
@@ -1725,6 +1758,23 @@
   A['sync-tout'] = async () => {
     if (!(await askConfirm('Tout envoyer', 'Toutes les fiches de cet appareil seront envoyées au serveur (fusion, rien n’est supprimé). Utile au premier branchement ou après l’import d’une sauvegarde.', 'Envoyer'))) return;
     const n = await Store.toutEnvoyer(); toast(`${n} fiche(s) mises en file d’envoi`); await Sync.synchroniser(); render();
+  };
+  A['mdp-changer'] = async () => {
+    for (;;) {
+      const v = await askForm({ title: 'Changer mon mot de passe', ok: 'Enregistrer', fields: [
+        { name: 'p1', label: 'Nouveau mot de passe (10 caractères minimum, lettres et chiffres)', type: 'password', required: true },
+        { name: 'p2', label: 'Confirmer', type: 'password', required: true }] });
+      if (!v) return;
+      if (v.p1 !== v.p2) { toast('Les deux saisies diffèrent'); continue; }
+      const faible = regleMotDePasse(v.p1, Sync.profil()?.email);
+      if (faible) { toast(faible); continue; }
+      try { await Sync.changerMotDePasse(v.p1); toast('Mot de passe changé'); return; } catch (e) { toast(e.message); }
+    }
+  };
+  A['deco-partout'] = async () => {
+    if (!(await askConfirm('Se déconnecter de tous les appareils', 'Toutes vos sessions seront fermées, y compris celle-ci. Les saisies non envoyées de cet appareil restent dessus et partiront à la prochaine connexion.', 'Tout fermer'))) return;
+    try { await Sync.deconnecterPartout(); toast('Toutes les sessions sont fermées'); } catch (e) { await alertBox('Déconnexion', [e.message]); }
+    render();
   };
   A['sync-deconnecter'] = async () => {
     if (!(await askConfirm('Se déconnecter', 'Les saisies resteront sur l’appareil et partiront à la prochaine connexion.', 'Se déconnecter'))) return;
@@ -1848,13 +1898,19 @@
     else if (R.name === 'connexion') R = { name: 'accueil', id: null, q: new URLSearchParams() };
     document.body.classList.toggle('ecran-connexion', R.name === 'connexion');
     const fn = V[R.name] || V.accueil;
-    $('#view').innerHTML = fn(R);
+    // Un écran qui échoue ne laisse jamais l'écran précédent figé : message clair et erreur remontée (onglet Technique).
+    try { $('#view').innerHTML = fn(R); }
+    catch (e) {
+      window.Erreurs?.noter({ nature: 'erreur', message: `Écran « ${R.name} » : ${e.message}`, detail: e.stack || '' });
+      $('#view').innerHTML = `<h1>Écran indisponible</h1><p class="warn">Cet écran n’a pas pu s’afficher (${esc(e.message)}). L’erreur a été signalée ; vos données ne sont pas touchées.</p><div class="actions"><a class="btn" href="#/accueil">Retour à l’accueil</a></div>`;
+    }
     const tab = TAB_OF[R.name] ?? R.name;
-    document.querySelectorAll('.tabs a').forEach(a => {
+    if (App.navigation) App.navigation(R);   // lot R1 : barre propre au rôle (js/vues/navigation.js)
+    else document.querySelectorAll('.tabs a').forEach(a => {
       const t = a.dataset.tab;
       a.classList.toggle('on', t === tab || (t === 'plus' && MOBILE_PLUS.includes(R.name)));
     });
-    const avecFab = ['accueil', 'demandes', 'ots', 'parc'].includes(R.name) || !V[R.name];
+    const avecFab = (['accueil', 'demandes', 'ots', 'parc'].includes(R.name) || !V[R.name]) && !(App.signalerDansBarre?.());
     $('#fab').classList.toggle('hidden', !avecFab);
     const pf = Sync.profil();
     const bs = $('#site');
@@ -1865,15 +1921,15 @@
     }
     document.querySelectorAll('.tabs a[data-tab=magasin]').forEach(a => a.classList.toggle('hidden', !aModule('magasin')));
     document.querySelectorAll('.tabs a[data-tab=preventif]').forEach(a => a.classList.toggle('hidden', !aModule('preventif')));
-    // Transition : l'ancienne adresse GitHub Pages invite à passer sur app.perfora.ma (données hors ligne liées à l'adresse).
-    if (location.hostname.endsWith('github.io')) $('#view').insertAdjacentHTML('afterbegin', '<p class="info"><b>Perfora déménage sur <a href="https://app.perfora.ma/">app.perfora.ma</a>.</b> Attendez « ☁ À jour » (rien en attente d’envoi), puis ouvrez la nouvelle adresse et reconnectez-vous : vos données reviennent du serveur. Ajoutez-la à l’écran d’accueil.</p>');
-    if (pf && !ecritureOK()) $('#view').insertAdjacentHTML('afterbegin', '<p class="warn">Abonnement suspendu ou expiré : consultation seule. Vos données restent accessibles et exportables.</p>');
-    if (modeDemo() && R.name !== 'connexion') $('#view').insertAdjacentHTML('afterbegin', '<p class="info" style="display:flex;gap:8px;align-items:center"><span class="grow"><b>Démonstration</b> · données fictives, sur cet appareil uniquement.</span><button class="btn sm" type="button" data-act="demo-quitter">Se connecter</button></p>');
-    // Annonces de la plateforme (maintenance, nouveauté) : masquables, mémorisées sur l'appareil.
+    // Un seul bandeau à la fois (lot R1), par priorité : abonnement suspendu > ancienne adresse > démonstration > annonce.
     const vues = data.meta.get('annonces')?.vues || [];
-    for (const a of annonces.filter(x => !vues.includes(x.id))) {
-      $('#view').insertAdjacentHTML('afterbegin', `<p class="${a.niveau === 'attention' ? 'warn' : 'info'}" style="display:flex;gap:8px;align-items:flex-start"><span class="grow"><b>${esc(a.titre)}</b><br>${esc(a.texte)}</span><button class="btn sm ghost" type="button" data-masquer-annonce="${esc(a.id)}" aria-label="Masquer">✕</button></p>`);
-    }
+    const annonce = annonces.find(x => !vues.includes(x.id));
+    const bandeau = pf && !ecritureOK() ? '<p class="warn">Abonnement suspendu ou expiré : consultation seule. Vos données restent accessibles et exportables.</p>'
+      : location.hostname.endsWith('github.io') ? '<p class="info"><b>Perfora déménage sur <a href="https://app.perfora.ma/">app.perfora.ma</a>.</b> Attendez « ☁ À jour » (rien en attente d’envoi), puis ouvrez la nouvelle adresse et reconnectez-vous : vos données reviennent du serveur. Ajoutez-la à l’écran d’accueil.</p>'
+      : modeDemo() && R.name !== 'connexion' ? '<p class="info" style="display:flex;gap:8px;align-items:center"><span class="grow"><b>Démonstration</b> · données fictives, sur cet appareil uniquement.</span><button class="btn sm" type="button" data-act="demo-quitter">Se connecter</button></p>'
+      : annonce ? `<p class="${annonce.niveau === 'attention' ? 'warn' : 'info'}" style="display:flex;gap:8px;align-items:flex-start"><span class="grow"><b>${esc(annonce.titre)}</b><br>${esc(annonce.texte)}</span><button class="btn sm ghost" type="button" data-masquer-annonce="${esc(annonce.id)}" aria-label="Masquer">✕</button></p>`
+      : '';
+    if (bandeau) $('#view').insertAdjacentHTML('afterbegin', bandeau);
     document.querySelectorAll('[data-masquer-annonce]').forEach(b => b.onclick = async () => {
       await Store.persistMeta({ id: 'annonces', vues: [...vues, b.dataset.masquerAnnonce].slice(-50) });
       render();
@@ -1958,7 +2014,7 @@
   }
 
   // Aides communes pour les écrans par domaine (js/vues/*.js, scripts classiques chargés après app.js).
-  window.App = { V, A, L, esc, badge, empty, seg, search, askForm, askConfirm, askText, alertBox, toast, edit, list, render, fmt, fmtY, today, refDe,
+  window.App = { otCard, demCard, eqCard, actifs, otOuvert, demandeOuverte, estAdminClient, voitJournal, modeDemo, preventifsSansOT, V, A, L, esc, badge, empty, seg, search, askForm, askConfirm, askText, alertBox, toast, edit, list, render, fmt, fmtY, today, refDe,
     role, autorise, aModule, siteActif, nomSite, mesSites, desigBesoin, CLS_BESOIN, leverAttentesPieces, exportCsv, AFTER, adressePublique, eq, locPath, ajouterFichier, progCard, fieldHtml };
 
   let annonces = [];

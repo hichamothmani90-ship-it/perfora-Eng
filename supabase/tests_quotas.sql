@@ -14,6 +14,8 @@ begin
   exception when others then r:=jsonb_build_object('refus', sqlerrm); end; return next;
 
   insert into profils(user_id, email, nom, role, entreprise_id, site_defaut) values (resp, 'resp@q.test', 'Resp Q', 'responsable', ent, s1);
+  -- lot R1 : inviter, activer et affecter demandent le droit d'administrateur de l'entreprise
+  update profils set admin_client = true where user_id = resp;
   insert into profil_sites values (resp, s1);
   for i in 2..5 loop
     u := ('00000000-0000-0000-0000-00000000c00' || i)::uuid;

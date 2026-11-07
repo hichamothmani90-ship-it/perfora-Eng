@@ -19,7 +19,7 @@ DEST = os.path.join(SRC, "production")
 
 # Ordre validé (docs/PROMPT_REPRISE.md) ; chaque script suppose les précédents.
 ORDRE = ["schema", "roles", "multitenant", "quotas", "plateforme", "durcissement", "magasin", "achats", "energie",
-         "mise_en_service", "centre_controle", "centre_controle_cc2", "references", "fichiers", "securite", "demo", "demo_energie"]
+         "mise_en_service", "centre_controle", "centre_controle_cc2", "references", "fichiers", "securite", "roles_r1", "demo", "demo_energie"]
 
 CONTROLES = """-- 99 — contrôles de fin de construction (base neuve). Rejouable.
 -- 1) multitenant.sql a créé « Perfora Démo » pour migrer d'anciennes données : sur une base neuve elle est vide,

@@ -101,6 +101,13 @@ const Sync = (() => {
   }
 
   async function deconnecter() { await majCfg({ access: null, refresh: null, expire: 0 }); notifier(); }
+  /** Ferme toutes les sessions du compte (téléphone perdu, appareil prêté), puis celle-ci. */
+  async function deconnecterPartout() {
+    const c = cfg();
+    const r = await requete(`${c.url}/auth/v1/logout?scope=global`, { method: 'POST', headers: { apikey: c.cle, Authorization: 'Bearer ' + await jeton() } });
+    if (!r.ok && r.status !== 401 && r.status !== 403) throw new Error(`Déconnexion refusée (${r.status})`);
+    await deconnecter();
+  }
 
   async function jeton() {
     const c = cfg();
@@ -199,6 +206,7 @@ const Sync = (() => {
   }
 
   // ---------- profil et équipe (rôles contrôlés par le serveur) ----------
+  const PERIMETRE = 'r1';   // version des règles de lecture du serveur (supabase/roles_r1.sql)
   async function chargerProfil() {
     const p = await api('/rest/v1/rpc/mon_profil', { method: 'POST', body: '{}' });
     // Multi-entreprise : un appareil ne mélange jamais les données de deux entreprises.
@@ -224,12 +232,19 @@ const Sync = (() => {
       if (Store.device().reinitLe || (cfg().curseur || 0) > 0) { await Store.viderMetier(); await majCfg({ curseur: 0 }); }
       await Store.persistMeta({ ...Store.device(), reinitLe: ri });
     }
+    // Lot R1 : le serveur restreint désormais certaines lectures (prestataire, journal). Une fois, on repart du serveur pour
+    // ne pas garder sur l'appareil des fiches hors du périmètre — seulement s'il n'y a rien en attente d'envoi.
+    if (ent && Store.device().perimetre !== PERIMETRE && !data.sortie.size) {
+      if ((cfg().curseur || 0) > 0) { await Store.viderMetier(); await majCfg({ curseur: 0 }); }
+      await Store.persistMeta({ ...Store.device(), perimetre: PERIMETRE });
+    }
     await majCfg({ profil: p, profilLe: Date.now() });
     if (p?.personneId && Store.device().personneId !== p.personneId) await Store.persistMeta({ ...Store.device(), personneId: p.personneId });
     return p;
   }
   const profil = () => (cfg()?.refresh ? cfg()?.profil : null) || null;
-  const equipe = () => api('/rest/v1/profils?select=user_id,email,nom,role,actif,personne_id&order=email.asc');
+  const equipe = () => api('/rest/v1/profils?select=user_id,email,nom,role,actif,personne_id,admin_client&order=email.asc');
+  const definirAdminClient = (cible, valeur) => api('/rest/v1/rpc/definir_admin_client', { method: 'POST', body: JSON.stringify({ cible, valeur: !!valeur }) });
   const utilisation = () => api('/rest/v1/rpc/utilisation', { method: 'POST', body: '{}' });
   const affecterSites = (cible, liste) => api('/rest/v1/rpc/affecter_sites', { method: 'POST', body: JSON.stringify({ cible, liste }) });
   /** Invitation via la fonction serveur « inviter » (seule détentrice de la clé secrète). */
@@ -358,5 +373,5 @@ const Sync = (() => {
   // Annonces de la plateforme et demande au support (tout compte connecté).
   const mesAnnonces = () => rpc('mes_annonces');
   const supportCreer = (nature, sujet, message) => rpc('support_creer', { p_nature: nature, p_sujet: sujet, p_message: message });
-  return { PROJET, pf, mfa, signalerErreurs, mesAnnonces, supportCreer, lireFichier, profil, chargerProfil, equipe, definirProfil, utilisation, affecterSites, inviter, connecter, deconnecter, synchroniser, planifier, demarrer, etatCourant, lireLienEmail, sessionDepuisLien, changerMotDePasse, demanderLien };
+  return { PROJET, pf, mfa, signalerErreurs, definirAdminClient, deconnecterPartout, mesAnnonces, supportCreer, lireFichier, profil, chargerProfil, equipe, definirProfil, utilisation, affecterSites, inviter, connecter, deconnecter, synchroniser, planifier, demarrer, etatCourant, lireLienEmail, sessionDepuisLien, changerMotDePasse, demanderLien };
 })();

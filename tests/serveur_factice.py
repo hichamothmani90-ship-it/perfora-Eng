@@ -54,15 +54,17 @@ SITES = {  # id -> site
     "s-cas": {"id": "s-cas", "entreprise": "DEMO", "code": "CAS", "nom": "Site Casablanca"},
     "s-rab": {"id": "s-rab", "entreprise": "AUTRE", "code": "RAB", "nom": "Site Rabat"},
 }
-COMPTES = {"tech3@gmao.test": "test-gmao", "expl@gmao.test": "test-gmao", "test@gmao.test": "test-gmao", "tech2@gmao.test": "test-gmao", "autre@gmao.test": "test-gmao", "mag@gmao.test": "test-gmao", "achat@gmao.test": "test-gmao"}
+COMPTES = {"tech3@gmao.test": "test-gmao", "expl@gmao.test": "test-gmao", "test@gmao.test": "test-gmao", "tech2@gmao.test": "test-gmao", "autre@gmao.test": "test-gmao", "mag@gmao.test": "test-gmao", "achat@gmao.test": "test-gmao", "presta@gmao.test": "test-gmao", "dir@gmao.test": "test-gmao"}
 PROFILS = {
-    "test@gmao.test": {"role": "responsable", "nom": "Responsable test", "actif": True, "entreprise": "DEMO", "sites": ["s-tng", "s-cas"], "defaut": "s-tng"},
+    "test@gmao.test": {"role": "responsable", "nom": "Responsable test", "actif": True, "entreprise": "DEMO", "sites": ["s-tng", "s-cas"], "defaut": "s-tng", "admin": True},
     "tech2@gmao.test": {"role": "technicien", "nom": "Technicien test", "actif": True, "entreprise": "DEMO", "sites": ["s-cas"], "defaut": "s-cas"},
-    "autre@gmao.test": {"role": "responsable", "nom": "Responsable Autre", "actif": True, "entreprise": "AUTRE", "sites": ["s-rab"], "defaut": "s-rab"},
+    "autre@gmao.test": {"role": "responsable", "nom": "Responsable Autre", "actif": True, "entreprise": "AUTRE", "sites": ["s-rab"], "defaut": "s-rab", "admin": True},
     "mag@gmao.test": {"role": "magasinier", "nom": "Magasinier test", "actif": True, "entreprise": "DEMO", "sites": ["s-cas"], "defaut": "s-cas"},
     "tech3@gmao.test": {"role": "technicien", "nom": "Technicien Tanger", "actif": True, "entreprise": "DEMO", "sites": ["s-tng"], "defaut": "s-tng"},
     "expl@gmao.test": {"role": "exploitation", "nom": "Opérateur test", "actif": True, "entreprise": "DEMO", "sites": ["s-cas"], "defaut": "s-cas"},
     "achat@gmao.test": {"role": "achats", "nom": "Acheteur test", "actif": True, "entreprise": "DEMO", "sites": ["s-cas", "s-tng"], "defaut": "s-tng"},
+    "presta@gmao.test": {"role": "prestataire", "nom": "Prestataire Froid", "actif": True, "entreprise": "DEMO", "sites": ["s-tng"], "defaut": "s-tng"},
+    "dir@gmao.test": {"role": "pilote", "nom": "Directrice test", "actif": True, "entreprise": "DEMO", "sites": ["s-tng", "s-cas"], "defaut": "s-tng"},
 }
 
 verrou = threading.Lock()
@@ -181,11 +183,78 @@ def controle_quota(code, sites, sauf=None):
     return None
 
 
+def est_admin_client(email):
+    p = PROFILS.get(email)
+    return bool(p and p["actif"] and p.get("admin"))
+
+
+def ot_a_moi(oid, email):
+    o = fiches.get(oid or "")
+    return bool(o and o["type"] == "ots" and o["entreprise"] == PROFILS[email]["entreprise"]
+                and any(i.get("personneId") == "p-" + email.split("@")[0] for i in o["data"].get("intervenants") or []))
+
+
+def prestataire_voit(f, email):
+    t, d = f["type"], f["data"]
+    if t in ("equipements", "localisations", "personnes", "articles", "compteurs", "releves", "parametres", "journal"):
+        return True
+    if t == "ots":
+        return ot_a_moi(f["id"], email)
+    if t == "demandes":
+        return f.get("auteur") == email or any(ot_a_moi(o["id"], email) and f["id"] in (o["data"].get("demandeIds") or []) for o in fiches.values() if o["type"] == "ots")
+    if t in ("besoins", "mouvements"):
+        return ot_a_moi(d.get("otId"), email)
+    if t == "programmes":
+        return any(o["type"] == "ots" and o["data"].get("programmeId") == f["id"] and ot_a_moi(o["id"], email) for o in fiches.values())
+    if t == "photos":
+        x = fiches.get(d.get("parentId") or "")
+        return bool(x and x["type"] != "photos" and prestataire_voit(x, email))
+    return False
+
+
+def journal_visible(f, email):
+    if role_de(email) in ("responsable", "pilote") or est_admin_client(email) or f.get("auteur") == email:
+        return True
+    x = fiches.get(f["data"].get("entiteId") or "")
+    if not x:
+        return False
+    if x.get("auteur") == email:
+        return True
+    if x["type"] == "ots":
+        return ot_a_moi(x["id"], email)
+    if x["type"] in ("besoins", "mouvements"):
+        return ot_a_moi(x["data"].get("otId"), email)
+    if x["type"] == "demandes":
+        return any(o["type"] == "ots" and x["id"] in (o["data"].get("demandeIds") or []) and ot_a_moi(o["id"], email) for o in fiches.values())
+    return False
+
+
 def visible(f, email):
     p = PROFILS[email]
     cout = (f["type"] in COUTS or (f["type"] == "journal" and f["data"].get("entite") in COUTS)
             or (f["type"] == "photos" and f["data"].get("parentType") == "factures_energie"))
-    return f["entreprise"] == p["entreprise"] and (f["site"] is None or f["site"] in mes_sites(email)) and (not cout or p["role"] in VOIT_COUTS)
+    return (f["entreprise"] == p["entreprise"] and (f["site"] is None or f["site"] in mes_sites(email)) and (not cout or p["role"] in VOIT_COUTS)
+            and (p["role"] != "prestataire" or prestataire_voit(f, email))
+            and (f["type"] != "journal" or journal_visible(f, email)))
+
+
+def prestataire_refus(t, fid, pa, email):
+    x = fiches.get(fid)
+    if t == "ots":
+        if not x:
+            return "un prestataire ne crée pas d'intervention : signalez, le responsable vous la confie"
+        if not ot_a_moi(fid, email):
+            return "intervention qui ne vous est pas confiée"
+    elif t in ("besoins", "mouvements"):
+        if not ot_a_moi(pa.get("otId") or (x and x["data"].get("otId")), email):
+            return "pièce hors de vos interventions"
+    elif t == "demandes":
+        if x and x.get("auteur") != email:
+            return "demande qui n'est pas la vôtre"
+    elif t == "journal":
+        if pa.get("entite") == "ots" and pa.get("entiteId") in fiches and not ot_a_moi(pa.get("entiteId"), email):
+            return "intervention qui ne vous est pas confiée"
+    return None
 
 
 ADMIS = ("localisations", "equipements", "compteurs", "releves", "fournisseurs", "articles", "mouvements", "valorisations", "programmes", "personnes")
@@ -493,7 +562,22 @@ class H(BaseHTTPRequestHandler):
         if u.path.startswith("/rest/v1/rpc/pf_"):
             return self.plateforme(email, u.path.removeprefix("/rest/v1/rpc/"))
         moi = PROFILS[email]
-        if u.path in ("/rest/v1/rpc/utilisation", "/rest/v1/rpc/affecter_sites", "/functions/v1/inviter") and role_de(email) != "responsable":
+        if u.path == "/rest/v1/rpc/definir_admin_client":
+            if not est_admin_client(email):
+                return self.repondre(403, {"message": "Réservé à l'administrateur de l'entreprise"})
+            b = self.corps()
+            cible = b["cible"].removeprefix("u-")
+            if cible not in PROFILS or PROFILS[cible]["entreprise"] != PROFILS[email]["entreprise"]:
+                return self.repondre(403, {"message": "Compte hors de votre entreprise"})
+            if not b.get("valeur") and not any(e != cible and q.get("admin") and q["actif"] and q["entreprise"] == PROFILS[email]["entreprise"] for e, q in PROFILS.items()):
+                return self.repondre(400, {"message": "L'entreprise doit garder au moins un administrateur"})
+            PROFILS[cible]["admin"] = bool(b.get("valeur"))
+            return self.repondre(200, None)
+        if u.path == "/rest/v1/rpc/affecter_sites" and not est_admin_client(email):
+            return self.repondre(403, {"message": "Réservé à l'administrateur de l'entreprise"})
+        if u.path == "/rest/v1/rpc/utilisation" and not (est_admin_client(email) or role_de(email) == "responsable"):
+            return self.repondre(403, {"message": "Réservé à l'administrateur de l'entreprise"})
+        if False:
             return self.repondre(403, {"message": "Réservé au responsable"})
         ent = moi["entreprise"]
         sites_ent = [k for k, v in SITES.items() if v["entreprise"] == ent]
@@ -522,6 +606,8 @@ class H(BaseHTTPRequestHandler):
         if u.path == "/functions/v1/inviter":
             b = self.corps()
             em, role, liste = (b.get("email") or "").strip().lower(), b.get("role"), b.get("sites") or []
+            if not b.get("entrepriseId") and not est_admin_client(email):
+                return self.repondre(400, {"erreur": "Réservé à l'administrateur de l'entreprise"})
             if b.get("entrepriseId"):   # invitation par l'administrateur plateforme pour un client
                 if not self.est_admin(email):
                     return self.repondre(400, {"erreur": "Réservé à l'administrateur plateforme"})
@@ -572,6 +658,8 @@ class H(BaseHTTPRequestHandler):
                     motif = "modification liée refusée"
                 elif module_compteur(t, pa, ex, ent, module_de(cible)) not in dr["modules"]:
                     motif = f"module « {module_compteur(t, pa, ex, ent, module_de(cible))} » non inclus dans l'abonnement"
+                elif peut_ecrire(r, cible) and r == "prestataire" and prestataire_refus(t, f["id"], pa, email):
+                    motif = prestataire_refus(t, f["id"], pa, email)
                 elif not peut_ecrire(r, cible):
                     motif = f"droits insuffisants ({r})"
                 # volet B (miroir de supabase/magasin.sql)
@@ -652,7 +740,7 @@ class H(BaseHTTPRequestHandler):
                     continue
                 seq[0] += 1
                 data = {**(ex["data"] if ex else {}), **pa, **({"siteId": s} if s else {})}
-                fiches[f["id"]] = {"id": f["id"], "type": t, "data": data, "seq": seq[0], "entreprise": ent, "site": s}
+                fiches[f["id"]] = {"id": f["id"], "type": t, "data": data, "seq": seq[0], "entreprise": ent, "site": s, "auteur": ex.get("auteur", email) if ex else email}
         return self.repondre(200, {"acceptes": acceptes, "refuses": refus})
 
     def plateforme(self, email, nom):
@@ -876,12 +964,12 @@ class H(BaseHTTPRequestHandler):
         return self.repondre(200, {"userId": "u-" + email, "email": email, "nom": p["nom"], "role": p["role"], "personneId": pid, "actif": p["actif"],
                                    "entreprise": {"id": e["id"], "code": e["code"], "nom": e["nom"], "statut": e["statut"], "demo": e.get("demo", False), "reinitLe": e.get("reinitLe")},
                                    "sites": [{"id": s["id"], "code": s["code"], "nom": s["nom"]} for s in sites],
-                                   "siteDefaut": p["defaut"], "abonnement": droits(p["entreprise"]), "adminPlateforme": self.est_admin(email),
+                                   "siteDefaut": p["defaut"], "abonnement": droits(p["entreprise"]), "adminPlateforme": self.est_admin(email), "adminClient": est_admin_client(email),
                                    "adminMfa": {"obligatoire": ADMIN_MFA.get(email, True), "niveau": self.niveau()} if email in ADMINS else None})
 
     def definir_profil(self, email):
-        if role_de(email) != "responsable":
-            return self.repondre(403, {"message": "Réservé au responsable"})
+        if not est_admin_client(email):
+            return self.repondre(403, {"message": "Réservé à l'administrateur de l'entreprise"})
         b = self.corps()
         cible = b["cible"].removeprefix("u-")
         if cible not in PROFILS or PROFILS[cible]["entreprise"] != PROFILS[email]["entreprise"]:
@@ -956,8 +1044,8 @@ class H(BaseHTTPRequestHandler):
             return
         if u.path == "/rest/v1/profils":
             moi = PROFILS[email]
-            vis = [(e, p) for e, p in PROFILS.items() if p["entreprise"] == moi["entreprise"]] if role_de(email) == "responsable" else [(email, moi)]
-            return self.repondre(200, [{"user_id": "u-" + e, "email": e, "nom": p["nom"], "role": p["role"], "actif": p["actif"], "personne_id": "p-" + e.split("@")[0]} for e, p in sorted(vis)])
+            vis = [(e, p) for e, p in PROFILS.items() if p["entreprise"] == moi["entreprise"]] if role_de(email) == "responsable" or est_admin_client(email) else [(email, moi)]
+            return self.repondre(200, [{"user_id": "u-" + e, "email": e, "nom": p["nom"], "role": p["role"], "actif": p["actif"], "personne_id": "p-" + e.split("@")[0], "admin_client": bool(p.get("admin"))} for e, p in sorted(vis)])
         if u.path == "/rest/v1/fiches":
             if not role_de(email):
                 return self.repondre(200, [])
