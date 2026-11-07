@@ -121,3 +121,21 @@ incohérent, non comparable), `totauxParUnite`, `relevesDus`, `bilanCombustible`
 32 vérifications ; compte factice `expl@gmao.test`). Appli v24 : stockage local v6, réglage dans Réglages
 (« Règles de l'entreprise »), « Terminer » → « À valider » quand le réglage est actif, accueil du responsable
 « Interventions à valider ».
+
+## 9. Fait en D3 (7 nov. 2026, v32)
+
+- `js/vues/compteurs.js` : **Compteurs** (menu Plus) — relevés à faire, compteurs d'équipement (heures, cycles…) et
+  d'énergie / eau, fiche compteur (définition, QR, relevés avec statut, anomalies, photo), création et modification par
+  le responsable (usage, mesure, unité, coefficient figés après le premier relevé).
+- **Saisie d'un relevé** (`#/releve?cpt=CODE`, ouverte par le QR du compteur, même hors ligne) : contrôle immédiat
+  pendant la frappe (« ✓ Cohérent : +50 h » ou avertissement) ; index plus bas → choix « je corrige / compteur remplacé
+  ou remis à zéro / garder à examiner » ; photo facultative ; valeur estimée ; heure réelle ; début de période (mode
+  non cumulatif). **Corriger** = nouveau relevé lié. **Remplacement / remise à zéro** déclaré (nouveau départ proposé à 0).
+- Responsable : **Confirmer** (variation inhabituelle seulement) ou **Invalider** un relevé à examiner, avec motif.
+- **Préventif selon l'usage** : programme « toutes les N unités » et / ou « tous les N jours » (le premier des deux),
+  marge d'alerte, reste affiché, date estimée (au moins 7 jours de relevés), « Préventif à lancer » ; à la clôture,
+  **index obligatoire** → enregistré comme relevé et nouveau point de départ (`Calculs.echeanceCompteur`, testé).
+- Accueil : « Relevés à faire aujourd'hui » ; fiche équipement : ses compteurs ; planche « QR des compteurs ».
+- Après connexion, retour à la page demandée (QR scanné avant de se connecter).
+Vérifié : 87 tests ; navigateur avec le serveur factice (responsable + technicien, hors ligne, photo, remplacement,
+relevé invalidé, clôture avec index) ; aucun refus du serveur.

@@ -5,7 +5,7 @@
 (() => {
   const { data } = Store;
   /** Version affichée dans Réglages : à incrémenter avec VERSION dans sw.js. */
-  const APP_VERSION = 'v31';
+  const APP_VERSION = 'v32';
   const $ = s => document.querySelector(s);
   // Multi-site : les listes de fiches de site ne montrent que le site actif (« tous » possible).
   // Les fiches sans site (anciennes ou pas encore synchronisées) restent visibles.
@@ -40,6 +40,7 @@
       : t === 'besoins' ? g('ots', o.otId)
       : t === 'valorisations' ? g('mouvements', o.mouvementId)
       : t === 'releves' ? g('compteurs', o.compteurId)
+      : t === 'compteurs' ? g('equipements', o.equipementId)
       : null;
     return parent || siteCreation();
   });
@@ -111,11 +112,19 @@
   function journalDe(id) { return list('journal').filter(j => j.entiteId === id).reverse().sort((a, b) => b.le.localeCompare(a.le)); }
   function refDe(t, id) { const o = data[t]?.get(id); return o ? (o.ref || o.code || o.designation || o.nom || o.libelle || '') : ''; }
 
+  /** État d'un programme selon compteur (heures, cycles…) : null si le programme n'est pas lié à un compteur. */
+  function etatCompteurProg(p) {
+    if (!p.compteurId || !p.intervalleCompteur) return null;
+    const c = data.compteurs.get(p.compteurId);
+    return { c, e: Calculs.echeanceCompteur(p, c, [...data.releves.values()].filter(r => r.compteurId === p.compteurId), today(), { maintenant: Store.now() }) };
+  }
+  const otOuvertDuProg = p => list('ots').find(o => o.programmeId === p.id && !['cloturee', 'annulee'].includes(o.statut));
   function preventifsSansOT(horizonJours) {
     const lim = addDays(today(), horizonJours);
-    return list('programmes').filter(p => p.actif !== false && p.prochaineEcheance && p.prochaineEcheance <= lim &&
-      !list('ots').some(o => o.programmeId === p.id && o.echeance === p.prochaineEcheance && o.statut !== 'annulee'))
-      .sort((a, b) => a.prochaineEcheance.localeCompare(b.prochaineEcheance));
+    const parDate = p => p.prochaineEcheance && p.prochaineEcheance <= lim && !list('ots').some(o => o.programmeId === p.id && o.echeance === p.prochaineEcheance && o.statut !== 'annulee');
+    const parCompteur = p => { const x = etatCompteurProg(p); return x && ['alerte', 'atteint'].includes(x.e.statut) && !otOuvertDuProg(p); };
+    return list('programmes').filter(p => p.actif !== false && (parDate(p) || parCompteur(p)))
+      .sort((a, b) => (a.prochaineEcheance || '9999').localeCompare(b.prochaineEcheance || '9999'));
   }
 
   // ---------- éléments d'interface ----------
@@ -225,7 +234,7 @@
   const role = () => Sync.profil()?.role || null;
   const estResp = () => !role() || role() === 'responsable';
   const DROITS = {
-    responsable: ['eq-new', 'eq-edit', 'loc-new', 'prog-new', 'prog-edit', 'pers-new', 'pers-edit', 'ot-rouvrir', 'sync-tout', 'equipe', 'param-cloture', 'seuil-valider', 'seuil-refuser', 'achat-valider', 'achat-completer', 'achat-refuser'],
+    responsable: ['eq-new', 'eq-edit', 'loc-new', 'prog-new', 'prog-edit', 'pers-new', 'pers-edit', 'ot-rouvrir', 'sync-tout', 'equipe', 'param-cloture', 'cpt-new', 'cpt-edit', 'releve-qualifier', 'seuil-valider', 'seuil-refuser', 'achat-valider', 'achat-completer', 'achat-refuser'],
     terrain: ['ot-new', 'dem-intervenir', 'dem-planifier', 'prog-ot', 'dem-pec', 'dem-classer', 'ot-demarrer', 'ot-planifier', 'ot-annuler', 'ot-suspendre', 'ot-reprendre', 'ot-terminer', 'ot-cloturer',
       'ot-ajout-int', 'ot-retirer', 'ot-ajout-piece', 'ot-annuler-piece', 'ot-ajout-suite', 'ot-lever',
       'bes-new', 'bes-urgent', 'bes-utilise', 'bes-rendre', 'bes-annuler'],
@@ -241,6 +250,8 @@
   function autorise(act) {
     const r = role();
     if (act === 'ot-cloturer' && clotureParResp()) return false;
+    // Relevés et remplacements de compteur : terrain, exploitation et responsable (miroir de energie.sql).
+    if (act === 'releve-saisir' || act === 'cpt-rupture') return !r || (ecritureOK() && ['technicien', 'prestataire', 'exploitation', 'responsable'].includes(r));
     if (ACT_MODULE[act] && !aModule(ACT_MODULE[act])) return false;
     if (r && !ecritureOK() && Object.values(DROITS).some(l => l.includes(act))) return false;
     if (!r || r === 'responsable') return true;
@@ -328,7 +339,8 @@
         const premiere = await Sync.connecter({ url: f.url?.value || Sync.PROJET.url, cle: f.cle?.value || Sync.PROJET.cle, email, motDePasse: mdp });
         try { await Sync.chargerProfil(); } catch (e) { toast(e.message); }
         await premiereConnexion(premiere);
-        location.hash = '#/accueil';
+        location.hash = sessionStorage.getItem('apresConnexion') || '#/accueil';
+        sessionStorage.removeItem('apresConnexion');
         render();
         Sync.synchroniser().then(() => render());
       } catch (e) {
@@ -358,6 +370,7 @@
     const susp = otsO.filter(o => o.statut === 'suspendue');
     const aValider = estResp() ? otsO.filter(o => o.statut === 'travail_termine') : [];
     const prev = preventifsSansOT(7);
+    const rel = App.compteurs && autorise('releve-saisir') ? App.compteurs.dus() : [];
     return `<h1>Aujourd’hui <span class="muted small" style="font-weight:400">${fmtY(today())}</span></h1>
       ${!me ? `<p class="warn">Indiquez qui utilise cet appareil pour signer vos saisies. <a href="#" data-act="who">Choisir</a></p>` : ''}
       ${rappelSauvegarde()}
@@ -366,7 +379,9 @@
         <a class="tile amber" href="#/demandes?f=a_examiner"><b>${aEx.length}</b><span>Demandes à examiner</span></a>
         <a class="tile blue" href="#/ots"><b>${otsO.length}</b><span>Travaux ouverts</span></a>
         <a class="tile" href="#/preventif"><b>${prev.length}</b><span>Préventifs à lancer (7 j)</span></a>
+        ${rel.length ? `<a class="tile ${rel.some(x => x.retardJours > 0) ? 'amber' : ''}" href="#/compteurs"><b>${rel.length}</b><span>Relevés à faire</span></a>` : ''}
       </div>
+      ${rel.length ? `<h2>Relevés à faire aujourd’hui</h2>${rel.slice(0, 5).map(App.carteReleveDu).join('')}${rel.length > 5 ? `<a class="btn ghost" href="#/compteurs">Tous les relevés à faire (${rel.length})</a>` : ''}` : ''}
       ${indispo.length ? `<h2>Indisponibles</h2>${indispo.map(eqCard).join('')}` : ''}
       ${aValider.length ? `<h2>Interventions à valider</h2>${aValider.map(otCard).join('')}` : ''}
       ${me ? `<h2>Mes travaux</h2>${mine.length ? mine.map(otCard).join('') : empty('Aucun travail affecté.')}` : ''}
@@ -655,6 +670,7 @@
         <div class="row" style="margin-top:12px;align-items:flex-start">${QR.svg(lien, 104)}<p class="small muted grow" style="margin:0">Scanner ce code ouvre « Signaler » sur cet équipement.<br><span style="word-break:break-all">${esc(lien)}</span><br><button class="btn sm ghost" data-act="copy" data-v="${esc(lien)}">Copier le lien</button> <a class="btn sm ghost" href="#/qr?eq=${e.id}">Imprimer</a></p></div></div>
       <div class="actions"><a class="btn primary" href="#/signaler?eq=${encodeURIComponent(e.code)}">Signaler sur cet équipement</a><button class="btn ghost" data-act="eq-edit" data-id="${e.id}">Modifier</button></div>
       <h2>En cours</h2>${ouverts.length ? ouverts.map(([k, x]) => k === 'd' ? demCard(x) : otCard(x)).join('') : empty('Rien en cours.')}
+      ${(() => { const cs = App.compteurs ? App.compteurs.visibles().filter(c => c.equipementId === e.id) : []; return cs.length ? `<h2>Compteurs</h2><div class="card"><ul class="lines">${cs.map(c => { const d = App.compteurs.dernierRetenu(c); return `<li><a class="grow" href="#/compteur/${c.id}"><b>${esc(c.libelle || c.code)}</b><br><span class="small muted">${d ? `${Number(d.valeur).toLocaleString('fr-FR')} ${esc(c.unite)} le ${fmt(d.le)}` : 'jamais relevé'}</span></a>${autorise('releve-saisir') ? `<a class="btn sm" href="#/releve?c=${c.id}">Relever</a>` : ''}</li>`; }).join('')}</ul></div>` : ''; })()}
       ${progs.length ? `<h2>Préventif</h2>${progs.map(progCard).join('')}` : ''}
       ${conso.length ? `<h2>Pièces consommées</h2><div class="card"><ul class="lines">${conso.map(([n, q]) => `<li><span class="grow">${esc(n)}</span><b>${q}</b></li>`).join('')}</ul></div>` : ''}
       <h2>Historique</h2>${hist.length ? hist.slice(0, 40).map(([k, x]) => k === 'd' ? demCard(x) : otCard(x)).join('') : empty('Aucun historique.')}`;
@@ -672,12 +688,16 @@
 
   function progCard(p) {
     const e = eq(p.equipementId);
-    const retard = p.prochaineEcheance && p.prochaineEcheance < today();
-    const otOpen = list('ots').find(o => o.programmeId === p.id && o.echeance === p.prochaineEcheance && o.statut !== 'annulee');
+    const xc = etatCompteurProg(p);
+    const retard = (p.prochaineEcheance && p.prochaineEcheance < today()) || xc?.e.statut === 'atteint';
+    const otOpen = xc ? otOuvertDuProg(p) : list('ots').find(o => o.programmeId === p.id && o.echeance === p.prochaineEcheance && o.statut !== 'annulee');
     const b = otOpen ? badge(otOpen.statut === 'cloturee' ? 'Réalisé' : 'OT ' + L.statutOT[otOpen.statut].toLowerCase(), otOpen.statut === 'cloturee' ? 'green' : 'blue')
-      : retard ? badge('En retard', 'red') : p.prochaineEcheance <= addDays(today(), 7) ? badge('À lancer', 'amber') : '';
+      : retard ? badge('En retard', 'red') : (p.prochaineEcheance && p.prochaineEcheance <= addDays(today(), 7)) || xc?.e.statut === 'alerte' ? badge('À lancer', 'amber') : '';
+    const nfc = n => Number(n).toLocaleString('fr-FR', { maximumFractionDigits: 1 });
+    const regleJours = p.periodiciteJours ? `tous les ${esc(p.periodiciteJours)} j · échéance <b>${fmtY(p.prochaineEcheance)}</b>` : '';
+    const regleCpt = xc ? `toutes les ${nfc(p.intervalleCompteur)} ${esc(xc.c?.unite || '')} · ${xc.e.statut === 'inconnu' ? 'en attente d’un relevé' : xc.e.reste > 0 ? `reste <b>${nfc(xc.e.reste)} ${esc(xc.c?.unite || '')}</b>${xc.e.dateEstimee ? ` (vers le ${fmtY(xc.e.dateEstimee)}, estimation)` : ''}` : `<b>dépassé de ${nfc(-xc.e.reste)} ${esc(xc.c?.unite || '')}</b>`}` : '';
     return `<div class="card"><div class="row"><span class="t grow">${esc(p.libelle)}</span>${b}</div>
-      <div class="s">${esc(e?.designation)} · ${esc(L.modele[p.modele] || '')} · tous les ${esc(p.periodiciteJours)} j · échéance <b>${fmtY(p.prochaineEcheance)}</b></div>
+      <div class="s">${esc(e?.designation)} · ${esc(L.modele[p.modele] || '')}${regleJours ? ' · ' + regleJours : ''}${regleCpt ? (regleJours ? '<br>ou ' : ' · ') + regleCpt : ''}</div>
       <div class="actions" style="margin-bottom:0">${otOpen ? `<a class="btn sm" href="#/ot/${otOpen.id}">Ouvrir ${esc(otOpen.ref)}</a>` : `<button class="btn sm primary" data-act="prog-ot" data-id="${p.id}">Créer l’OT</button>`}<button class="btn sm ghost" data-act="prog-edit" data-id="${p.id}">Modifier</button></div></div>`;
   }
 
@@ -720,6 +740,13 @@
   };
 
   V.qr = r => {
+    if (r.q.get('type') === 'compteurs' && App.compteurs) {
+      let cs = App.compteurs.visibles();
+      if (r.q.get('cpt')) cs = cs.filter(c => c.id === r.q.get('cpt'));
+      return `<div class="no-print"><h1>QR des compteurs</h1><p class="small muted">Scanné avec l’appareil photo du téléphone, le QR ouvre la saisie d’un relevé sur ce compteur. À coller sur ou près du compteur.</p>
+        <div class="actions"><a class="btn ghost" href="#/qr">QR des équipements</a><button class="btn primary" data-act="imprimer">Imprimer (${cs.length})</button></div></div>
+        <div class="qr-grid">${cs.map(c => `<div class="qr-label">${QR.svg(App.compteurs.lienReleve(c), 132)}<div><b>${esc(c.libelle || c.code)}</b><div class="small">${esc(c.code)} · ${esc(c.unite)}</div><div class="small muted">${esc(App.compteurs.quoi(c))}</div><div class="small">Scanner pour relever</div></div></div>`).join('') || empty('Aucun compteur.')}</div>`;
+    }
     const lieu = r.q.get('lieu') || '', un = r.q.get('eq');
     let eqs = list('equipements').filter(e => e.actif !== false);
     if (un) eqs = eqs.filter(e => e.id === un);
@@ -739,8 +766,9 @@
        <div id="pf-liste"><p class="muted">Chargement…</p></div>`
     : empty('Réservé à l’administrateur plateforme.');
 
-  V.plus = () => `<h1>Plus</h1>${[['#/preventif', '↻ Préventif', 'Programmes et échéances'], ['#/qr', '▣ QR codes', 'Planche imprimable des équipements'], ['#/magasin', '▤ Magasin', 'Articles, stock, mouvements'], ['#/achats', '₪ Achats', 'Demandes d’achat, commandes, réceptions'], ['#/valeur', '∑ Valeur du stock', 'Coût moyen pondéré par article et site'], ['#/indicateurs', '▥ Indicateurs', 'Pilotage par équipement'], ['#/journal', '☰ Journal d’audit', 'Toutes les modifications'], ['#/reglages', '⚙ Réglages', 'Utilisateur, personnes, sauvegarde']]
+  V.plus = () => `<h1>Plus</h1>${[['#/preventif', '↻ Préventif', 'Programmes et échéances'], ['#/compteurs', '⏱ Compteurs', 'Relevés, énergie et eau, heures de marche'], ['#/qr', '▣ QR codes', 'Planche imprimable des équipements'], ['#/magasin', '▤ Magasin', 'Articles, stock, mouvements'], ['#/achats', '₪ Achats', 'Demandes d’achat, commandes, réceptions'], ['#/valeur', '∑ Valeur du stock', 'Coût moyen pondéré par article et site'], ['#/indicateurs', '▥ Indicateurs', 'Pilotage par équipement'], ['#/journal', '☰ Journal d’audit', 'Toutes les modifications'], ['#/reglages', '⚙ Réglages', 'Utilisateur, personnes, sauvegarde']]
     .concat(Sync.profil()?.adminPlateforme ? [['#/plateforme', '◆ Console plateforme', 'Clients, abonnements, démo commerciale']] : [])
+    .filter(([h]) => !(h === '#/compteurs' && !aModule('energie') && !aModule('preventif')))
     .filter(([h]) => !(h === '#/magasin' && !aModule('magasin')) && !(h === '#/preventif' && !aModule('preventif')) && !(['#/achats', '#/valeur'].includes(h) && !(aModule('achats') && App.voitCouts?.())))
     .map(([h, t, s]) => `<a class="card" href="${h}"><div class="t">${t}</div><div class="s">${s}</div></a>`).join('')}`;
 
@@ -1210,6 +1238,8 @@
   /** Clôture d'une fiche (éventuellement complétée par la fenêtre « Terminer ») ; false si quelque chose manque. */
   async function cloturer(o) {
     const err = Calculs.verifierCloture(o);
+    const progC = o.programmeId ? data.programmes.get(o.programmeId) : null;
+    if (progC?.compteurId && (o.indexCompteur == null || o.indexCompteur === '')) err.push('Indiquer l’index du compteur à la réalisation (préventif selon l’usage) : « Terminer ».');
     if (err.length) { await alertBox('Avant de clôturer', err.map(e => '• ' + e)); return false; }
     const enMain = Calculs.piecesDetenues(besoinsDe(o), [...data.mouvements.values()], o.pieces);
     if (enMain.length && !(await askConfirm('Pièces encore en main', `${enMain.map(r => r.detenu + ' × ' + desigBesoin(r.besoin)).join(' ; ')} : remises mais ni déclarées utilisées ni rendues. Clôturer quand même ? L’écart restera visible au magasin.`, 'Clôturer quand même'))) return false;
@@ -1217,7 +1247,12 @@
     await Store.save('ots', { ...o, statut: 'cloturee', clotureLe: now, cloturePar: me, attentes: fermerAttentes(o) }, { action: 'cloture' });
     if (o.programmeId) {
       const p = data.programmes.get(o.programmeId);
-      if (p && p.prochaineEcheance === o.echeance) {
+      if (p?.compteurId && o.indexCompteur != null) {
+        // Préventif selon l'usage : l'index noté devient le point de départ ; il est aussi enregistré comme relevé.
+        await Store.save('releves', { id: Store.uid(), compteurId: p.compteurId, le: now, valeur: Number(o.indexCompteur), unite: data.compteurs.get(p.compteurId)?.unite, source: 'cloture', otId: o.id });
+        await Store.update('programmes', p.id, { dernierIndex: Number(o.indexCompteur), derniereRealisation: now,
+          ...(p.periodiciteJours ? { prochaineEcheance: addDays(now.slice(0, 10), Number(p.periodiciteJours)) } : {}) }, { action: 'echeance_suivante' });
+      } else if (p && p.prochaineEcheance === o.echeance) {
         await Store.update('programmes', p.id, { prochaineEcheance: Calculs.echeanceSuivante(p, o.echeance, now), derniereRealisation: now }, { action: 'echeance_suivante' });
       }
     }
@@ -1237,6 +1272,8 @@
   A['ot-terminer'] = async el => {
     const o = data.ots.get(el.dataset.id);
     const sansSuite = !(o.reserves || []).some(r => r.statut === 'ouverte');
+    const progO = o.programmeId ? data.programmes.get(o.programmeId) : null;
+    const cptProg = progO?.compteurId ? data.compteurs.get(progO.compteurId) : null;
     const fields = [
       ...(o.nature === 'a_qualifier' ? [{ name: 'nature', label: 'Nature', type: 'chips', options: Object.fromEntries(Object.entries(L.nature).filter(([k]) => k !== 'a_qualifier')), required: true }] : []),
       { name: 'travaux', label: 'Ce qui a été fait', type: 'textarea', required: true },
@@ -1244,16 +1281,18 @@
       { name: 'certitudeCause', label: 'Certitude de la cause', type: 'chips', options: L.certitude },
       { name: 'cause', label: 'Cause, si connue', type: 'textarea' },
       ...(o.avecArret === 'oui' && !o.arretFin ? [{ name: 'arretFin', label: 'Remise à disposition (fin d’arrêt)', type: 'datetime-local' }] : []),
+      ...(cptProg ? [{ name: 'indexCompteur', label: `Index du compteur à la réalisation (${cptProg.unite}) — dernier relevé : ${App.compteurs?.dernierRetenu(cptProg)?.valeur ?? '—'}`, type: 'number', required: true }] : []),
       ...(sansSuite ? [{ name: 'suite', label: 'Suite à donner, si partiel ou non résolu', type: 'text' },
         { name: 'suiteResp', label: 'Responsable de la suite', type: 'select', options: personnesOpts(), empty: '—' }] : []),
     ];
     const valider = clotureParResp();
     if (valider) fields.push({ type: 'info', text: 'Le responsable valide la clôture.' });
-    const v = await askForm({ title: 'Terminer l’intervention', ok: valider ? 'Terminer' : 'Clôturer', values: { travaux: o.travaux, resultat: o.resultat, certitudeCause: o.certitudeCause, cause: o.cause }, fields });
+    const v = await askForm({ title: 'Terminer l’intervention', ok: valider ? 'Terminer' : 'Clôturer', values: { travaux: o.travaux, resultat: o.resultat, certitudeCause: o.certitudeCause, cause: o.cause, indexCompteur: o.indexCompteur }, fields });
     if (!v) return;
     const patch = { travaux: v.travaux, resultat: v.resultat, certitudeCause: v.certitudeCause || o.certitudeCause, cause: v.cause || null };
     if (v.nature) patch.nature = v.nature;
     if (v.arretFin) patch.arretFin = v.arretFin;
+    if (v.indexCompteur != null) patch.indexCompteur = v.indexCompteur;
     if (v.suite) patch.reserves = [...(o.reserves || []), { id: Store.uid(), type: 'suite', texte: v.suite, responsableId: v.suiteResp || null, echeance: null, bloquante: false, statut: 'ouverte', creeLe: Store.now() }];
     if (valider) {
       const err = Calculs.verifierCloture({ ...o, ...patch });
@@ -1474,21 +1513,38 @@
     { name: 'equipementId', label: 'Équipement', type: 'select', required: true, empty: '— Choisir —', options: list('equipements').filter(e => e.actif !== false).map(e => [e.id, `${e.designation} (${e.code})`]) },
     { name: 'libelle', label: 'Libellé', type: 'text', required: true, placeholder: 'ex. Vidange compresseur' },
     { name: 'modele', label: 'Modèle', type: 'chips', options: L.modele, default: 'entretien', required: true },
-    { name: 'periodiciteJours', label: 'Périodicité (jours)', type: 'number', required: true },
-    { name: 'prochaineEcheance', label: 'Prochaine échéance', type: 'date', required: true },
+    { name: 'periodiciteJours', label: 'Tous les … jours', type: 'number' },
+    { name: 'prochaineEcheance', label: 'Prochaine échéance (si périodicité en jours)', type: 'date' },
+    ...(list('compteurs').some(c => c.usage === 'equipement') ? [
+      { type: 'info', text: 'Et / ou selon l’usage : « le premier des deux » déclenche l’intervention.' },
+      { name: 'compteurId', label: 'Compteur d’équipement (heures, cycles…)', type: 'select', options: list('compteurs').filter(c => c.usage === 'equipement' && c.actif !== false).map(c => [c.id, `${c.libelle || c.code} (${c.unite})`]), empty: '—' },
+      { name: 'intervalleCompteur', label: 'Toutes les … (unité du compteur, ex. 500)', type: 'number' },
+      { name: 'margeCompteur', label: 'Alerter … avant (ex. 50)', type: 'number' },
+      { name: 'dernierIndex', label: 'Index à la dernière réalisation', type: 'number' }] : []),
     { name: 'regle', label: 'Échéance suivante', type: 'chips', options: L.regle, default: 'fixe', required: true },
     { name: 'instruction', label: 'Instruction / gamme', type: 'textarea' }];
-  A['prog-new'] = async () => { const v = await askForm({ title: 'Nouveau programme préventif', fields: progFields() }); if (v) { await Store.save('programmes', { id: Store.uid(), ...v, actif: true }); render(); } };
+  const regleProgOK = v => (v.periodiciteJours && v.prochaineEcheance) || (v.compteurId && v.intervalleCompteur) ? null
+    : 'Indiquez une périodicité en jours avec sa prochaine échéance, ou un compteur et son pas (ou les deux).';
+  A['prog-new'] = async () => {
+    const v = await askForm({ title: 'Nouveau programme préventif', fields: progFields() });
+    if (!v) return;
+    const err = regleProgOK(v); if (err) { await alertBox('Programme', [err]); return; }
+    await Store.save('programmes', { id: Store.uid(), ...v, actif: true }); render();
+  };
   A['prog-edit'] = async el => {
     const p = data.programmes.get(el.dataset.id);
     const v = await askForm({ title: 'Modifier le programme', values: p, fields: [...progFields(), { name: 'motif', label: 'Motif (report d’échéance…)', type: 'text' }] });
     if (!v) return;
     const { motif, ...rest } = v;
+    const err = regleProgOK(rest); if (err) { await alertBox('Programme', [err]); return; }
     await edit('programmes', p.id, rest, { motif });
   };
   A['prog-ot'] = async el => {
     const p = data.programmes.get(el.dataset.id);
-    const o = await newOT({ programmeId: p.id, echeance: p.prochaineEcheance, equipementId: p.equipementId, nature: 'preventive', priorite: 'planifiable', travaux: null, activites: [] });
+    const xc = etatCompteurProg(p);
+    const parCompteur = xc && ['alerte', 'atteint'].includes(xc.e.statut) && !(p.prochaineEcheance && p.prochaineEcheance <= today());
+    const o = await newOT({ programmeId: p.id, echeance: parCompteur ? today() : p.prochaineEcheance, equipementId: p.equipementId, nature: 'preventive', priorite: 'planifiable', travaux: null, activites: [],
+      ...(xc ? { echeanceIndex: xc.e.echeanceIndex } : {}) });
     location.hash = '#/ot/' + o.id;
   };
 
@@ -1754,12 +1810,15 @@
     const [name, id] = path.split('/');
     return { name, id: id ? decodeURIComponent(id) : null, q: new URLSearchParams(qs || '') };
   }
-  const TAB_OF = { demande: 'demandes', ot: 'ots', eq: 'parc', article: 'magasin', reappro: 'magasin', achat: 'plus', achats: 'plus', valeur: 'plus', signaler: '', qr: 'parc', plateforme: 'plus', miseenservice: 'plus' };
-  const MOBILE_PLUS = ['preventif', 'magasin', 'article', 'reappro', 'achat', 'achats', 'valeur', 'indicateurs', 'journal', 'reglages', 'plus', 'plateforme', 'miseenservice'];
+  const TAB_OF = { demande: 'demandes', ot: 'ots', eq: 'parc', article: 'magasin', reappro: 'magasin', achat: 'plus', achats: 'plus', valeur: 'plus', signaler: '', qr: 'parc', plateforme: 'plus', miseenservice: 'plus', compteurs: 'plus', compteur: 'plus', releve: 'plus' };
+  const MOBILE_PLUS = ['preventif', 'magasin', 'article', 'reappro', 'achat', 'achats', 'valeur', 'indicateurs', 'journal', 'reglages', 'plus', 'plateforme', 'miseenservice', 'compteurs', 'compteur', 'releve'];
   function render() {
     cacheEtat = null;
     R = parseHash();
-    if (doitSeConnecter()) R = { name: 'connexion', id: null, q: new URLSearchParams() };
+    if (doitSeConnecter()) {
+      if (R.name !== 'connexion' && R.name !== 'accueil') sessionStorage.setItem('apresConnexion', location.hash);
+      R = { name: 'connexion', id: null, q: new URLSearchParams() };
+    }
     else if (R.name === 'connexion') R = { name: 'accueil', id: null, q: new URLSearchParams() };
     document.body.classList.toggle('ecran-connexion', R.name === 'connexion');
     const fn = V[R.name] || V.accueil;
@@ -1874,7 +1933,7 @@
 
   // Aides communes pour les écrans par domaine (js/vues/*.js, scripts classiques chargés après app.js).
   window.App = { V, A, L, esc, badge, empty, seg, search, askForm, askConfirm, askText, alertBox, toast, edit, list, render, fmt, fmtY, today, refDe,
-    role, autorise, aModule, siteActif, nomSite, mesSites, desigBesoin, CLS_BESOIN, leverAttentesPieces, exportCsv, AFTER, adressePublique };
+    role, autorise, aModule, siteActif, nomSite, mesSites, desigBesoin, CLS_BESOIN, leverAttentesPieces, exportCsv, AFTER, adressePublique, eq, locPath, ajouterFichier, progCard };
 
   let annonces = [];
   const chargerAnnonces = () => { if (Sync.profil()) Sync.mesAnnonces().then(a => { annonces = Array.isArray(a) ? a : []; if (annonces.length && !enSaisie()) render(); }).catch(() => {}); };

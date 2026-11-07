@@ -551,7 +551,50 @@
     return { parDevise: t, sansMontant };
   }
 
-  const Calculs = { UNITES, UNITES_RESSOURCE, ANOMALIES_CONFIRMABLES, analyserReleves, consommationPeriode, rapprochementFacture, residuSousComptage, totauxParUnite, relevesDus, bilanCombustible, totalFactures,
+  /** Contrôle immédiat d'un relevé avant enregistrement : anomalies que ce relevé aurait parmi les relevés existants. */
+  function controleReleve(compteur, releves, candidat, { maintenant = null } = {}) {
+    const c = { id: '__candidat__', compteurId: compteur.id, ...candidat };
+    const l = analyserReleves(compteur, [...releves, c], { maintenant }).lignes.find(x => x.releve.id === '__candidat__');
+    const retenus = analyserReleves(compteur, releves, { maintenant }).lignes.filter(x => x.statut === 'retenu' || x.statut === 'rupture');
+    const precedent = [...retenus].reverse().find(x => x.releve.nature !== 'rupture' && (x.releve.le || '') < (c.le || '')) || null;
+    return { anomalies: l?.anomalies || [], confirmable: !!l?.confirmable, precedent: precedent?.releve || null };
+  }
+
+  /** Préventif selon l'usage (heures, cycles…) : usage depuis la dernière réalisation, reste, alerte, date estimée.
+   *  Programme : { compteurId, intervalleCompteur, margeCompteur, dernierIndex, derniereRealisation }.
+   *  Usage = dernier index retenu − index de la dernière réalisation (même série) ; après un remplacement de compteur,
+   *  somme des consommations relevées depuis la réalisation. Inconnu si aucun relevé depuis. */
+  function echeanceCompteur(programme, compteur, releves, today, { maintenant = null } = {}) {
+    const pas = num(programme.intervalleCompteur);
+    if (!compteur || !pas) return { statut: 'inconnu', raison: 'compteur ou pas manquant' };
+    const a = analyserReleves(compteur, releves, { maintenant });
+    const retenus = a.lignes.filter(l => l.statut === 'retenu').map(l => l.releve);
+    const dernier = retenus[retenus.length - 1] || null;
+    const ref = programme.derniereRealisation ? instant(programme.derniereRealisation) : null;
+    const coef = num(compteur.coefficient) || 1;
+    const ruptureApres = a.lignes.some(l => l.statut === 'rupture' && (!ref || l.releve.le > ref));
+    let usage = null;
+    if (dernier && programme.dernierIndex != null && programme.dernierIndex !== '' && !ruptureApres && (!ref || dernier.le >= ref))
+      usage = (Number(dernier.valeur) - num(programme.dernierIndex)) * coef;
+    else if (ref) {
+      const segs = a.segments.filter(s => s.debut >= ref);
+      if (segs.length) usage = segs.reduce((t, s) => t + s.quantite, 0);
+    }
+    if (usage == null) return { statut: 'inconnu', raison: 'aucun relevé depuis la dernière réalisation', dernier, intervalle: pas };
+    usage = arrondi(usage);
+    const reste = arrondi(pas - usage), marge = num(programme.margeCompteur);
+    // Rythme : consommations des relevés retenus sur les 60 derniers jours.
+    const debutFenetre = addDays(today, -60) + 'T00:00';
+    const recents = a.segments.filter(s => s.fin >= debutFenetre);
+    const jours = recents.reduce((t, s) => t + minutesBetween(s.debut, s.fin) / 1440, 0);
+    // Pas d'estimation sur moins de 7 jours de relevés (deux relevés à quelques minutes d'écart donneraient n'importe quoi).
+    const rythme = jours >= 7 ? recents.reduce((t, s) => t + s.quantite, 0) / jours : null;
+    const dateEstimee = reste <= 0 ? today : rythme > 0 ? addDays(dernier ? dernier.le.slice(0, 10) : today, Math.ceil(reste / rythme)) : null;
+    return { statut: reste <= 0 ? 'atteint' : reste <= marge ? 'alerte' : 'ok', usage, reste, intervalle: pas, marge, echeanceIndex: programme.dernierIndex != null ? arrondi(num(programme.dernierIndex) + pas / coef) : null,
+      dernier, rythme: rythme == null ? null : arrondi(rythme), dateEstimee };
+  }
+
+  const Calculs = { controleReleve, echeanceCompteur, UNITES, UNITES_RESSOURCE, ANOMALIES_CONFIRMABLES, analyserReleves, consommationPeriode, rapprochementFacture, residuSousComptage, totauxParUnite, relevesDus, bilanCombustible, totalFactures,
     montantCommande, isolementsEnAttente, consommationHebdo, seuilIndicatif, seuilActif, besoinsNonCouverts, receptionLigne, etatAchat, qteEnCommande, qteIsolee, situationArticle, aReapprovisionner, prixMAD, valorisation, coutConsomme, besoinsAServir, attentesALever, piecesDetenues, stockPhysique, qteReservee, stockDisponible, etatBesoin, rapprochementBesoin, retraitsAVerifier, qteRemise, addDays, daysBetween, minutesBetween, dureeUnion, mediane, NATURE_DU_BESOIN, ETAT_RANK, otOuvert, demandeOuverte, indexOtsParDemande, etatEquipement, verifierCloture, echeanceSuivante, indicateurs };
   if (typeof module === 'object' && module.exports) module.exports = Calculs; else root.Calculs = Calculs;
 })(this);

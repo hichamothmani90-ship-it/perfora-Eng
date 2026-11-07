@@ -149,3 +149,40 @@ test('relevés à faire : fréquence en jours, jamais relevé = dû, inactif ign
 test('coûts : montants par devise, montant inconnu compté à part', () => {
   assert.deepEqual(C.totalFactures([{ montantHT: 1200.5 }, { montantHT: 300, devise: 'MAD' }, { montantHT: null }]), { parDevise: { MAD: 1500.5 }, sansMontant: 1 });
 });
+
+// ---------- D3 : préventif selon l'usage, contrôle immédiat ----------
+const HRS = { id: 'c-hrs', unite: 'h', mode: 'cumulatif', coefficient: 1, usage: 'equipement', equipementId: 'cmp' };
+const h = (le, v, o) => rel(HRS.id, le, v, o);
+const PROG = { id: 'p1', compteurId: HRS.id, intervalleCompteur: 500, margeCompteur: 50, dernierIndex: 12000, derniereRealisation: '2026-09-01T00:00' };
+
+test('préventif selon l’usage : reste, alerte à la marge, atteint', () => {
+  const r = [h('2026-09-01T08:00', 12000), h('2026-10-01T08:00', 12200), h('2026-11-01T08:00', 12400)];
+  let x = C.echeanceCompteur(PROG, HRS, r, '2026-11-01');
+  assert.deepEqual([x.statut, x.usage, x.reste, x.echeanceIndex], ['ok', 400, 100, 12500]);
+  assert.equal(x.dateEstimee, '2026-11-17', '400 h en 61 jours ≈ 6,56 h / jour → 100 h en 15,3 j, arrondi au jour suivant');
+  x = C.echeanceCompteur(PROG, HRS, [...r, h('2026-11-05T08:00', 12460)], '2026-11-05');
+  assert.deepEqual([x.statut, x.reste], ['alerte', 40]);
+  x = C.echeanceCompteur(PROG, HRS, [...r, h('2026-11-10T08:00', 12510)], '2026-11-10');
+  assert.deepEqual([x.statut, x.reste, x.dateEstimee], ['atteint', -10, '2026-11-10']);
+});
+
+test('préventif selon l’usage : compteur remplacé après la réalisation → somme des tronçons ; aucun relevé → inconnu', () => {
+  const r = [h('2026-09-01T00:00', 12000), h('2026-10-01T00:00', 12300), rel(HRS.id, '2026-10-02T00:00', null, { nature: 'rupture', indexFinal: 12310, indexInitial: 0 }), h('2026-11-01T00:00', 150)];
+  const x = C.echeanceCompteur(PROG, HRS, r, '2026-11-01');
+  assert.deepEqual([x.statut, x.usage, x.reste], ['ok', 460, 40].map((v, i) => i === 0 ? 'alerte' : v));
+  assert.equal(C.echeanceCompteur(PROG, HRS, [], '2026-11-01').statut, 'inconnu');
+  assert.equal(C.echeanceCompteur({ ...PROG, intervalleCompteur: null }, HRS, r, '2026-11-01').statut, 'inconnu');
+});
+
+test('contrôle immédiat d’un relevé : baisse d’index (non confirmable), relevé précédent rendu', () => {
+  const r = [h('2026-11-01T08:00', 12300), h('2026-11-02T08:00', 12310)];
+  const c = C.controleReleve(HRS, r, { le: '2026-11-03T08:00', valeur: 12000 });
+  assert.deepEqual([c.anomalies, c.confirmable, c.precedent.valeur], [['baisse_index'], false, 12310]);
+  assert.deepEqual(C.controleReleve(HRS, r, { le: '2026-11-03T08:00', valeur: 12320 }).anomalies, []);
+});
+
+test('préventif selon l’usage : pas de date estimée sur moins de 7 jours de relevés', () => {
+  const r = [h('2026-11-01T08:00', 12300), h('2026-11-01T08:10', 12320)];
+  const x = C.echeanceCompteur({ ...PROG, dernierIndex: 12320, derniereRealisation: '2026-11-01T08:10' }, HRS, r, '2026-11-01');
+  assert.deepEqual([x.statut, x.reste, x.rythme, x.dateEstimee], ['ok', 500, null, null]);
+});
