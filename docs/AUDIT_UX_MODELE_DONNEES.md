@@ -346,7 +346,7 @@ surtout l'appli). Chaque lot : maquette écran par écran validée par Hicham **
 
 | Ordre | Lot | Contenu | Effort indicatif |
 |---|---|---|---|
-| 1 | **R1 Navigation et droits par rôle** | barre du bas, accueil et menu par rôle ; Réglages éclatés (Mon compte · Entreprise · Données) ; rôle Achats visible ; prestataire limité à ses interventions ; journal restreint ; un seul bandeau | 4 – 5 jours |
+| 1 | ✅ **R1 Navigation et droits par rôle** (v36, 7 nov.) | barre du bas, accueil et menu par rôle ; Réglages éclatés (Mon compte · Entreprise · Données) ; rôle Achats visible ; prestataire limité à ses interventions ; journal restreint ; un seul bandeau | 4 – 5 jours |
 | 2 | **R2 Fiche intervention en étapes** | Préparer / Réaliser / Terminer ; qualification proposée puis validée ; activités fréquentes ; une seule liste de pièces ; saisie rapide ; Signaler allégé | 3 – 4 jours |
 | 3 | **R3 Membres, équipes, administrateur du client** | une seule notion « membre » (avec ou sans compte), équipes, société prestataire, rôle admin client, invitations par l'admin client | 3 – 4 jours |
 | 4 | **R5 Magasin ↔ achats relié** | pièce indisponible → achat lié → réservation à la réception → attente levée ; achat urgent ; « qui commande » (Achats ou repli) | 2 – 3 jours |

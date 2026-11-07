@@ -19,6 +19,11 @@ fonctions appelables par un compte connecté qui vérifient elles-mêmes rôle, 
 Pro) ; aucune fonction appelable sans compte ; aucune erreur remontée par les appareils ; base 13 Mo.
 Seul bruit en ligne : le script de statistiques Cloudflare, bloqué par la politique de sécurité (voir A6).
 
+**Refonte de l'organisation (audit du 7 nov., docs/AUDIT_UX_MODELE_DONNEES.md)** : lots R1 → R2 → R3 → R5 → R4 → R9 → R8
+avant le pilote (≈ 4 semaines). **R1 fait (v36)** : navigation, accueils et menus par rôle, Mon compte / Entreprise,
+droit administrateur de l'entreprise, prestataire limité à ses interventions, journal restreint. Prochain : **R2** (fiche
+intervention en étapes, arrêts planifiés / non planifiés).
+
 ## 0 bis. Plan actualisé jusqu'au pilote
 
 ### A. Préparatifs (Hicham, courts, à faire maintenant — détails dans docs/SECURITE.md et docs/PRODUCTION_ET_SAUVEGARDE.md)

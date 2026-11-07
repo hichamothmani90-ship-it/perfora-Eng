@@ -28,10 +28,12 @@ multi-entreprise) et concepteur d'interfaces terrain mobile-first. Langue : fran
      (décision du 6 nov. 2026 : traçabilité légère, pas de chronomètre).
    Si tu as besoin d'un passage précis, demande à lire le fichier.
 
-3. ÉTAT (7 nov. 2026, appli **v35** sur app.perfora.ma) — **lire d'abord docs/PLANNING_ACTUALISE.md** (§0 « où on en est »,
+3. ÉTAT (7 nov. 2026, appli **v36** sur app.perfora.ma) — **lire d'abord docs/PLANNING_ACTUALISE.md** (§0 « où on en est »,
    §0 bis « chemin vers le pilote », §8 décisions). Volet D (énergie et eau) **terminé** (docs/VOLET_D_CONCEPTION.md §7-11). Étapes 5 et 6 faites (docs/PRODUCTION_ET_SAUVEGARDE.md, docs/SECURITE.md).
    Plan à jour : PLANNING_ACTUALISE.md §0 bis (A préparatifs Hicham → B production → C avant le premier client → D/E pilote).
    Prochaine étape : **B — production**, dès que Hicham a créé le projet Supabase de production (A5).
+   Refonte en cours (docs/AUDIT_UX_MODELE_DONNEES.md §13) : R1 fait (v36, docs/MAQUETTES_R1.md) ; prochain lot **R2**
+   (maquettes d'abord, validées par Hicham avant de coder). Comptes factices ajoutés : presta@ (prestataire), dir@ (direction).
    Administrateur : double authentification ACTIVÉE (7 nov.) : droits seulement en session « aal2 » (code de l'appli d'authentification) ;
    dans le SQL Editor, pour agir en administrateur : claims avec 'aal':'aal2'. Autres repères : docs/TESTS_HORS_LIGNE.md, docs/CENTRE_CONTROLE_CONCEPTION.md, docs/MISE_EN_SERVICE_CLIENT.md,
    docs/CLASSIFICATION_PARC.md, docs/DISCUSSION_MODELE_DONNEES.md.
@@ -58,7 +60,7 @@ multi-entreprise) et concepteur d'interfaces terrain mobile-first. Langue : fran
      (site, dépôt perfora-site) en ligne ; DNS chez Cloudflare (docs/MISE_EN_LIGNE_PERFORA_MA.md). E-mails pro en place (contact@ → Gmail ; envois Supabase par Resend depuis no-reply@perfora.ma). Ensuite volet D (énergie et eau). Ou mise
      en production (docs/RECETTE_VOLET_A.md §4). Démo VITRINE à réinitialiser une fois (nouvelles données magasin).
    - Supabase « gmao-terrain » (réf. oihaqzkqhvyjybijsonc, Frankfurt). Scripts dans l'ordre :
-     schema.sql → roles.sql → multitenant.sql → quotas.sql → plateforme.sql → durcissement.sql → magasin.sql → achats.sql → energie.sql → mise_en_service.sql → centre_controle.sql → centre_controle_cc2.sql → references.sql → fichiers.sql → securite.sql → demo.sql → demo_energie.sql (généré : python scripts/generer_demo_energie.py) ; séquence unique pour une base neuve :
+     schema.sql → roles.sql → multitenant.sql → quotas.sql → plateforme.sql → durcissement.sql → magasin.sql → achats.sql → energie.sql → mise_en_service.sql → centre_controle.sql → centre_controle_cc2.sql → references.sql → fichiers.sql → securite.sql → roles_r1.sql (généré : python scripts/generer_roles_r1.py) → demo.sql → demo_energie.sql (généré : python scripts/generer_demo_energie.py) ; séquence unique pour une base neuve :
      supabase/production/construire_base.sql (générée : python scripts/assembler_sql.py ; --verifier avant un commit) ; tests : tests_etancheite, tests_quotas, tests_plateforme, tests_magasin, tests_demo, tests_achats, tests_energie, tests_mise_en_service, tests_centre_controle, tests_centre_controle_cc2, tests_references, tests_fichiers, tests_securite (tous rejouables en local : bash scripts/sauvegarde/tester_sql.sh) ;
      Edge Function supabase/functions/inviter. Entreprises : DEMO « Perfora Démo » (Site Tanger, pack Pro ;
      othmanihicham99@gmail.com responsable + administrateur plateforme ; hothmani36@outlook.fr magasinier)

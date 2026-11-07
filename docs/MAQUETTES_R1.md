@@ -4,7 +4,7 @@ Source : audit (docs/AUDIT_UX_MODELE_DONNEES.md §1, §3, §4) et décisions du 
 Note (décision Q9 corrigée) : les tuiles de la direction restent Disponibilité, MTBF et MTTR ; arrêts suivis en planifié /
 non planifié ; temps des intervenants jamais suivis.
 Maquette interactive présentée dans la conversation du 7 nov. (rôle par rôle : accueil, menu, mon compte, entreprise).
-**Rien n'est codé tant que ce document n'est pas validé.**
+**Validé le 7 nov. 2026 ; fait en v36 (voir §8).**
 
 ## 1. Principes
 
@@ -94,3 +94,22 @@ Migration : les responsables actuels reçoivent le droit administrateur du clien
 
 4 – 5 jours : serveur (S1 – S3) et tests d'étanchéité → navigation (barre, menu, accueils) → réglages éclatés →
 recette par rôle. Le lot R3 (membres, équipes) s'appuie ensuite sur le droit administrateur posé ici.
+
+## 8. Fait (7 nov. 2026, v36)
+
+- **Serveur** `supabase/roles_r1.sql` (généré par `scripts/generer_roles_r1.py`, dans la séquence après `securite.sql`) :
+  droit `profils.admin_client` (responsables existants migrés ; le premier compte d'une entreprise l'obtient à
+  l'invitation ; jamais retiré au dernier administrateur), invitations / rôles / sites réservés à l'administrateur,
+  périmètre du prestataire en lecture et en écriture (`prestataire_voit`, `prestataire_refus`), journal restreint
+  (`journal_visible`). Tests : `tests_roles_r1.sql` 16/16 sur Supabase et sur une base neuve ; 13 fichiers de tests SQL
+  conformes ; serveur factice aligné (`tests/roles_r1_serveur_test.py` 15/15 ; comptes `presta@` et `dir@` ajoutés).
+- **Appli** : `js/vues/navigation.js` (barre, menu groupé, accueils technicien / prestataire / opérateur / direction,
+  recherche) ; `app.js` : Mon compte (changer son mot de passe, se déconnecter de tous les appareils, appareil, support)
+  et Entreprise (abonnement, membres et droits avec ★ Admin, règles, lieux, personnes sans compte, données) ; un seul
+  bandeau ; plus de rappel d'export pour un compte connecté ; « Pilote » affiché « Direction » ; filtres « Les miens » /
+  « Les miennes » ; resynchronisation unique des appareils pour appliquer les nouveaux périmètres (si rien en attente).
+- **Robustesse** (trouvé pendant la recette) : une fiche sans date de création ne fait plus échouer les indicateurs ni les
+  listes ; un écran qui échoue affiche « Écran indisponible » (erreur remontée) au lieu de laisser l'écran précédent figé.
+- Libellés de barre raccourcis pour tenir sur une ligne : « Aujourd'hui » (responsable), « Synthèse » (direction),
+  « Mes demandes » (opérateur).
+- Reporté : S4 « qui commande » (réglage et contrôle au lot R5), onglet « Semaine » des travaux (lot R9).
