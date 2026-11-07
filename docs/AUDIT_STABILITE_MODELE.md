@@ -194,7 +194,7 @@ Gravité = probabilité × impact, notée pour un pilote de 10 à 30 utilisateur
 | Lot | Contenu | Durée | Quand |
 |---|---|---|---|
 | ✅ **S1 — urgent** (v39) | A fusion des listes · B périmètre `r3` + fiches de type inconnu gardées · D version minimale | ≈ 1,5 jour (v39) | **maintenant**, avant de reprendre R5 |
-| **S2 — avant le pilote** | E essai et curseur sûr · F code appareil unique · G contrôle du contenu + rapport nocturne · K liens · H source unique des types, `push_fiches` en un fichier, scénarios communs | ≈ 3 – 4 jours | après S1, avant ou entre R5 et R4 |
+| ✅ **S2 — avant le pilote** (v41) | E essai et curseur sûr · F code appareil unique · G contrôle du contenu + rapport nocturne · K liens · H source unique des types, `push_fiches` en un fichier, scénarios communs | ≈ 3 – 4 jours | après S1, avant ou entre R5 et R4 |
 | **S3 — avec la production** | C sauvegarde activée et restauration testée, offre Pro · I mesure à 100 000 fiches · J horloge et fuseau · L anonymisation | ≈ 2 jours (+ A1 côté Hicham) | étape B (production) et avant le premier contrat |
 
 Côté Hicham, sans attendre : **A1** (dépôt privé des sauvegardes et ses 4 secrets) et la décision sur l'offre de la
@@ -233,3 +233,36 @@ justes, et donc de A, E et J.
   aux v38 et plus anciennes (elles ne décrivent pas leurs retraits).
 - Rejouer seul un ancien fichier SQL (avant `stabilite_s1.sql`) recréerait `push_fiches(jsonb)` à côté de la nouvelle :
   toujours rejouer la séquence complète, ou `stabilite_s1.sql` à la suite.
+
+## 8. Fait — lot S2 (7 nov. 2026, v41)
+
+- **E, curseur pendant un import — confirmé puis corrigé.** Essai `scripts/sauvegarde/tester_curseur.sh` (import de
+  300 fiches resté ouvert 6 s, un envoi validé pendant ce temps, un téléphone qui lit entre les deux) : **101 fiches
+  sur 300 jamais reçues** sans correctif, **0** avec. `pf_importer` renumérote désormais ses fiches juste avant de
+  valider (`supabase/stabilite_s2.sql`).
+- **F, code appareil unique** : `appareil_code(code, appareil)` inscrit le code de chaque appareil dans l'entreprise
+  (`pf_appareils`) ; un appareil garde le sien s'il est libre, sinon reçoit un code neuf ; un code n'est jamais
+  redonné, même après « Effacer cet appareil ». L'appli l'appelle à la lecture du profil (identifiant d'appareil
+  `appareilId`). Essai : deux appareils « K3 » → le second devient « RL », ses références suivent (`OT-RL-0003`).
+- **G, contenu** : `s2_controle` refuse un statut, une nature, une priorité, un type de mouvement ou un statut d'achat
+  inconnus, une quantité non numérique, une date mal formée (champs présents seulement, valeur vide acceptée). Les
+  données de la recette ont été vérifiées avant : 0 valeur hors liste.
+- **K, liens** : `s2_lien` vérifie à la création l'intervention et l'article d'une pièce, l'article, la pièce et
+  l'intervention d'un mouvement ; à chaque écriture l'équipe et la société d'une intervention. Une intervention et sa
+  pièce envoyées ensemble restent acceptées.
+- **Rapport des fiches anormales** : `pf_fiches_anormales()` (administrateur plateforme), bouton « Contrôle des
+  données » dans la console : par entreprise, contenu non reconnu, liens cassés, fiches sans date de création, et
+  5 exemples. À lancer à la main (pas de tâche de nuit pour l'instant).
+- **H, une seule source** : `supabase/push_fiches.sql` est désormais **la** source de `push_fiches`, modifiée à la main
+  (fin de la chaîne de scripts) ; `scripts/modele.py` est la référence des types, fiches sans site, fiches jamais
+  modifiées et modules ; `tests/coherence_modele_test.py` vérifie que le SQL, l'appli et le serveur factice disent la
+  même chose (18 contrôles). **Reste à faire** : des scénarios de test communs (un même fichier joué sur Postgres et sur
+  le serveur factice) — reporté, la cohérence des listes étant désormais vérifiée.
+- **Essais** : `tests_stabilite_s2.sql` 14/14 sur une base neuve ; 19 fichiers SQL rejoués : mêmes résultats, sauf un
+  motif dans `tests_achats` (n° 18, un mouvement d'un technicien vers une intervention inexistante : toujours refusé,
+  le lien manquant est signalé en premier) ; serveur factice : S2 11/11, toutes les autres suites inchangées ; 115 tests
+  node. Navigateur (v41, serveur factice) : codes appareils, saisie complète (équipement, article, intervention avec
+  arrêt, pièce) acceptée sans refus.
+- **Constat en passant** (non corrigé) : `pf_annuler_lot` supprime les fiches d'un import annulé sur le serveur, mais
+  un téléphone qui les avait déjà reçues les garde. À traiter avec S3 (annulation = nouveau périmètre, ou fiches
+  marquées « annulées » plutôt que supprimées).

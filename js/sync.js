@@ -240,6 +240,14 @@ const Sync = (() => {
       if ((cfg().curseur || 0) > 0) { await Store.viderMetier(); await majCfg({ curseur: 0 }); }
       await Store.persistMeta({ ...Store.device(), perimetre: PERIMETRE });
     }
+    // S2 (risque F) : code appareil unique dans l'entreprise, attribué par le serveur (références OT-K3-0007 sans doublon).
+    if (ent && Store.device().codeEntreprise !== ent) {
+      try {
+        const d = Store.device(), appareilId = d.appareilId || Store.uid() + Store.uid();
+        const code = await api('/rest/v1/rpc/appareil_code', { method: 'POST', body: JSON.stringify({ p_code: d.code, p_appareil: appareilId }) });
+        if (typeof code === 'string' && code) await Store.persistMeta({ ...Store.device(), code, appareilId, codeEntreprise: ent });
+      } catch { /* hors ligne ou serveur plus ancien : nouvel essai à la prochaine lecture du profil */ }
+    }
     await majCfg({ profil: p, profilLe: Date.now() });
     if (p?.personneId && Store.device().personneId !== p.personneId) await Store.persistMeta({ ...Store.device(), personneId: p.personneId });
     return p;
@@ -266,6 +274,7 @@ const Sync = (() => {
       p_max_sites: v.maxSites ?? null, p_max_utilisateurs_site: v.maxUtilisateursSite ?? null, p_max_utilisateurs_total: v.maxUtilisateursTotal ?? null }),
     ajouterSite: (ent, code, nom) => rpc('pf_ajouter_site', { p_entreprise: ent, p_code: code, p_nom: nom }),
     reinitialiserDemo: ent => rpc('pf_reinitialiser_demo', { p_entreprise: ent }),
+    anormales: () => rpc('pf_fiches_anormales'),
     // mise en service d'un client (supabase/mise_en_service.sql)
     referentiel: ent => rpc('pf_referentiel', { p_entreprise: ent }),
     importer: (ent, lot, fichier, fiches, essai) => rpc('pf_importer', { p_entreprise: ent, p_lot: lot, p_fichier: fichier, p_fiches: fiches, p_essai: !!essai }),

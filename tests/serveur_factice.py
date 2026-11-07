@@ -120,6 +120,52 @@ def cloture_par_responsable(ent):
     return bool(f and f["entreprise"] == ent and f["data"].get("clotureParResponsable"))
 
 
+# Lot S2 (miroir de supabase/stabilite_s2.sql) : contenu reconnu, liens existants, code appareil unique.
+import re as _re
+S2_PERMIS = {
+    ("ots", "statut"): ["a_preparer", "a_planifier", "planifiee", "prete", "en_cours", "suspendue", "travail_termine", "cloturee", "annulee"],
+    ("ots", "nature"): ["a_qualifier", "corrective", "preventive", "assistance_production", "travaux_techniques"],
+    ("ots", "priorite"): ["urgence_securite", "critique_service", "rapide", "planifiable", "a_qualifier"],
+    ("ots", "avecArret"): ["oui", "non", "inconnu"], ("ots", "arretType"): ["planifie", "non_planifie"],
+    ("demandes", "statut"): ["a_examiner", "prise_en_charge", "traitement_organise", "close_sans_travail", "annulee"],
+    ("besoins", "statut"): ["demande", "reserve", "indisponible", "annule", "partiellement_remis", "remis"],
+    ("mouvements", "type"): ["entree", "sortie", "remise", "retour", "rebut", "ajustement", "isolement", "liberation", "disposition"],
+    ("achats", "statut"): ["brouillon", "soumise", "a_completer", "validee", "refusee", "transmise", "commandee", "partiellement_recue", "recue", "close", "annulee"],
+}
+S2_PERMIS[("ots", "natureProposee")] = S2_PERMIS[("ots", "nature")]
+S2_PERMIS[("ots", "prioriteProposee")] = S2_PERMIS[("ots", "priorite")]
+S2_DATES = {"creeLe", "modifieLe", "le", "demandeLe", "depuis", "fin", "arretDebut", "arretFin", "arretPrevuDebut", "arretPrevuFin", "creneau",
+            "echeance", "clotureLe", "dateCommande", "livraisonPrevue", "valideLe", "soumiseLe", "redigeLe", "delai", "reserveLe", "contratFin"}
+S2_DATE_RE = _re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}([T ][0-9]{2}:[0-9]{2}(:[0-9]{2}([.][0-9]+)?)?(Z|[+-][0-9]{2}:?[0-9]{2})?)?$")
+S2_LIENS = [("besoins", "otId", "ots", True), ("besoins", "articleId", "articles", True), ("mouvements", "articleId", "articles", True),
+            ("mouvements", "besoinId", "besoins", True), ("mouvements", "otId", "ots", True), ("ots", "equipeId", "equipes", False), ("ots", "societeId", "fournisseurs", False)]
+APPAREILS = {}   # (entreprise, code) -> appareil
+
+
+def s2_controle(t, pa):
+    for k, v in pa.items():
+        if v is None:
+            continue
+        permis = S2_PERMIS.get((t, k))
+        if permis is not None and (not isinstance(v, str) or v not in permis):
+            return f"valeur non reconnue pour « {k} » : {json.dumps(v, ensure_ascii=False)[:40]} (mettez l'appli à jour)"
+        if ((t in ("besoins", "mouvements") and k in ("qte", "qteReservee", "quantite")) or (t == "releves" and k == "valeur")) and (isinstance(v, bool) or not isinstance(v, (int, float))):
+            return f"quantité non numérique pour « {k} »"
+        if k in S2_DATES and isinstance(v, str) and v and not S2_DATE_RE.match(v):
+            return f"date mal formée pour « {k} » : {v[:30]}"
+    return None
+
+
+def s2_lien(t, pa, ent, nouvelle):
+    for ty, champ, cible, creation in S2_LIENS:
+        if ty != t or (creation and not nouvelle) or not pa.get(champ):
+            continue
+        x = fiches.get(pa[champ])
+        if not (x and x["type"] == cible and x["entreprise"] == ent):
+            return f"lien vers une fiche inconnue de l'entreprise ({champ})"
+    return None
+
+
 # Lot R5 (miroir de supabase/magasin_r5.sql) : qui commande, commande d'une demande validée ou urgente.
 def r5_qui_commande(ent):
     f = fiches.get("parametres-" + ENTREPRISES[ent]["id"])
@@ -700,6 +746,25 @@ class H(BaseHTTPRequestHandler):
                 return self.repondre(400, {"message": "L'entreprise doit garder au moins un administrateur"})
             PROFILS[cible]["admin"] = bool(b.get("valeur"))
             return self.repondre(200, None)
+        if u.path == "/rest/v1/rpc/appareil_code":   # S2 (miroir de supabase/stabilite_s2.sql)
+            b = self.corps()
+            ent, app, code = PROFILS[email]["entreprise"], str(b.get("p_appareil") or ""), b.get("p_code")
+            if not app or len(app) > 64:
+                return self.repondre(400, {"message": "Appareil inconnu"})
+            with verrou:
+                deja = next((c for (e, c), a in APPAREILS.items() if e == ent and a == app), None)
+                if deja:
+                    return self.repondre(200, deja)
+                if isinstance(code, str) and _re.match(r"^[A-Z0-9]{2,4}$", code) and (ent, code) not in APPAREILS:
+                    APPAREILS[(ent, code)] = app
+                    return self.repondre(200, code)
+                import random
+                for i in range(200):
+                    c = "".join(random.choice("ABCDEFGHJKLMNPQRSTUVWXYZ23456789") for _ in range(2 if i < 100 else 3))
+                    if (ent, c) not in APPAREILS:
+                        APPAREILS[(ent, c)] = app
+                        return self.repondre(200, c)
+            return self.repondre(400, {"message": "Aucun code appareil libre"})
         if u.path == "/rest/v1/rpc/relier_membre":   # R3 (miroir de supabase/membres_r3.sql)
             if not est_admin_client(email):
                 return self.repondre(403, {"message": "Réservé à l'administrateur de l'entreprise"})
@@ -874,6 +939,10 @@ class H(BaseHTTPRequestHandler):
                     motif = "un prix se rattache à une entrée de stock"
                 elif t == "valorisations" and ex and r != "responsable":
                     motif = "correction d'un prix : réservée au responsable"
+                elif t != "journal" and s2_controle(t, pa):   # S2 (G, K)
+                    motif = s2_controle(t, pa)
+                elif t != "journal" and s2_lien(t, pa, ent, not ex):
+                    motif = s2_lien(t, pa, ent, not ex)
                 elif t == "ots" and terrain and (pa.get("qualificationValidee") is True or "qualifieePar" in pa or "qualifieeLe" in pa):
                     motif = "validation de la qualification : réservée au responsable"
                 elif t == "ots" and terrain and ex and ex["data"].get("qualificationValidee") is True and any(k in pa for k in ("natureProposee", "prioriteProposee", "qualificationValidee")):

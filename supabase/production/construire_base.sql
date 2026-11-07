@@ -4423,7 +4423,444 @@ select coalesce(json_agg(p.proname), '[]')::text as encore_ouvertes_sans_compte
 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
 where n.nspname = 'public' and p.prorettype <> 'trigger'::regtype and has_function_privilege('anon', p.oid, 'execute');
 
--- ===== 21_demo.sql — copie générée de supabase/demo.sql (empreinte 8e724fa0fbc29b27) : ne pas modifier ici =====
+-- ===== 21_stabilite_s2.sql — copie générée de supabase/stabilite_s2.sql (empreinte f7e65e549314f13d) : ne pas modifier ici =====
+-- GMAO terrain — lot S2 de stabilisation (docs/AUDIT_STABILITE_MODELE.md §4 E, F, G, K). APRÈS magasin_r5.sql,
+-- AVANT push_fiches.sql. Rejouable. FICHIER GÉNÉRÉ par scripts/generer_stabilite_s2.py : ne pas modifier à la main.
+-- E : pf_importer renumérote ses fiches avant de valider (curseur des téléphones sûr pendant un import).
+-- F : code appareil unique dans l'entreprise (références lisibles OT-K3-0007 sans doublon) : appareil_code.
+-- G : contrôle léger du contenu (statuts, natures, priorités, types, quantités, dates) : s2_controle.
+-- K : liens vérifiés à la création (intervention, article, besoin, équipe, société) : s2_lien.
+-- Rapport des fiches anormales pour la console : pf_fiches_anormales.
+
+-- ---------- F : code appareil ----------
+create table if not exists public.pf_appareils (
+  entreprise_id uuid not null references public.entreprises(id) on delete cascade,
+  code text not null, appareil text not null, user_id uuid, cree_le timestamptz not null default now(),
+  primary key (entreprise_id, code));
+alter table public.pf_appareils enable row level security;
+revoke all on public.pf_appareils from public, anon, authenticated;
+
+/** Code de l'appareil, unique dans l'entreprise : le sien s'il est libre (ou déjà à lui), sinon un nouveau.
+    Un code n'est jamais redonné à un autre appareil (même après « Effacer cet appareil »). */
+create or replace function public.appareil_code(p_code text, p_appareil text)
+returns text language plpgsql security definer set search_path = public as $$
+declare ent uuid := public.mon_entreprise(); c text; a text := 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; i integer;
+begin
+  if ent is null then raise exception 'Compte sans entreprise' using errcode = '42501'; end if;
+  if coalesce(p_appareil, '') = '' or length(p_appareil) > 64 then raise exception 'Appareil inconnu'; end if;
+  select code into c from pf_appareils where entreprise_id = ent and appareil = p_appareil order by cree_le limit 1;
+  if c is not null then return c; end if;   -- appareil déjà inscrit : il garde son code
+  perform public.limiter('appareil:' || ent::text, 60, interval '1 hour', 'Trop de nouveaux appareils en une heure : réessayez plus tard');
+  if p_code ~ '^[A-Z0-9]{2,4}$' and not exists (select 1 from pf_appareils where entreprise_id = ent and code = p_code) then
+    insert into pf_appareils (entreprise_id, code, appareil, user_id) values (ent, p_code, p_appareil, auth.uid());
+    return p_code;
+  end if;
+  for i in 1 .. 200 loop
+    c := substr(a, 1 + floor(random() * 32)::int, 1) || substr(a, 1 + floor(random() * 32)::int, 1)
+         || case when i > 100 then substr(a, 1 + floor(random() * 32)::int, 1) else '' end;
+    if not exists (select 1 from pf_appareils where entreprise_id = ent and code = c) then
+      insert into pf_appareils (entreprise_id, code, appareil, user_id) values (ent, c, p_appareil, auth.uid());
+      return c;
+    end if;
+  end loop;
+  raise exception 'Aucun code appareil libre';
+end $$;
+revoke all on function public.appareil_code(text, text) from public, anon;
+grant execute on function public.appareil_code(text, text) to authenticated;
+
+-- ---------- G : contrôle léger du contenu ----------
+/** Motif si une valeur du patch n'est pas reconnue (null = accepté). Seuls les champs présents sont contrôlés ;
+    une valeur vide (null) est toujours acceptée. */
+create or replace function public.s2_controle(t text, p jsonb)
+returns text language plpgsql immutable set search_path = public as $$
+declare k text; v jsonb; permis text[];
+begin
+  for k, v in select key, value from jsonb_each(p) loop
+    continue when v is null or jsonb_typeof(v) = 'null';
+    permis := case
+      when t = 'ots' and k = 'statut' then array['a_preparer','a_planifier','planifiee','prete','en_cours','suspendue','travail_termine','cloturee','annulee']
+      when t = 'ots' and k in ('nature', 'natureProposee') then array['a_qualifier','corrective','preventive','assistance_production','travaux_techniques']
+      when t = 'ots' and k in ('priorite', 'prioriteProposee') then array['urgence_securite','critique_service','rapide','planifiable','a_qualifier']
+      when t = 'ots' and k = 'avecArret' then array['oui','non','inconnu']
+      when t = 'ots' and k = 'arretType' then array['planifie','non_planifie']
+      when t = 'demandes' and k = 'statut' then array['a_examiner','prise_en_charge','traitement_organise','close_sans_travail','annulee']
+      when t = 'besoins' and k = 'statut' then array['demande','reserve','indisponible','annule','partiellement_remis','remis']
+      when t = 'mouvements' and k = 'type' then array['entree','sortie','remise','retour','rebut','ajustement','isolement','liberation','disposition']
+      when t = 'achats' and k = 'statut' then array['brouillon','soumise','a_completer','validee','refusee','transmise','commandee','partiellement_recue','recue','close','annulee']
+      else null end;
+    if permis is not null and (jsonb_typeof(v) <> 'string' or not (v #>> '{}') = any (permis)) then
+      return 'valeur non reconnue pour « ' || k || ' » : ' || left(v::text, 40) || ' (mettez l''appli à jour)';
+    end if;
+    if ((t in ('besoins', 'mouvements') and k in ('qte', 'qteReservee', 'quantite')) or (t = 'releves' and k = 'valeur'))
+       and jsonb_typeof(v) <> 'number' then
+      return 'quantité non numérique pour « ' || k || ' »';
+    end if;
+    if k in ('creeLe','modifieLe','le','demandeLe','depuis','fin','arretDebut','arretFin','arretPrevuDebut','arretPrevuFin','creneau',
+             'echeance','clotureLe','dateCommande','livraisonPrevue','valideLe','soumiseLe','redigeLe','delai','reserveLe','contratFin')
+       and jsonb_typeof(v) = 'string' and v #>> '{}' <> ''
+       and v #>> '{}' !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}([T ][0-9]{2}:[0-9]{2}(:[0-9]{2}([.][0-9]+)?)?(Z|[+-][0-9]{2}:?[0-9]{2})?)?$' then
+      return 'date mal formée pour « ' || k || ' » : ' || left(v #>> '{}', 30);
+    end if;
+  end loop;
+  return null;
+end $$;
+revoke all on function public.s2_controle(text, jsonb) from public, anon, authenticated;
+
+-- ---------- K : liens vérifiés ----------
+/** Motif si un lien du patch pointe vers une fiche absente de l'entreprise (null = accepté). À la création pour les
+    liens de rattachement ; à chaque écriture pour l'équipe et la société d'une intervention. */
+create or replace function public.s2_lien(t text, p jsonb, ent uuid, nouvelle boolean)
+returns text language plpgsql stable security definer set search_path = public as $$
+declare k text; cible text;
+begin
+  for k, cible in select x.champ, x.ct from (values
+      ('besoins', 'otId', 'ots', true), ('besoins', 'articleId', 'articles', true),
+      ('mouvements', 'articleId', 'articles', true), ('mouvements', 'besoinId', 'besoins', true), ('mouvements', 'otId', 'ots', true),
+      ('ots', 'equipeId', 'equipes', false), ('ots', 'societeId', 'fournisseurs', false)) x(ty, champ, ct, creation)
+    where x.ty = t and (nouvelle or not x.creation) and coalesce(p->>x.champ, '') <> ''
+    loop
+    if not exists (select 1 from fiches y where y.id = p->>k and y.type = cible and y.entreprise_id = ent) then
+      return 'lien vers une fiche inconnue de l''entreprise (' || k || ')';
+    end if;
+  end loop;
+  return null;
+end $$;
+revoke all on function public.s2_lien(text, jsonb, uuid, boolean) from public, anon, authenticated;
+
+-- ---------- Rapport des fiches anormales (console) ----------
+/** Par entreprise : fiches dont le contenu n'est pas reconnu, liens cassés, fiches sans date de création. */
+create or replace function public.pf_fiches_anormales()
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+begin
+  perform public.exiger_admin();
+  return coalesce((select jsonb_agg(jsonb_build_object('code', e.code, 'nom', e.nom, 'fiches', r.n, 'contenu', r.contenu, 'liens', r.liens,
+      'sansCreeLe', r.sans_cree, 'exemples', r.exemples) order by e.code)
+    from entreprises e cross join lateral (
+      select count(*) n,
+        count(*) filter (where x.type <> 'journal' and public.s2_controle(x.type, x.data) is not null) contenu,
+        count(*) filter (where public.s2_lien(x.type, x.data, e.id, true) is not null) liens,
+        count(*) filter (where x.type not in ('journal', 'mouvements', 'photos') and coalesce(x.data->>'creeLe', '') = '') sans_cree,
+        (select jsonb_agg(z) from (select jsonb_build_object('id', y.id, 'type', y.type,
+            'motif', coalesce(public.s2_controle(y.type, y.data), public.s2_lien(y.type, y.data, e.id, true))) z
+          from fiches y where y.entreprise_id = e.id and y.type <> 'journal'
+            and (public.s2_controle(y.type, y.data) is not null or public.s2_lien(y.type, y.data, e.id, true) is not null) limit 5) w) exemples
+      from fiches x where x.entreprise_id = e.id) r), '[]'::jsonb);
+end $$;
+revoke all on function public.pf_fiches_anormales() from public, anon;
+grant execute on function public.pf_fiches_anormales() to authenticated;
+
+create or replace function public.pf_importer(p_entreprise uuid, p_lot text, p_fichier text, p_fiches jsonb, p_essai boolean)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  f jsonb; t text; d jsonb; s uuid; motif text; n integer := 0;
+  refus jsonb := '[]'::jsonb; resume jsonb := '{}'::jsonb;
+  admis constant text[] := array['localisations','equipements','compteurs','releves','fournisseurs','articles','mouvements','valorisations','programmes','personnes'];
+  communs constant text[] := array['articles','fournisseurs','personnes'];
+begin
+  perform public.exiger_admin();
+  if not exists (select 1 from entreprises where id = p_entreprise) then raise exception 'Entreprise inconnue'; end if;
+  if coalesce(p_lot, '') !~ '^[A-Za-z0-9-]{6,64}$' then raise exception 'Identifiant de lot invalide'; end if;
+  if exists (select 1 from pf_lots_import where id = p_lot) then raise exception 'Ce lot a déjà été importé'; end if;
+  if jsonb_typeof(p_fiches) is distinct from 'array' or jsonb_array_length(p_fiches) = 0 then raise exception 'Aucune fiche à importer'; end if;
+  if jsonb_array_length(p_fiches) > 20000 then raise exception 'Lot trop volumineux (20 000 fiches maximum) : découpez le kit'; end if;
+  begin
+    for f in select value from jsonb_array_elements(p_fiches) loop
+      t := f->>'type'; motif := null; s := null;
+      d := coalesce(f->'data', '{}'::jsonb) || jsonb_build_object('id', f->>'id', 'lotImport', p_lot);
+      if not (t = any (admis)) then motif := 'type non importable';
+      elsif coalesce(f->>'id', '') = '' then motif := 'identifiant manquant';
+      elsif exists (select 1 from fiches where id = f->>'id') then motif := 'identifiant déjà utilisé';
+      elsif not (t = any (communs)) then
+        s := public.uuid_ou_null(d->>'siteId');
+        if s is null or not exists (select 1 from sites where id = s and entreprise_id = p_entreprise) then motif := 'site absent ou d''une autre entreprise'; end if;
+      end if;
+      if motif is null then
+        motif := case
+          when t = 'equipements' and exists (select 1 from fiches x where x.entreprise_id = p_entreprise and x.type = t and upper(x.data->>'code') = upper(d->>'code')) then 'code équipement déjà utilisé'
+          when t = 'compteurs' and exists (select 1 from fiches x where x.entreprise_id = p_entreprise and x.type = t and upper(x.data->>'code') = upper(d->>'code')) then 'code compteur déjà utilisé'
+          when t = 'localisations' and exists (select 1 from fiches x where x.entreprise_id = p_entreprise and x.type = t and x.site_id = s and upper(x.data->>'code') = upper(d->>'code')) then 'code de lieu déjà utilisé sur ce site'
+          when t = 'articles' and exists (select 1 from fiches x where x.entreprise_id = p_entreprise and x.type = t and upper(x.data->>'ref') = upper(d->>'ref')) then 'référence d''article déjà utilisée'
+          when t = 'fournisseurs' and exists (select 1 from fiches x where x.entreprise_id = p_entreprise and x.type = t and lower(x.data->>'nom') = lower(d->>'nom')) then 'fournisseur déjà présent'
+          when t in ('equipements', 'compteurs', 'localisations') and coalesce(d->>'code', '') = '' then 'code manquant'
+          when t = 'articles' and coalesce(d->>'ref', '') = '' then 'référence manquante'
+        end;
+      end if;
+      if motif is not null then
+        refus := refus || jsonb_build_object('id', f->>'id', 'type', t, 'motif', motif);
+        continue;
+      end if;
+      insert into fiches (id, type, data, auteur, entreprise_id, site_id) values (f->>'id', t, d, auth.uid(), p_entreprise, s);
+      n := n + 1;
+      resume := jsonb_set(resume, array[t], to_jsonb(coalesce((resume->>t)::int, 0) + 1));
+    end loop;
+    -- Références : chaque lien pointe vers une fiche du bon type, dans la même entreprise (lot ou existant).
+    refus := refus || coalesce((select jsonb_agg(jsonb_build_object('id', x.id, 'type', x.type, 'motif', 'référence introuvable (' || r.k || ')'))
+      from fiches x cross join lateral (values ('localisationId', 'localisations'), ('parentId', x.type), ('equipementId', 'equipements'),
+        ('compteurId', 'compteurs'), ('articleId', 'articles'), ('mouvementId', 'mouvements'), ('fournisseurId', 'fournisseurs')) as r(k, cible)
+      where x.entreprise_id = p_entreprise and x.data->>'lotImport' = p_lot and coalesce(x.data->>r.k, '') <> ''
+        and not exists (select 1 from fiches y where y.id = x.data->>r.k and y.entreprise_id = p_entreprise and y.type = r.cible)), '[]'::jsonb);
+    if p_essai or jsonb_array_length(refus) > 0 then raise exception 'pf_essai'; end if;
+  exception when raise_exception then
+    if sqlerrm <> 'pf_essai' then raise; end if;   -- annule les insertions du bloc ; les compteurs restent
+  end;
+  if not p_essai and jsonb_array_length(refus) = 0 then
+    -- S2 (risque E) : une longue transaction prend ses numéros au début ; les téléphones qui lisent pendant l'import
+    -- avancent leur curseur au-delà et ne reçoivent jamais une partie des fiches. Renumérotées à la fin, elles passent
+    -- après tout ce qui a été lu entre-temps (essai du 7 nov. : 101 fiches sur 300 perdues sans ce correctif, 0 avec).
+    update fiches set seq = nextval('public.fiches_seq') where entreprise_id = p_entreprise and data->>'lotImport' = p_lot;
+    insert into pf_lots_import (id, entreprise_id, par, fichier, resume, seq_fin)
+    values (p_lot, p_entreprise, auth.uid(), left(p_fichier, 200), resume,
+            (select max(seq) from fiches where entreprise_id = p_entreprise and data->>'lotImport' = p_lot));
+  end if;
+  return jsonb_build_object('essai', p_essai, 'acceptes', n, 'refus', refus, 'resume', resume,
+    'importe', not p_essai and jsonb_array_length(refus) = 0);
+end $$;
+
+revoke all on function public.pf_importer(uuid, text, text, jsonb, boolean) from public, anon;
+grant execute on function public.pf_importer(uuid, text, text, jsonb, boolean) to authenticated;
+
+-- Contrôle : aucune fonction du schéma public appelable sans compte.
+select coalesce(json_agg(p.proname), '[]')::text as encore_ouvertes_sans_compte
+from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public' and p.prorettype <> 'trigger'::regtype and has_function_privilege('anon', p.oid, 'execute');
+
+-- ===== 22_push_fiches.sql — copie générée de supabase/push_fiches.sql (empreinte 49e2df1c70055b97) : ne pas modifier ici =====
+-- GMAO terrain — push_fiches : réception des envois des appareils (contrôle, fusion, écriture). APRÈS stabilite_s2.sql.
+-- SOURCE UNIQUE depuis le lot S2 (7 nov. 2026) : modifier CE fichier à la main. Les fichiers précédents (schema.sql …
+-- magasin_r5.sql) gardent des versions antérieures de la fonction pour l'historique ; la séquence de construction
+-- les rejoue dans l'ordre et celle-ci, jouée en dernier, est la seule active. Rejouable.
+-- Chaque règle porte le lot qui l'a introduite (R1, R2, R3, S1, R5, S2…). Après une modification : tests SQL
+-- (scripts/sauvegarde/tester_sql.sh), même règle dans tests/serveur_factice.py, tests/coherence_modele_test.py.
+
+create or replace function public.push_fiches(lot jsonb, version text default null)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  f jsonb; p jsonb; t text; cible text; motif text;
+  r text := public.mon_role();
+  ent uuid := public.mon_entreprise();
+  droits jsonb; mes uuid[]; defaut uuid;
+  ex record; s uuid; data_site jsonb; terrain boolean; mod text; u text; gere boolean; soi boolean; lie boolean; listes jsonb;
+  n integer := 0; refus jsonb := '[]'::jsonb; refuses text[] := '{}';
+begin
+  if r is null or ent is null then
+    raise exception 'Compte sans droits (profil absent, désactivé ou sans entreprise)' using errcode = '42501';
+  end if;
+  -- S1 : version minimale de l'appli (appel par l'API seulement ; rien n'est accepté, la file reste sur le téléphone).
+  motif := public.s1_version_refus(version);
+  if motif is not null then raise exception '%', motif using errcode = 'P0001'; end if;
+  terrain := r in ('technicien', 'prestataire');
+  gere := r = 'responsable' or public.est_admin_client();   -- R3 : membres, équipes, sociétés prestataires
+  droits := public.droits_entreprise(ent);
+  mes := array(select public.mes_sites());
+  select site_defaut into defaut from profils where user_id = auth.uid();
+  if defaut is null or not (defaut = any (mes)) then
+    defaut := case when coalesce(array_length(mes, 1), 0) = 1 then mes[1] end;
+  end if;
+
+  for f in select value from jsonb_array_elements(lot) loop
+    t := f->>'type'; p := coalesce(f->'patch', '{}'::jsonb);
+    -- S1 : changements de listes décrits par l'appareil (jamais enregistrés tels quels).
+    listes := p->'$listes'; p := p - '$listes';
+    cible := case when t = 'journal' then p->>'entite' else t end;
+    motif := null; s := null;
+    select id, entreprise_id, site_id, data into ex from fiches where id = f->>'id';
+    -- R2 : nature et priorité écrites par le terrain = proposition (le responsable valide).
+    if t = 'ots' and terrain then p := public.r2_qualif_terrain(p, ex.data, ex.id is null); end if;
+    -- D2 bis : un compteur d'équipement (heures, cycles) relève du préventif, un compteur de ressource de l'énergie.
+    mod := public.module_de(cible);
+    if cible in ('compteurs', 'releves') then
+      u := case
+        when t = 'compteurs' then coalesce(p->>'usage', ex.data->>'usage')
+        when t = 'releves' then (select c.data->>'usage' from fiches c where c.id = coalesce(p->>'compteurId', ex.data->>'compteurId') and c.entreprise_id = ent)
+        else (select case when x.type = 'compteurs' then x.data->>'usage'
+                          else (select c.data->>'usage' from fiches c where c.id = x.data->>'compteurId' and c.entreprise_id = ent) end
+              from fiches x where x.id = p->>'entiteId' and x.entreprise_id = ent)
+      end;
+      if u = 'equipement' then mod := 'preventif'; end if;
+    end if;
+    -- R3 : une société prestataire relève du module de base (pas du magasin).
+    if cible = 'fournisseurs' and (t = 'journal' or coalesce(p->>'prestataire', ex.data->>'prestataire', '') = 'true') then mod := 'base'; end if;
+    -- R3 : sa propre fiche membre (nom, téléphone) ; fiche reliée à un compte (rôle par l'administrateur).
+    soi := cible = 'personnes' and coalesce(case when t = 'journal' then p->>'entiteId' else f->>'id' end, '') = coalesce(public.ma_personne(), '-')
+           and (t = 'journal' or (ex.id is not null and not exists (
+             select 1 from jsonb_object_keys(p) k where k not in ('nom', 'telephone', 'modifieLe', 'modifiePar'))));
+    lie := t = 'personnes' and exists (select 1 from profils x where x.personne_id = f->>'id' and x.entreprise_id = ent);
+    -- Renvoi identique d'un mouvement ou d'un relevé déjà reçu (réponse perdue, envoi complet) : accepté sans rien changer.
+    if t in ('mouvements', 'releves') and ex.id is not null and ex.entreprise_id = ent and ex.data @> p then
+      n := n + 1; continue;
+    end if;
+
+    if t not in ('localisations','equipements','personnes','demandes','ots','programmes','articles','mouvements','journal','photos','besoins','seuils','achats','valorisations','compteurs','releves','factures_energie','parametres','fournisseurs','equipes') then
+      motif := 'type inconnu';
+    elsif droits is null or not coalesce((droits->>'ecriture')::boolean, false) then
+      motif := 'abonnement suspendu ou expiré : lecture seule';
+    elsif ex.id is not null and ex.entreprise_id is distinct from ent then
+      motif := 'fiche d''une autre entreprise';
+    elsif t = 'journal' and (p->>'entiteId') = any (refuses) then
+      motif := 'modification liée refusée';
+    elsif not ((droits->'modules') ? mod) then
+      motif := 'module « ' || mod || ' » non inclus dans l''abonnement';
+    elsif cible in ('personnes', 'equipes') and not gere and not soi then
+      motif := 'membres et équipes : réservés au responsable et à l''administrateur';
+    elsif cible not in ('personnes', 'equipes') and not (cible = 'fournisseurs' and gere) and not public.peut_ecrire(r, cible) then
+      motif := 'droits insuffisants (' || r || ')';
+    elsif t = 'fournisseurs' and not gere and (p->>'prestataire' = 'true' or ex.data->>'prestataire' = 'true') then
+      motif := 'société prestataire : réservée au responsable et à l''administrateur';
+    elsif lie and ex.id is not null and ((p ? 'role' and p->'role' is distinct from ex.data->'role')
+          or (p ? 'actif' and p->'actif' is distinct from ex.data->'actif' and p->'actif' = 'false'::jsonb)) then
+      motif := 'membre avec un accès : rôle et accès se changent par l''administrateur (Membres)';
+    elsif t = 'ots' and terrain and ((p ? 'equipeId' and p->'equipeId' is distinct from coalesce(ex.data->'equipeId', 'null'::jsonb) and coalesce(p->>'equipeId', '') <> '')
+          or (p ? 'societeId' and p->'societeId' is distinct from coalesce(ex.data->'societeId', 'null'::jsonb) and coalesce(p->>'societeId', '') <> '')) then
+      motif := 'intervention confiée à une équipe ou une société : réservé au responsable';
+    -- R1 : un prestataire n'écrit que sur les interventions qui lui sont confiées (et ce qui s'y rattache).
+    elsif r = 'prestataire' and public.prestataire_refus(t, f->>'id', p, ex.id is null) is not null then
+      motif := public.prestataire_refus(t, f->>'id', p, ex.id is null);
+    -- S2 (G, K) : contenu reconnu et liens existants.
+    elsif t <> 'journal' and public.s2_controle(t, p) is not null then
+      motif := public.s2_controle(t, p);
+    elsif t <> 'journal' and public.s2_lien(t, p, ent, ex.id is null) is not null then
+      motif := public.s2_lien(t, p, ent, ex.id is null);
+    elsif t = 'ots' and terrain and (p->'qualificationValidee' = 'true'::jsonb or p ? 'qualifieePar' or p ? 'qualifieeLe') then
+      motif := 'validation de la qualification : réservée au responsable';
+    elsif t = 'ots' and terrain and ex.data->'qualificationValidee' = 'true'::jsonb
+          and (p ? 'natureProposee' or p ? 'prioriteProposee' or p ? 'qualificationValidee') then
+      motif := 'qualification déjà validée par le responsable : demandez-lui de la changer';
+    elsif t = 'ots' and p->>'statut' in ('cloturee', 'travail_termine') and coalesce(ex.data->>'statut', '') <> p->>'statut'
+          and public.r2_arret_incomplet(coalesce(ex.data, '{}'::jsonb) || p) then
+      motif := 'arrêt non planifié : indiquer la remise à disposition ou « heures inconnues »';
+    elsif t = 'ots' and r <> 'responsable' and ex.data->>'statut' = 'cloturee' then
+      motif := 'intervention clôturée : modification réservée au responsable';
+    elsif t = 'ots' and r <> 'responsable' and p->>'statut' = 'cloturee' and public.cloture_par_responsable(ent) then
+      motif := 'clôture réservée au responsable (réglage de l''entreprise) : terminez l''intervention, le responsable la clôture';
+    -- réglages de l'entreprise : une seule fiche, d'identifiant fixe
+    elsif t = 'parametres' and f->>'id' <> ('parametres-' || ent::text) then
+      motif := 'paramètres : identifiant réservé à l''entreprise';
+    -- besoins : la réservation et ses suites appartiennent au magasin
+    elsif t = 'besoins' and terrain and (p ? 'qteReservee' or p ? 'delai' or coalesce(p->>'statut', 'demande') not in ('demande', 'annule')) then
+      motif := 'réservation et disponibilité : réservées au magasin';
+    elsif t = 'besoins' and terrain and ex.id is null and coalesce(p->>'otId', '') = '' then
+      motif := 'un besoin de pièce se rattache à une intervention';
+    -- mouvements : le terrain ne fait que retrait urgent et retour, rattachés à une intervention ou un besoin
+    elsif t = 'mouvements' and ex.id is null and terrain and not (
+            ((p->>'type') = 'remise' and coalesce((p->>'urgent')::boolean, false))
+            or (p->>'type') in ('retour', 'sortie'))
+    then
+      motif := 'mouvement de stock réservé au magasin (terrain : retrait urgent ou retour)';
+    elsif t = 'mouvements' and ex.id is null and terrain and coalesce(p->>'otId', '') = '' and coalesce(p->>'besoinId', '') = '' then
+      motif := 'mouvement de stock hors intervention : réservé au magasin';
+    elsif t = 'mouvements' and ex.id is not null and (terrain or exists (select 1 from jsonb_object_keys(p) k where k not in ('verifieLe', 'verifiePar', 'aVerifier', 'modifieLe', 'modifiePar'))) then
+      motif := 'un mouvement de stock ne se modifie pas (seule sa vérification par le magasin)';
+    -- volet C : seuils proposés par le magasin, validés par le responsable
+    elsif t = 'seuils' and r <> 'responsable' and (coalesce(p->>'statut', 'propose') <> 'propose' or p ? 'valideLe' or p ? 'validePar') then
+      motif := 'validation des seuils : réservée au responsable';
+    elsif t = 'seuils' and r <> 'responsable' and ex.id is not null and ex.data->>'statut' = 'valide' then
+      motif := 'un seuil validé ne se modifie pas : proposez une nouvelle version';
+    elsif t = 'seuils' and ex.id is null and coalesce(p->>'articleId', '') = '' then
+      motif := 'un seuil se rattache à un article';
+    -- volet C : demandes d'achat (V3 §17) ; aucune commande n'est envoyée par l'appli
+    -- R5 : une demande urgente porte son motif ; la commande d'une demande validée (ou urgente, avant validation) est
+    -- renseignée par la personne qui commande (Achats, ou le magasinier si le réglage le désigne).
+    elsif t = 'achats' and coalesce(p->'urgent', ex.data->'urgent') = 'true'::jsonb
+          and coalesce(nullif(trim(coalesce(p->>'motifUrgence', ex.data->>'motifUrgence')), ''), '') = '' then
+      motif := 'achat urgent : indiquer le motif (ex. machine à l''arrêt)';
+    elsif t = 'achats' and ex.id is not null and r in ('achats', 'magasinier') and public.r5_commande_acceptee(r, ex.data, p, ent) then
+      motif := null;
+    elsif t = 'achats' and r = 'achats' and ex.id is null then
+      motif := 'une demande d''achat est rédigée par le magasin ou le responsable';
+    elsif t = 'achats' and r = 'achats' and coalesce(ex.data->>'statut', '') not in ('validee', 'transmise', 'commandee', 'partiellement_recue', 'recue') then
+      motif := 'demande d''achat pas encore validée par le responsable';
+    elsif t = 'achats' and r = 'achats' and p ? 'statut' and p->>'statut' not in ('transmise', 'commandee') then
+      motif := 'les achats renseignent la commande, pas la validation';
+    elsif t = 'achats' and r = 'magasinier' and coalesce(ex.data->>'statut', 'brouillon') in ('brouillon', 'soumise', 'a_completer')
+          and p ? 'statut' and p->>'statut' not in ('brouillon', 'soumise', 'annulee') then
+      motif := 'validation d''une demande d''achat : réservée au responsable';
+    elsif t = 'achats' and r = 'magasinier' and coalesce(ex.data->>'statut', 'brouillon') not in ('brouillon', 'soumise', 'a_completer')
+          and not (p->>'statut' = 'close' and coalesce(ex.data->>'statut', '') in ('commandee', 'partiellement_recue', 'recue')
+                   and not exists (select 1 from jsonb_object_keys(p) k where k not in ('statut', 'closLe', 'closPar', 'motifCloture', 'modifieLe', 'modifiePar'))) then
+      motif := 'demande d''achat validée : modification réservée au responsable et aux achats';
+    -- volet C : prix des entrées ; une correction de prix est une régularisation du responsable
+    elsif t = 'valorisations' and ex.id is null and coalesce(p->>'mouvementId', '') = '' then
+      motif := 'un prix se rattache à une entrée de stock';
+    elsif t = 'valorisations' and ex.id is not null and r <> 'responsable' then
+      motif := 'correction d''un prix : réservée au responsable';
+    -- intégrité : une fiche rattachée à un équipement exige un équipement connu de l'entreprise (lot en cours compris)
+    elsif t in ('demandes', 'ots', 'programmes') and ex.id is null and coalesce(p->>'equipementId', '') <> ''
+          and not exists (select 1 from fiches x where x.id = p->>'equipementId' and x.type = 'equipements' and x.entreprise_id = ent) then
+      motif := 'équipement inconnu de l''entreprise (créé hors connexion ou supprimé ?)';
+    -- volet D : compteurs (référentiel du responsable), relevés jamais modifiés, factures à lecture restreinte
+    elsif t = 'compteurs' and ex.id is not null
+          and ((p ? 'mode' and p->'mode' is distinct from ex.data->'mode') or (p ? 'unite' and p->'unite' is distinct from ex.data->'unite')
+               or (p ? 'coefficient' and p->'coefficient' is distinct from ex.data->'coefficient')
+               or (p ? 'usage' and p->'usage' is distinct from ex.data->'usage'))
+          and exists (select 1 from fiches x where x.type = 'releves' and x.entreprise_id = ent and x.data->>'compteurId' = ex.id) then
+      motif := 'compteur déjà relevé : usage, mode, unité et coefficient ne changent plus (rupture déclarée ou nouveau compteur)';
+    elsif t = 'releves' and ex.id is null and not exists (select 1 from fiches c where c.id = p->>'compteurId' and c.type = 'compteurs' and c.entreprise_id = ent) then
+      motif := 'un relevé se rattache à un compteur connu';
+    elsif t = 'releves' and ex.id is null and r <> 'responsable' and (p ? 'decision' or p ? 'decidePar' or p ? 'decideLe') then
+      motif := 'qualification d''un relevé : réservée au responsable';
+    elsif t = 'releves' and ex.id is null and coalesce(p->>'remplaceId', '') <> '' and not exists (
+            select 1 from fiches x where x.id = p->>'remplaceId' and x.type = 'releves' and x.entreprise_id = ent and x.data->>'compteurId' = p->>'compteurId') then
+      motif := 'une correction remplace un relevé du même compteur';
+    elsif t = 'releves' and ex.id is not null and (r <> 'responsable' or exists (
+            select 1 from jsonb_object_keys(p) k where k not in ('decision', 'motifDecision', 'decideLe', 'decidePar', 'modifieLe', 'modifiePar'))) then
+      motif := 'un relevé ne se modifie pas : saisissez une correction (seule sa qualification par le responsable)';
+    end if;
+
+    if motif is null and t not in ('personnes', 'articles', 'parametres', 'fournisseurs', 'equipes') then
+      s := coalesce(
+        public.uuid_ou_null(p->>'siteId'),
+        ex.site_id,
+        case when t = 'journal' then (select site_id from fiches where id = p->>'entiteId' and entreprise_id = ent) end,
+        case when t = 'photos' then (select site_id from fiches where id = p->>'parentId' and entreprise_id = ent) end,
+        case when t in ('besoins', 'mouvements') then (select site_id from fiches where id = coalesce(p->>'besoinId', p->>'otId') and entreprise_id = ent) end,
+        case when t = 'valorisations' then (select site_id from fiches where id = p->>'mouvementId' and entreprise_id = ent) end,
+        case when t = 'releves' then (select site_id from fiches where id = p->>'compteurId' and entreprise_id = ent) end,
+        defaut);
+      if s is null then motif := 'site non déterminé (choisissez un site)';
+      elsif not (s = any (mes)) then motif := 'site non autorisé';
+      elsif ex.site_id is not null and s <> ex.site_id and r <> 'responsable' then motif := 'changement de site réservé au responsable';
+      end if;
+    end if;
+
+    if motif is not null then
+      refus := refus || jsonb_build_object('id', f->>'id', 'type', t, 'motif', motif);
+      refuses := refuses || (f->>'id');
+      continue;
+    end if;
+
+    -- S1 : une liste modifiée en même temps par deux appareils garde les ajouts des deux (fusion élément par élément).
+    if ex.id is not null and t not in ('journal', 'mouvements', 'photos') then
+      p := public.s1_fusion_listes(ex.data, p, listes);
+    end if;
+    data_site := case when s is null then '{}'::jsonb else jsonb_build_object('siteId', s) end;
+    if t = 'mouvements' and ex.id is not null then
+      update fiches set data = fiches.data || p, seq = nextval('public.fiches_seq'), recu_le = now() where id = ex.id;   -- vérification seule
+    elsif t in ('journal', 'mouvements', 'photos') then
+      insert into fiches (id, type, data, auteur, entreprise_id, site_id)
+      values (f->>'id', t, p || data_site, auth.uid(), ent, s)
+      on conflict (id) do nothing;
+    else
+      insert into fiches (id, type, data, auteur, entreprise_id, site_id)
+      values (f->>'id', t, p || data_site, auth.uid(), ent, s)
+      on conflict (id) do update
+        set data = fiches.data || excluded.data, site_id = excluded.site_id,
+            seq = nextval('public.fiches_seq'), recu_le = now(), auteur = auth.uid();
+    end if;
+    -- R5 : les pièces liées à une demande d'achat reçoivent son résumé sans prix (les techniciens ne lisent pas les achats).
+    if t = 'achats' then perform public.r5_suivi_besoins(f->>'id', ent); end if;
+    -- R3 : le nom d'un membre avec accès est aussi celui de son compte.
+    if t = 'personnes' and lie and coalesce(trim(p->>'nom'), '') <> '' then
+      update profils set nom = trim(p->>'nom') where personne_id = f->>'id' and entreprise_id = ent;
+    end if;
+    n := n + 1;
+  end loop;
+  return jsonb_build_object('acceptes', n, 'refuses', refus);
+end $$;
+
+revoke all on function public.push_fiches(jsonb, text) from public, anon;
+grant execute on function public.push_fiches(jsonb, text) to authenticated;
+
+-- ===== 23_demo.sql — copie générée de supabase/demo.sql (empreinte 8e724fa0fbc29b27) : ne pas modifier ici =====
 -- GMAO terrain — démo commerciale (rejouable). APRÈS achats.sql.
 -- Remplace pf_reinitialiser_demo de plateforme.sql (ne pas rejouer plateforme.sql en entier après achats.sql :
 -- controle_invitation y est dans sa version d'avant le rôle « achats »).
@@ -4523,7 +4960,7 @@ end $$;
 revoke all on function public.pf_reinitialiser_demo(uuid) from public, anon;
 grant execute on function public.pf_reinitialiser_demo(uuid) to authenticated;
 
--- ===== 22_demo_energie.sql — copie générée de supabase/demo_energie.sql (empreinte 7d45dd219704c0d0) : ne pas modifier ici =====
+-- ===== 24_demo_energie.sql — copie générée de supabase/demo_energie.sql (empreinte 7d45dd219704c0d0) : ne pas modifier ici =====
 -- GMAO terrain — démo : énergie et eau (volet D, étape D5). APRÈS fichiers.sql (et demo.sql).
 -- FICHIER GÉNÉRÉ par scripts/generer_demo_energie.py depuis Calculs.demoEnergie (js/calculs.js) : ne pas modifier à la main.
 -- Scénario : arrivée générale + 3 sous-compteurs (résidu ≈ 7 % « à expliquer »), compteur de la ligne remplacé il y a

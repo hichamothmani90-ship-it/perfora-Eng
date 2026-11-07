@@ -9,7 +9,7 @@ Une seule séquence, dans l'ordre, générée depuis les scripts de `supabase/` 
 
 | Fichier | Rôle |
 |---|---|
-| `supabase/production/01_schema.sql` … `22_demo_energie.sql` | copies numérotées (lecture, vérification ; les anciennes copies sont retirées à chaque assemblage) |
+| `supabase/production/01_schema.sql` … `24_demo_energie.sql` | copies numérotées (lecture, vérification ; les anciennes copies sont retirées à chaque assemblage) |
 | `supabase/production/99_controles.sql` | contrôles de fin : 0 fonction ouverte sans compte, RLS partout, espace « fichiers » créé |
 | `supabase/production/construire_base.sql` | **tout en un seul fichier** : à exécuter une fois dans le SQL Editor du projet neuf |
 | `supabase/production/MANIFESTE.txt` | ordre et empreinte de chaque script source |

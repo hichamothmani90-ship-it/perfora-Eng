@@ -5,7 +5,7 @@
 (() => {
   const { data } = Store;
   /** Version affichée dans Réglages : à incrémenter avec VERSION dans sw.js. */
-  const APP_VERSION = 'v40';
+  const APP_VERSION = 'v41';
   if (window.Erreurs) Erreurs.version = APP_VERSION;
   const $ = s => document.querySelector(s);
   // Multi-site : les listes de fiches de site ne montrent que le site actif (« tous » possible).
@@ -941,7 +941,7 @@
        <div class="actions"><a class="btn primary" href="console/">Ouvrir le centre de contrôle</a></div>`
     : Sync.profil()?.adminPlateforme
     ? `<h1>Console plateforme</h1><p class="small muted">Réservée à l’administrateur plateforme. Chaque action est vérifiée par le serveur.</p>
-       <div class="actions"><a class="btn primary" href="console/">Centre de contrôle (ordinateur)</a><button class="btn" type="button" id="pf-creer">+ Nouvelle entreprise</button><button class="btn" type="button" id="pf-actualiser">Actualiser</button></div>
+       <div class="actions"><a class="btn primary" href="console/">Centre de contrôle (ordinateur)</a><button class="btn" type="button" id="pf-creer">+ Nouvelle entreprise</button><button class="btn" type="button" id="pf-actualiser">Actualiser</button><button class="btn" type="button" id="pf-controle">Contrôle des données</button></div>
        <div id="pf-liste"><p class="muted">Chargement…</p></div>`
     : empty('Réservé à l’administrateur plateforme.');
 
@@ -1037,6 +1037,15 @@
     if (!box) return;
     const recharger = () => AFTER.plateforme();
     $('#pf-actualiser').onclick = recharger;
+    // S2 (G, K) : fiches dont le contenu n'est pas reconnu, liens cassés, fiches sans date de création, par entreprise.
+    $('#pf-controle').onclick = async () => {
+      try {
+        const l = await Sync.pf.anormales();
+        const lignes = (l || []).flatMap(e => [`${e.code} · ${e.fiches} fiches : ${e.contenu} contenu non reconnu, ${e.liens} lien(s) cassé(s), ${e.sansCreeLe} sans date de création`,
+          ...(e.exemples || []).map(x => `   – ${x.type} ${x.id} : ${x.motif}`)]);
+        await alertBox('Contrôle des données', lignes.length ? lignes : ['Aucune entreprise.']);
+      } catch (e) { await alertBox('Contrôle impossible', [e.message]); }
+    };
     $('#pf-creer').onclick = async () => {
       const v = await askForm({ title: 'Nouvelle entreprise cliente', ok: 'Créer', values: { pack: 'essentiel', statut: 'essai', siteCode: 'S1' }, fields: [
         { name: 'nom', label: 'Nom de l’entreprise', type: 'text', required: true },

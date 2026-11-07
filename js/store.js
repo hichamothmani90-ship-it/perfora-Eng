@@ -57,7 +57,7 @@ const Store = (() => {
       data[t] = new Map(all.map(o => [o.id, o]));
     }
     if (!data.meta.get('device')) {
-      await persistMeta({ id: 'device', code: randomCode(), personneId: null });
+      await persistMeta({ id: 'device', code: randomCode(), appareilId: uid() + uid(), personneId: null });
     }
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
     await appliquerInconnus();
@@ -265,7 +265,7 @@ const Store = (() => {
       await new Promise((res, rej) => { const tx = db.transaction(t, 'readwrite'); tx.objectStore(t).clear(); tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
       data[t] = new Map();
     }
-    await persistMeta({ id: 'device', code: randomCode(), personneId: null });
+    await persistMeta({ id: 'device', code: randomCode(), appareilId: uid() + uid(), personneId: null });
   }
 
   return { open, data, save, update, uid, now, nextRef, device, persistMeta, currentUser, currentUserName, exportAll, importAll, wipe, blobLire, blobEcrire,
