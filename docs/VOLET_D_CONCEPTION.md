@@ -139,3 +139,27 @@ incohérent, non comparable), `totauxParUnite`, `relevesDus`, `bilanCombustible`
 - Après connexion, retour à la page demandée (QR scanné avant de se connecter).
 Vérifié : 87 tests ; navigateur avec le serveur factice (responsable + technicien, hors ligne, photo, remplacement,
 relevé invalidé, clôture avec index) ; aucun refus du serveur.
+
+## 10. Fait en D4 (7 nov. 2026, v33)
+
+- `js/vues/energie.js` : **Énergie et eau** (menu Plus ; responsable, pilote, achats), trois onglets et navigation par mois
+  (le mois en cours s'arrête à aujourd'hui) :
+  - **Consommations** : totaux par ressource et unité sur les **compteurs principaux seulement**, chaque compteur avec sa
+    couverture (« 28 j sur 31 »), estimé, relevés à examiner ; sous-compteurs en retrait, jamais ajoutés ; valeurs
+    instantanées (dernière, min, max) jamais additionnées ; **sous-comptages** : résidu principal − Σ sous-compteurs
+    (faible, à expliquer, incohérent, non comparable avec la raison) ;
+  - **À examiner** : relevés à examiner de tous les compteurs (Confirmer / Invalider, ou lien pour corriger),
+    écarts facture / mesure, résidus à expliquer du mois, relevés en retard ;
+  - **Factures** (lecture restreinte) : liste avec rapprochement, total HT de l'année par devise (sans montant = compté à part).
+- **Facture d'énergie** : saisie sur une page (ressource, fournisseur, n°, période du / au, quantité, unité, montant HT,
+  TTC, devise, compteurs concernés, note) avec le **PDF ou la photo joint dans le même geste** (espace « couts ») ;
+  fiche facture : rapprochement par compteur (bornes mesurées, raison si incomplet), fichiers, modifier. Contrôles :
+  fin après début, montant non négatif, compteur d'une autre unité refusé (aucune conversion). Site = celui du 1er compteur.
+- **Créer une demande** depuis un écart ou un résidu : ouvre « Signaler » prérempli (constat chiffré, besoin « vérifier »,
+  équipement du compteur s'il existe) ; la demande garde le lien vers le compteur.
+- Accueil du responsable : tuile « Énergie : à examiner » (relevés à examiner + factures en écart).
+- Calculs : `bornesMois`, `moisDecale`, `tableauEnergie` (testés). Serveur inchangé (règles D2 déjà en place).
+Vérifié : 89 tests ; navigateur avec le serveur factice (responsable : scénario principal + sous-compteur + eau avec relevé
+inhabituel, facture du 1er au 29 oct. avec écart +3 % et PDF, facture du 15 au 15 « incomplète », demande créée depuis
+un résidu ; technicien : ni page, ni factures, ni PDF reçus) ; envoi au serveur sans refus ; affichage téléphone.
+Reste pour plus tard : bilan des cuves à l'écran (calcul prêt).

@@ -28,9 +28,9 @@ multi-entreprise) et concepteur d'interfaces terrain mobile-first. Langue : fran
      (décision du 6 nov. 2026 : traçabilité légère, pas de chronomètre).
    Si tu as besoin d'un passage précis, demande à lire le fichier.
 
-3. ÉTAT (7 nov. 2026, appli **v32** sur app.perfora.ma) — **lire d'abord docs/PLANNING_ACTUALISE.md** (§0 « où on en est »,
-   §0 bis « chemin vers le pilote », §8 décisions). Prochaine étape : **D4 écran Énergie** (docs/VOLET_D_CONCEPTION.md §1-8,
-   D3 fait §9). Autres repères : docs/TESTS_HORS_LIGNE.md, docs/CENTRE_CONTROLE_CONCEPTION.md, docs/MISE_EN_SERVICE_CLIENT.md,
+3. ÉTAT (7 nov. 2026, appli **v33** sur app.perfora.ma) — **lire d'abord docs/PLANNING_ACTUALISE.md** (§0 « où on en est »,
+   §0 bis « chemin vers le pilote », §8 décisions). Prochaine étape : **D5 démo énergie** (docs/VOLET_D_CONCEPTION.md ; D3 fait §9,
+   D4 fait §10). Autres repères : docs/TESTS_HORS_LIGNE.md, docs/CENTRE_CONTROLE_CONCEPTION.md, docs/MISE_EN_SERVICE_CLIENT.md,
    docs/CLASSIFICATION_PARC.md, docs/DISCUSSION_MODELE_DONNEES.md.
    - Décisions récentes : offre Supabase gratuite au départ (2 projets : recette actuelle + production créée avant le
      pilote, sauvegarde maison) ; pas d'inscription libre (essais ouverts par l'administrateur) ; MFA administrateur
@@ -60,7 +60,7 @@ multi-entreprise) et concepteur d'interfaces terrain mobile-first. Langue : fran
      othmanihicham99@gmail.com responsable + administrateur plateforme ; hothmani36@outlook.fr magasinier)
      et VITRINE « Vitrine Perfora » (démo réinitialisable, **pack Entreprise** depuis le 6 nov. 2026 pour montrer les achats,
      réinitialisée avec la démo du volet C ; hicham.othmani90@gmail.com responsable). DEMO reste en pack Pro.
-   - Tests : node --test tests/*.test.js (87) ; supabase/tests_*.sql (à rejouer dans le SQL Editor).
+   - Tests : node --test tests/*.test.js (89) ; supabase/tests_*.sql (à rejouer dans le SQL Editor).
      Faux serveur : python tests/serveur_factice.py 8094 (comptes test@ responsable, tech2@ technicien,
      mag@ magasinier, achat@ achats, autre@ autre entreprise ; mot de passe test-gmao ; pack de DEMO modifiable par
      POST /test/abonnement) ; appli : python serveur.py 8081 ;
@@ -84,8 +84,8 @@ multi-entreprise) et concepteur d'interfaces terrain mobile-first. Langue : fran
    - Commits en français, terminés par la ligne Co-Authored-By habituelle.
 
 5. VOLET À TRAITER MAINTENANT :
-   D4 — écran Énergie (consommations avec couverture, relevés à examiner, factures d'énergie avec PDF et montants en
-   lecture restreinte, rapprochement facturé / mesuré, sous-comptages, « créer une demande » depuis un écart).
+   D5 — démo énergie (compteurs, relevés dont un suspect et un remplacement, sous-compteur, facture du 15 au 15 avec PDF)
+   dans VITRINE et Perfora Démo, guide, tests hors ligne des relevés.
    Commence par me proposer le modèle de données, les règles serveur et le découpage en étapes,
    en citant les sections V3 concernées, puis attends ma validation.
 ```

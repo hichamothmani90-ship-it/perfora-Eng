@@ -186,3 +186,29 @@ test('préventif selon l’usage : pas de date estimée sur moins de 7 jours de 
   const x = C.echeanceCompteur({ ...PROG, dernierIndex: 12320, derniereRealisation: '2026-11-01T08:10' }, HRS, r, '2026-11-01');
   assert.deepEqual([x.statut, x.reste, x.rythme, x.dateEstimee], ['ok', 500, null, null]);
 });
+
+test('D4 : bornes de mois et mois décalé', () => {
+  assert.deepEqual(C.bornesMois('2026-02'), { du: '2026-02-01', au: '2026-02-28' });
+  assert.deepEqual(C.bornesMois('2028-02'), { du: '2028-02-01', au: '2028-02-29' });
+  assert.equal(C.moisDecale('2026-01', -1), '2025-12');
+  assert.equal(C.moisDecale('2026-11', 2), '2027-01');
+});
+
+test('D4 : tableau Énergie — totaux sur les principaux seulement, résidu des sous-comptages, équipements exclus', () => {
+  const P = { id: 'p', ressource: 'electricite', unite: 'kWh', mode: 'cumulatif', coefficient: 1 };
+  const S1 = { id: 's1', ressource: 'electricite', unite: 'kWh', mode: 'cumulatif', coefficient: 1, parentId: 'p' };
+  const EAU = { id: 'w', ressource: 'eau', unite: 'm³', mode: 'cumulatif', coefficient: 1 };
+  const T = { id: 't', ressource: 'autre', unite: '°C', mode: 'instantane' };
+  const H = { id: 'h', usage: 'equipement', unite: 'h', mode: 'cumulatif' };
+  const r = [rel('p', '2026-11-01T00:00', 1000), rel('p', '2026-12-01T00:00', 2000),
+    rel('s1', '2026-11-01T00:00', 0), rel('s1', '2026-12-01T00:00', 700),
+    rel('w', '2026-11-01T00:00', 50), rel('w', '2026-11-20T00:00', 80),
+    rel('t', '2026-11-10T00:00', 4), rel('t', '2026-11-11T00:00', 6), rel('h', '2026-11-01T00:00', 10), rel('h', '2026-11-30T00:00', 90)];
+  const x = C.tableauEnergie([S1, P, EAU, T, H], r, '2026-11-01', '2026-11-30');
+  assert.deepEqual(x.lignes.map(l => [l.compteur.id, l.niveau]), [['p', 0], ['s1', 1], ['w', 0], ['t', 0]], 'sous-compteur sous son principal, heures exclues');
+  assert.deepEqual(x.totaux, [{ ressource: 'electricite', unite: 'kWh', quantite: 1000, nonMesures: 0 }, { ressource: 'eau', unite: 'm³', quantite: 30, nonMesures: 0 }],
+    'les 700 kWh du sous-compteur ne sont pas ajoutés ; la température n’est jamais additionnée');
+  assert.equal(x.lignes.find(l => l.compteur.id === 'w').conso.couvertureJours, 19, 'couverture affichée : 19 jours sur 30');
+  assert.equal(x.sousComptages.length, 1);
+  assert.deepEqual([x.sousComptages[0].compteur.id, x.sousComptages[0].principal.quantite, x.sousComptages[0].statut, x.sousComptages[0].residu], ['p', 1000, 'a_expliquer', 300]);
+});

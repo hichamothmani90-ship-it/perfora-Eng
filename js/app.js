@@ -5,7 +5,7 @@
 (() => {
   const { data } = Store;
   /** Version affichée dans Réglages : à incrémenter avec VERSION dans sw.js. */
-  const APP_VERSION = 'v32';
+  const APP_VERSION = 'v33';
   const $ = s => document.querySelector(s);
   // Multi-site : les listes de fiches de site ne montrent que le site actif (« tous » possible).
   // Les fiches sans site (anciennes ou pas encore synchronisées) restent visibles.
@@ -41,6 +41,7 @@
       : t === 'valorisations' ? g('mouvements', o.mouvementId)
       : t === 'releves' ? g('compteurs', o.compteurId)
       : t === 'compteurs' ? g('equipements', o.equipementId)
+      : t === 'factures_energie' ? g('compteurs', (o.compteurIds || [])[0])
       : null;
     return parent || siteCreation();
   });
@@ -252,6 +253,8 @@
     if (act === 'ot-cloturer' && clotureParResp()) return false;
     // Relevés et remplacements de compteur : terrain, exploitation et responsable (miroir de energie.sql).
     if (act === 'releve-saisir' || act === 'cpt-rupture') return !r || (ecritureOK() && ['technicien', 'prestataire', 'exploitation', 'responsable'].includes(r));
+    // Factures d'énergie : responsable et achats (miroir de energie.sql).
+    if (act === 'fact-saisir') return aModule('energie') && (!r || (ecritureOK() && ['responsable', 'achats'].includes(r)));
     if (ACT_MODULE[act] && !aModule(ACT_MODULE[act])) return false;
     if (r && !ecritureOK() && Object.values(DROITS).some(l => l.includes(act))) return false;
     if (!r || r === 'responsable') return true;
@@ -371,6 +374,7 @@
     const aValider = estResp() ? otsO.filter(o => o.statut === 'travail_termine') : [];
     const prev = preventifsSansOT(7);
     const rel = App.compteurs && autorise('releve-saisir') ? App.compteurs.dus() : [];
+    const nrj = App.energie ? App.energie.aExaminer() : 0;
     return `<h1>Aujourd’hui <span class="muted small" style="font-weight:400">${fmtY(today())}</span></h1>
       ${!me ? `<p class="warn">Indiquez qui utilise cet appareil pour signer vos saisies. <a href="#" data-act="who">Choisir</a></p>` : ''}
       ${rappelSauvegarde()}
@@ -380,6 +384,7 @@
         <a class="tile blue" href="#/ots"><b>${otsO.length}</b><span>Travaux ouverts</span></a>
         <a class="tile" href="#/preventif"><b>${prev.length}</b><span>Préventifs à lancer (7 j)</span></a>
         ${rel.length ? `<a class="tile ${rel.some(x => x.retardJours > 0) ? 'amber' : ''}" href="#/compteurs"><b>${rel.length}</b><span>Relevés à faire</span></a>` : ''}
+        ${nrj ? `<a class="tile amber" href="#/energie?o=examiner"><b>${nrj}</b><span>Énergie : à examiner</span></a>` : ''}
       </div>
       ${rel.length ? `<h2>Relevés à faire aujourd’hui</h2>${rel.slice(0, 5).map(App.carteReleveDu).join('')}${rel.length > 5 ? `<a class="btn ghost" href="#/compteurs">Tous les relevés à faire (${rel.length})</a>` : ''}` : ''}
       ${indispo.length ? `<h2>Indisponibles</h2>${indispo.map(eqCard).join('')}` : ''}
@@ -495,6 +500,7 @@
         <dt>Besoin</dt><dd>${esc(L.besoin[d.besoin])}</dd>
         <dt>Impact</dt><dd>${esc(L.impact[d.impact] || '—')}</dd>
         <dt>Heure du fait</dt><dd>${d.heureFait ? fmtY(d.heureFait) + ` <span class="muted">(${esc((L.precision[d.precisionHeure] || '').toLowerCase())})</span>` : '<span class="muted">inconnue</span>'}</dd>
+        ${d.compteurId && data.compteurs.get(d.compteurId) ? `<dt>Compteur</dt><dd><a href="#/compteur/${d.compteurId}">${esc(data.compteurs.get(d.compteurId).libelle || data.compteurs.get(d.compteurId).code)}</a></dd>` : ''}
         <dt>Origine</dt><dd>${esc(L.origine[d.origine])}${d.tiers?.nom ? ' — ' + esc(d.tiers.nom) + (d.tiers.service ? ' (' + esc(d.tiers.service) + ')' : '') : ''}</dd>
         <dt>Créée</dt><dd>${fmtY(d.creeLe)} par ${esc(d.creePar)}</dd>
         ${d.priseEnChargePar ? `<dt>Prise en charge</dt><dd>${fmtY(d.priseEnChargeLe)} par ${esc(persNom(d.priseEnChargePar))}</dd>` : ''}
@@ -766,10 +772,10 @@
        <div id="pf-liste"><p class="muted">Chargement…</p></div>`
     : empty('Réservé à l’administrateur plateforme.');
 
-  V.plus = () => `<h1>Plus</h1>${[['#/preventif', '↻ Préventif', 'Programmes et échéances'], ['#/compteurs', '⏱ Compteurs', 'Relevés, énergie et eau, heures de marche'], ['#/qr', '▣ QR codes', 'Planche imprimable des équipements'], ['#/magasin', '▤ Magasin', 'Articles, stock, mouvements'], ['#/achats', '₪ Achats', 'Demandes d’achat, commandes, réceptions'], ['#/valeur', '∑ Valeur du stock', 'Coût moyen pondéré par article et site'], ['#/indicateurs', '▥ Indicateurs', 'Pilotage par équipement'], ['#/journal', '☰ Journal d’audit', 'Toutes les modifications'], ['#/reglages', '⚙ Réglages', 'Utilisateur, personnes, sauvegarde']]
+  V.plus = () => `<h1>Plus</h1>${[['#/preventif', '↻ Préventif', 'Programmes et échéances'], ['#/compteurs', '⏱ Compteurs', 'Relevés, énergie et eau, heures de marche'], ['#/energie', '⚡ Énergie et eau', 'Consommations, à examiner, factures'], ['#/qr', '▣ QR codes', 'Planche imprimable des équipements'], ['#/magasin', '▤ Magasin', 'Articles, stock, mouvements'], ['#/achats', '₪ Achats', 'Demandes d’achat, commandes, réceptions'], ['#/valeur', '∑ Valeur du stock', 'Coût moyen pondéré par article et site'], ['#/indicateurs', '▥ Indicateurs', 'Pilotage par équipement'], ['#/journal', '☰ Journal d’audit', 'Toutes les modifications'], ['#/reglages', '⚙ Réglages', 'Utilisateur, personnes, sauvegarde']]
     .concat(Sync.profil()?.adminPlateforme ? [['#/plateforme', '◆ Console plateforme', 'Clients, abonnements, démo commerciale']] : [])
     .filter(([h]) => !(h === '#/compteurs' && !aModule('energie') && !aModule('preventif')))
-    .filter(([h]) => !(h === '#/magasin' && !aModule('magasin')) && !(h === '#/preventif' && !aModule('preventif')) && !(['#/achats', '#/valeur'].includes(h) && !(aModule('achats') && App.voitCouts?.())))
+    .filter(([h]) => !(h === '#/energie' && !App.energie?.voitEnergie()) && !(h === '#/magasin' && !aModule('magasin')) && !(h === '#/preventif' && !aModule('preventif')) && !(['#/achats', '#/valeur'].includes(h) && !(aModule('achats') && App.voitCouts?.())))
     .map(([h, t, s]) => `<a class="card" href="${h}"><div class="t">${t}</div><div class="s">${s}</div></a>`).join('')}`;
 
   V.reglages = () => {
@@ -842,8 +848,8 @@
       <div id="eqpick"></div>
       <div id="dupl"></div>
       <label class="f">État constaté</label>${chipGroup('etat', L.etat, null, { colored: true, required: true })}
-      <label class="f">Besoin</label>${chipGroup('besoin', L.besoin, null, { required: true })}
-      <label class="f" for="constat">Constat</label><textarea id="constat" name="constat" required placeholder="Ce que vous avez observé (bruit, fuite, défaut…)"></textarea>
+      <label class="f">Besoin</label>${chipGroup('besoin', L.besoin, r.q.get('constat') ? 'verifier' : null, { required: true })}
+      <label class="f" for="constat">Constat</label><textarea id="constat" name="constat" required placeholder="Ce que vous avez observé (bruit, fuite, défaut…)">${esc(r.q.get('constat') || '')}</textarea>
       <label class="f">Impact sur l’exploitation</label>${chipGroup('impact', L.impact, 'a_confirmer')}
       <label class="f">Photos <span class="opt">(facultatif)</span></label>
       <input type="file" id="photoIn" accept="image/*" class="hidden">
@@ -1068,6 +1074,7 @@
         precisionHeure: v.quand === 'maintenant' ? 'exacte' : v.quand === 'autre' ? v.precisionHeure : 'inconnue',
         tiers: v.origine === 'tiers' && (v.tiersNom || v.tiersService) ? { nom: v.tiersNom || null, service: v.tiersService || null } : null,
         statut: 'a_examiner', priseEnChargePar: null, priseEnChargeLe: null, motifClassement: null,
+        ...(r.q.get('cpt') && data.compteurs.get(r.q.get('cpt')) ? { compteurId: r.q.get('cpt') } : {}),
       };
       if (v.jInterviens && me) Object.assign(d, { statut: 'prise_en_charge', priseEnChargePar: me.id, priseEnChargeLe: now });
       await Store.save('demandes', d);
@@ -1810,8 +1817,8 @@
     const [name, id] = path.split('/');
     return { name, id: id ? decodeURIComponent(id) : null, q: new URLSearchParams(qs || '') };
   }
-  const TAB_OF = { demande: 'demandes', ot: 'ots', eq: 'parc', article: 'magasin', reappro: 'magasin', achat: 'plus', achats: 'plus', valeur: 'plus', signaler: '', qr: 'parc', plateforme: 'plus', miseenservice: 'plus', compteurs: 'plus', compteur: 'plus', releve: 'plus' };
-  const MOBILE_PLUS = ['preventif', 'magasin', 'article', 'reappro', 'achat', 'achats', 'valeur', 'indicateurs', 'journal', 'reglages', 'plus', 'plateforme', 'miseenservice', 'compteurs', 'compteur', 'releve'];
+  const TAB_OF = { demande: 'demandes', ot: 'ots', eq: 'parc', article: 'magasin', reappro: 'magasin', achat: 'plus', achats: 'plus', valeur: 'plus', signaler: '', qr: 'parc', plateforme: 'plus', miseenservice: 'plus', compteurs: 'plus', compteur: 'plus', releve: 'plus', energie: 'plus', facture: 'plus', 'facture-saisie': 'plus' };
+  const MOBILE_PLUS = ['preventif', 'magasin', 'article', 'reappro', 'achat', 'achats', 'valeur', 'indicateurs', 'journal', 'reglages', 'plus', 'plateforme', 'miseenservice', 'compteurs', 'compteur', 'releve', 'energie', 'facture', 'facture-saisie'];
   function render() {
     cacheEtat = null;
     R = parseHash();
@@ -1933,7 +1940,7 @@
 
   // Aides communes pour les écrans par domaine (js/vues/*.js, scripts classiques chargés après app.js).
   window.App = { V, A, L, esc, badge, empty, seg, search, askForm, askConfirm, askText, alertBox, toast, edit, list, render, fmt, fmtY, today, refDe,
-    role, autorise, aModule, siteActif, nomSite, mesSites, desigBesoin, CLS_BESOIN, leverAttentesPieces, exportCsv, AFTER, adressePublique, eq, locPath, ajouterFichier, progCard };
+    role, autorise, aModule, siteActif, nomSite, mesSites, desigBesoin, CLS_BESOIN, leverAttentesPieces, exportCsv, AFTER, adressePublique, eq, locPath, ajouterFichier, progCard, fieldHtml };
 
   let annonces = [];
   const chargerAnnonces = () => { if (Sync.profil()) Sync.mesAnnonces().then(a => { annonces = Array.isArray(a) ? a : []; if (annonces.length && !enSaisie()) render(); }).catch(() => {}); };

@@ -594,7 +594,43 @@
       dernier, rythme: rythme == null ? null : arrondi(rythme), dateEstimee };
   }
 
-  const Calculs = { controleReleve, echeanceCompteur, UNITES, UNITES_RESSOURCE, ANOMALIES_CONFIRMABLES, analyserReleves, consommationPeriode, rapprochementFacture, residuSousComptage, totauxParUnite, relevesDus, bilanCombustible, totalFactures,
+  /** Bornes d'un mois « AAAA-MM » (dates incluses) et mois décalé de n. */
+  function bornesMois(ym) {
+    const [y, m] = ym.split('-').map(Number);
+    const fin = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    return { du: `${ym}-01`, au: `${ym}-${String(fin).padStart(2, '0')}` };
+  }
+  function moisDecale(ym, n) {
+    const [y, m] = ym.split('-').map(Number), t = y * 12 + (m - 1) + n;
+    return `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, '0')}`;
+  }
+
+  /** Tableau Énergie d'une période : consommation de chaque compteur (avec couverture), totaux par ressource et unité
+   *  sur les compteurs principaux seulement (un sous-compteur n'est jamais ajouté à son principal), résidus des
+   *  sous-comptages. Les compteurs d'équipement (heures, cycles) n'y figurent pas. */
+  function tableauEnergie(compteurs, releves, du, au, { maintenant = null } = {}) {
+    const liste = compteurs.filter(c => c.usage !== 'equipement' && c.actif !== false);
+    const ids = new Set(liste.map(c => c.id));
+    const parent = c => (c.parentId && ids.has(c.parentId) && c.parentId !== c.id ? c.parentId : null);
+    const enfants = id => liste.filter(c => parent(c) === id);
+    const parCompteur = new Map(liste.map(c => [c.id, consommationPeriode(c, releves, du, au, { maintenant })]));
+    // Ordre d'affichage : chaque principal suivi de ses sous-compteurs (en profondeur).
+    const lignes = [], vus = new Set();
+    const ajouter = (c, niveau) => {
+      if (vus.has(c.id)) return;
+      vus.add(c.id);
+      lignes.push({ compteur: c, conso: parCompteur.get(c.id), niveau, parentId: parent(c) });
+      enfants(c.id).forEach(x => ajouter(x, niveau + 1));
+    };
+    liste.filter(c => !parent(c)).forEach(c => ajouter(c, 0));
+    liste.forEach(c => ajouter(c, 0)); // boucle de parenté éventuelle : affichée quand même
+    const totaux = totauxParUnite(lignes.filter(l => l.niveau === 0 && l.conso.mode !== 'instantane')
+      .map(l => ({ ressource: l.compteur.ressource || 'autre', unite: l.compteur.unite, quantite: l.conso.quantite })));
+    const sousComptages = liste.filter(c => enfants(c.id).length).map(c => ({ ...residuSousComptage(c, enfants(c.id), releves, du, au, { maintenant }), compteur: c }));
+    return { lignes, totaux, sousComptages, suspects: lignes.reduce((t, l) => t + (l.conso.suspects || 0), 0) };
+  }
+
+  const Calculs = { bornesMois, moisDecale, tableauEnergie, controleReleve, echeanceCompteur, UNITES, UNITES_RESSOURCE, ANOMALIES_CONFIRMABLES, analyserReleves, consommationPeriode, rapprochementFacture, residuSousComptage, totauxParUnite, relevesDus, bilanCombustible, totalFactures,
     montantCommande, isolementsEnAttente, consommationHebdo, seuilIndicatif, seuilActif, besoinsNonCouverts, receptionLigne, etatAchat, qteEnCommande, qteIsolee, situationArticle, aReapprovisionner, prixMAD, valorisation, coutConsomme, besoinsAServir, attentesALever, piecesDetenues, stockPhysique, qteReservee, stockDisponible, etatBesoin, rapprochementBesoin, retraitsAVerifier, qteRemise, addDays, daysBetween, minutesBetween, dureeUnion, mediane, NATURE_DU_BESOIN, ETAT_RANK, otOuvert, demandeOuverte, indexOtsParDemande, etatEquipement, verifierCloture, echeanceSuivante, indicateurs };
   if (typeof module === 'object' && module.exports) module.exports = Calculs; else root.Calculs = Calculs;
 })(this);

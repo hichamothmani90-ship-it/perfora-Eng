@@ -29,7 +29,7 @@
   const quoi = c => (c.usage === 'equipement' ? (eq(c.equipementId)?.designation || 'équipement') : (RESSOURCE[c.ressource] || 'ressource'));
 
   // Utilisés par l'accueil, la fiche équipement, le préventif et la planche de QR (app.js).
-  App.compteurs = { visibles, dus, lienReleve, nomCompteur, quoi, dernierRetenu, relevesDe, parCode };
+  App.compteurs = { RESSOURCE, ANOM, visibles, dus, lienReleve, nomCompteur, quoi, dernierRetenu, relevesDe, parCode };
 
   function carteDu(x) {
     const c = x.compteur, der = dernierRetenu(c);
