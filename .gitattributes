@@ -1,0 +1,4 @@
+# Fins de ligne Linux : scripts lancés sous Linux (GitHub Actions, WSL) et séquence SQL vérifiée octet par octet.
+*.sh text eol=lf
+supabase/production/** text eol=lf
+scripts/sauvegarde/** text eol=lf
