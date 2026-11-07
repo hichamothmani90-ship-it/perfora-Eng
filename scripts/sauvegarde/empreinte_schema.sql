@@ -1,8 +1,10 @@
 -- Empreinte du schéma Perfora (fonctions, règles d'accès, déclencheurs, colonnes, droits d'exécution).
 -- À lancer sur deux bases (projet Supabase / base reconstruite) : les deux résultats doivent être identiques.
+-- Fonctions comparées sans les commentaires ni les espaces (un commentaire ajouté après coup n'est pas un écart).
 select '##' || json_build_object(
   'fonctions', (select json_object_agg(k, v order by k) from (
-      select p.oid::regprocedure::text as k, md5(pg_get_functiondef(p.oid)) as v
+      select p.oid::regprocedure::text as k, md5(btrim(regexp_replace(regexp_replace(pg_get_functiondef(p.oid), '--[^
+]*', '', 'g'), '\s+', ' ', 'g'))) as v
       from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public') x),
   'appelables_sans_compte', (select coalesce(json_agg(p.oid::regprocedure::text order by 1), '[]') from pg_proc p join pg_namespace n on n.oid = p.pronamespace
       where n.nspname = 'public' and has_function_privilege('anon', p.oid, 'execute')),
