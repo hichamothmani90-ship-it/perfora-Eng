@@ -238,4 +238,5 @@ test('D5 : démo énergie — résidu à expliquer, remplacement sans fausse bai
   const pg = de('programmes')[0];
   const ech = C.echeanceCompteur(pg, cpts.find(c => c.id === pg.compteurId), rel, T, { maintenant: now });
   assert.deepEqual([ech.statut, ech.reste], ['alerte', 48]);
+  assert.deepEqual(C.relevesDus(cpts, rel, T).map(x => x.compteur.code), ['HRS-COMP01'], 'un relevé à faire aujourd’hui pour le technicien');
 });

@@ -644,7 +644,7 @@
     const cat = C('ca', { code: 'ELEC-AT', libelle: 'Électricité — atelier presses', usage: 'ressource', ressource: 'electricite', unite: 'kWh', parentId: gen });
     const clg = C('cl', { code: 'ELEC-LG', libelle: 'Électricité — ligne conditionnement', usage: 'ressource', ressource: 'electricite', unite: 'kWh', parentId: gen });
     const eau = C('ce', { code: 'EAU-GEN', libelle: 'Eau de ville', usage: 'ressource', ressource: 'eau', unite: 'm³' });
-    const hrs = C('ch', { code: 'HRS-COMP01', libelle: 'Heures de marche compresseur', usage: 'equipement', unite: 'h', equipementId: comp });
+    const hrs = C('ch', { code: 'HRS-COMP01', libelle: 'Heures de marche compresseur', usage: 'equipement', unite: 'h', equipementId: comp, frequenceJours: 1 }); // relevé dû chaque jour : « Relevés à faire » du technicien
     let n = 0;
     const R = (cpt, j, hm, o) => { const le = J(j, hm); n++; out.push(['releves', { id: K('r' + n), compteurId: cpt, le, creeLe: le, creePar: qui[n % 2], ...o }]); };
     const serie = (cpt, unite, depart, incs, hm, special = {}) => {
