@@ -17,6 +17,9 @@ if [ "$cible" = "app" ]; then
   # Adresses versionnées : le cache navigateur de Cloudflare (4 h sur le domaine) ne sert jamais une ancienne console.
   version=$(grep -o "gmao-terrain-v[0-9]*" sw.js | head -1)
   sed -i "s/?v=dev/?v=$version/g" dist/console/index.html
+  # Scripts communs de l'appli chargés par la console (../js/…) : versionnés aussi, sinon une ancienne copie en cache
+  # (sync.js d'avant la double authentification, par ex.) casserait la console nouvelle.
+  sed -i -E "s#(\.\./js/[a-z_]+\.js)\"#\1?v=$version\"#g" dist/console/index.html
 else
   echo "Cible inconnue : $cible (seule « app » existe ; le site est dans le dépôt perfora-site)" >&2; exit 1
 fi

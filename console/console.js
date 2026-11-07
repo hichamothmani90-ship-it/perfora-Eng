@@ -608,6 +608,7 @@ ${esc(e.appareil || '')}</pre></details></td>
     $('#cc-moi').textContent = p.email || '';
     document.querySelector('.cc-onglets')?.classList.add('hidden');
     let facteurs, ins = null;
+    if (!Sync.mfa) { vue.innerHTML = '<p class="warn">Une ancienne version de l’appli est restée en mémoire : rechargez la page (Ctrl+F5).</p>'; return; }
     try {
       facteurs = await Sync.mfa.facteurs();
       if (!facteurs.some(f => f.status === 'verified')) ins = await Sync.mfa.inscrire();
