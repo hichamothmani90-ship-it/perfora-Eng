@@ -5,7 +5,8 @@
 (() => {
   const { data } = Store;
   /** Version affichée dans Réglages : à incrémenter avec VERSION dans sw.js. */
-  const APP_VERSION = 'v34';
+  const APP_VERSION = 'v35';
+  if (window.Erreurs) Erreurs.version = APP_VERSION;
   const $ = s => document.querySelector(s);
   // Multi-site : les listes de fiches de site ne montrent que le site actif (« tous » possible).
   // Les fiches sans site (anciennes ou pas encore synchronisées) restent visibles.
@@ -766,14 +767,28 @@
       <div class="qr-grid">${eqs.map(e => `<div class="qr-label">${QR.svg(lienSignaler(e), 132)}<div><b>${esc(e.designation)}</b><div class="small">${esc(e.code)}</div><div class="small muted">${esc(locPath(e.localisationId))}</div><div class="small">Scanner pour signaler</div></div></div>`).join('') || empty('Aucun équipement.')}</div>`;
   };
 
-  V.plateforme = () => Sync.profil()?.adminPlateforme
+  /** Règle des mots de passe (étape 6) : la même est réglée dans Supabase (Authentication → Policies). */
+  function regleMotDePasse(mdp, email = '') {
+    if (mdp.length < 10) return '10 caractères minimum';
+    if (!/[a-zA-Z]/.test(mdp) || !/[0-9]/.test(mdp)) return 'Mélangez lettres et chiffres';
+    const nom = String(email).split('@')[0].toLowerCase();
+    if (nom.length >= 4 && mdp.toLowerCase().includes(nom)) return 'Le mot de passe ne doit pas contenir votre adresse e-mail';
+    if (/^(.)\1+$/.test(mdp) || /(0123456789|azertyuiop|qwertyuiop|motdepasse|password|perfora)/i.test(mdp)) return 'Mot de passe trop facile à deviner';
+    return null;
+  }
+  // Administrateur inscrit dont la session n'a pas encore de code de double authentification : la console le demande.
+  const adminSansCode = () => !Sync.profil()?.adminPlateforme && !!Sync.profil()?.adminMfa;
+  V.plateforme = () => adminSansCode()
+    ? `<h1>Console plateforme</h1><p class="warn">Double authentification requise : saisissez le code de votre application d’authentification dans le centre de contrôle.</p>
+       <div class="actions"><a class="btn primary" href="console/">Ouvrir le centre de contrôle</a></div>`
+    : Sync.profil()?.adminPlateforme
     ? `<h1>Console plateforme</h1><p class="small muted">Réservée à l’administrateur plateforme. Chaque action est vérifiée par le serveur.</p>
        <div class="actions"><a class="btn primary" href="console/">Centre de contrôle (ordinateur)</a><button class="btn" type="button" id="pf-creer">+ Nouvelle entreprise</button><button class="btn" type="button" id="pf-actualiser">Actualiser</button></div>
        <div id="pf-liste"><p class="muted">Chargement…</p></div>`
     : empty('Réservé à l’administrateur plateforme.');
 
   V.plus = () => `<h1>Plus</h1>${[['#/preventif', '↻ Préventif', 'Programmes et échéances'], ['#/compteurs', '⏱ Compteurs', 'Relevés, énergie et eau, heures de marche'], ['#/energie', '⚡ Énergie et eau', 'Consommations, à examiner, factures'], ['#/qr', '▣ QR codes', 'Planche imprimable des équipements'], ['#/magasin', '▤ Magasin', 'Articles, stock, mouvements'], ['#/achats', '₪ Achats', 'Demandes d’achat, commandes, réceptions'], ['#/valeur', '∑ Valeur du stock', 'Coût moyen pondéré par article et site'], ['#/indicateurs', '▥ Indicateurs', 'Pilotage par équipement'], ['#/journal', '☰ Journal d’audit', 'Toutes les modifications'], ['#/reglages', '⚙ Réglages', 'Utilisateur, personnes, sauvegarde']]
-    .concat(Sync.profil()?.adminPlateforme ? [['#/plateforme', '◆ Console plateforme', 'Clients, abonnements, démo commerciale']] : [])
+    .concat(Sync.profil()?.adminPlateforme || Sync.profil()?.adminMfa ? [['#/plateforme', '◆ Console plateforme', 'Clients, abonnements, démo commerciale']] : [])
     .filter(([h]) => !(h === '#/compteurs' && !aModule('energie') && !aModule('preventif')))
     .filter(([h]) => !(h === '#/energie' && !App.energie?.voitEnergie()) && !(h === '#/magasin' && !aModule('magasin')) && !(h === '#/preventif' && !aModule('preventif')) && !(['#/achats', '#/valeur'].includes(h) && !(aModule('achats') && App.voitCouts?.())))
     .map(([h, t, s]) => `<a class="card" href="${h}"><div class="t">${t}</div><div class="s">${s}</div></a>`).join('')}`;
@@ -1689,11 +1704,12 @@
         for (;;) {
           const v = await askForm({ title: 'Choisissez votre mot de passe', ok: 'Enregistrer', cancel: null, fields: [
             { type: 'info', text: `Compte : ${email}. Ce mot de passe servira à vous connecter sur vos autres appareils.` },
-            { name: 'p1', label: 'Nouveau mot de passe (8 caractères minimum)', type: 'password', required: true },
+            { name: 'p1', label: 'Nouveau mot de passe (10 caractères minimum, lettres et chiffres)', type: 'password', required: true },
             { name: 'p2', label: 'Confirmer', type: 'password', required: true }] });
           if (!v) continue;
           if (v.p1 !== v.p2) { toast('Les deux saisies diffèrent'); continue; }
-          if (v.p1.length < 8) { toast('8 caractères minimum'); continue; }
+          const faible = regleMotDePasse(v.p1, email);
+          if (faible) { toast(faible); continue; }
           try { await Sync.changerMotDePasse(v.p1); break; } catch (e) { toast(e.message); }
         }
       }

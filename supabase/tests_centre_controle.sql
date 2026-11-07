@@ -21,7 +21,7 @@ begin
   n:=1; test:='non-admin lit pf_clients (erreur)';
   begin r := pf_clients(); exception when others then r := jsonb_build_object('erreur', sqlerrm); end; return next;
 
-  perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated', 'aal', 'aal2')::text, true);
   n:=2; test:='fiche client'; r := pf_client_maj(ent, '{"raisonSociale":"K SARL","ice":"001234567000089","ville":"Safi","contacts":[{"nom":"M. Test","telephone":"+212600000000"}]}'::jsonb);
   r := jsonb_build_object('ville', r->>'ville', 'contacts', jsonb_array_length(r->'contacts')); return next;
   n:=3; test:='ICE invalide (erreur)';
@@ -49,5 +49,6 @@ begin
   delete from entreprises where id = ent;
   n:=9; test:='nettoyage'; r := jsonb_build_object('entreprises', (select string_agg(code, ', ') from entreprises)); return next;
 end $$;
+revoke all on function public.gmao_test_cc() from public, anon, authenticated;   -- jamais appelable par l'API, même si on oublie le « drop »
 select jsonb_object_agg(n::text || ' ' || test, r)::text as resultats from public.gmao_test_cc();
 -- Puis, OBLIGATOIREMENT (sinon la fonction reste appelable par l'API) : drop function if exists public.gmao_test_cc();

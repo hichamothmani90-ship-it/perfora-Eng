@@ -33,17 +33,7 @@ sql() { docker exec -i "$1" psql -U postgres -h localhost -X -q -v ON_ERROR_STOP
 # L'image ne crée que le schéma « storage » vide (les tables viennent du service de fichiers de Supabase) :
 # on ajoute les deux tables utilisées par Perfora, avec les mêmes colonnes, pour le test local seulement.
 stockage() {
-  docker exec -i "$1" psql -U supabase_admin -d postgres -X -q -v ON_ERROR_STOP=1 <<'SQL'
-create table if not exists storage.buckets (id text primary key, name text not null unique, owner uuid, public boolean default false,
-  file_size_limit bigint, allowed_mime_types text[], created_at timestamptz default now(), updated_at timestamptz default now());
-create table if not exists storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text references storage.buckets(id),
-  name text, owner uuid, metadata jsonb, created_at timestamptz default now(), updated_at timestamptz default now(), last_accessed_at timestamptz default now());
-alter table storage.objects enable row level security;
-grant usage on schema storage to authenticated, anon;
-grant select, insert on storage.objects to authenticated;
-grant all on storage.buckets, storage.objects to postgres;
-alter table storage.buckets owner to postgres; alter table storage.objects owner to postgres;
-SQL
+  docker exec -i "$1" psql -U supabase_admin -d postgres -X -q -v ON_ERROR_STOP=1 >/dev/null < "$RACINE/scripts/sauvegarde/complement_image_locale.sql"
 }
 
 echo "== 1. Construction de la base source"

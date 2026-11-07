@@ -280,6 +280,50 @@
       </div></div>`;
   };
 
+  const OP = { INSERT: ['ajout', 'green'], UPDATE: ['modification', 'blue'], DELETE: ['suppression', 'red'] };
+  const NATURE_E = { erreur: ['erreur', 'red'], refus: ['refus serveur', 'amber'], synchro: ['synchronisation', 'amber'] };
+  const mo = n => (n == null ? '—' : !n ? '0 Ko' : n >= 1048576 ? `${(n / 1048576).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} Mo` : `${Math.max(1, Math.round(n / 1024))} Ko`);
+  const heure = s => (s ? new Date(s).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—');
+  /** Résumé lisible d'un changement : champs modifiés (avant → après), sans les dates techniques. */
+  function changement(j) {
+    const cles = Object.keys(j.apres || j.avant || {}).filter(k => !['modifie_le', 'cree_le', 'seq', 'recu_le'].includes(k));
+    const v = x => (x == null ? '∅' : typeof x === 'object' ? JSON.stringify(x) : String(x));
+    if (j.operation === 'UPDATE') return cles.slice(0, 6).map(k => `${k} : ${v(j.avant?.[k]).slice(0, 40)} → ${v(j.apres?.[k]).slice(0, 40)}`).join(' · ');
+    const o = j.apres || j.avant || {};
+    return ['code', 'nom', 'pack', 'statut', 'email', 'role', 'type'].filter(k => o[k] != null).map(k => `${k} : ${v(o[k]).slice(0, 40)}`).join(' · ');
+  }
+  V.technique = () => {
+    const t = technique || { erreurs: [], journal: [], stockage: {} };
+    const parEnt = Object.entries(t.stockage?.parEntreprise || {}).sort((a, b) => b[1] - a[1]);
+    const nomEnt = id => clients.find(c => c.id === id)?.nom || id;
+    const quota = 1024 * 1048576;   // offre gratuite Supabase : 1 Go de fichiers, 500 Mo de base
+    return `<h1>Technique</h1>
+      <div class="tiles">
+        <div class="tile ${t.erreurs.length ? 'amber' : 'green'}"><b>${t.erreurs.length}</b><span>erreur(s) sur 7 jours</span></div>
+        <div class="tile"><b>${mo(t.stockage?.total)}</b><span>fichiers joints (${Math.round((t.stockage?.total || 0) / quota * 100)} % de 1 Go)</span></div>
+        <div class="tile"><b>${mo(t.stockage?.base)}</b><span>base de données (${Math.round((t.stockage?.base || 0) / (500 * 1048576) * 100)} % de 500 Mo)</span></div>
+      </div>
+      <h2>Erreurs et refus remontés par les appareils (7 jours)</h2>
+      ${t.erreurs.length ? `<table class="cc-table"><thead><tr><th>Dernière</th><th>Nb</th><th>Nature</th><th>Message</th><th>Client · compte</th><th>Page · version</th></tr></thead><tbody>
+        ${t.erreurs.map(e => `<tr><td>${heure(e.dernierLe)}</td><td>${e.nb}</td><td>${badge(...(NATURE_E[e.nature] || [e.nature, '']))}</td>
+          <td><details><summary>${esc(e.message)}</summary><pre class="small" style="white-space:pre-wrap;margin:6px 0 0">${esc(e.detail || '')}
+${esc(e.appareil || '')}</pre></details></td>
+          <td>${esc(e.entreprise || '—')}<br><span class="small muted">${esc(e.email || '')} ${e.role ? '· ' + esc(e.role) : ''}</span></td>
+          <td class="small">${esc(e.page || '')}<br>${esc(e.version || '')}</td></tr>`).join('')}</tbody></table>`
+        : '<p class="muted">Aucune erreur remontée.</p>'}
+      <h2>Fichiers joints par client</h2>
+      ${parEnt.length ? `<table class="cc-table"><tbody>${parEnt.map(([e, o]) => `<tr><td>${esc(nomEnt(e))}</td><td>${mo(o)}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">Aucun fichier.</p>'}
+      <h2>Journal des actions de la plateforme</h2>
+      <p class="small muted">Créations et modifications d’entreprises, d’abonnements, de sites, de tarifs, imports, droits d’administrateur.
+        Ajout seulement : personne ne peut le modifier ni l’effacer. « avec code » = session confirmée par la double authentification.</p>
+      ${t.journal.length ? `<table class="cc-table"><thead><tr><th>Quand</th><th>Qui</th><th>Action</th><th>Table</th><th>Détail</th></tr></thead><tbody>
+        ${t.journal.map(j => `<tr><td>${heure(j.le)}</td><td>${esc(j.acteur_email || (j.acteur ? '?' : 'SQL / service'))}${j.niveau === 'aal2' ? ' ' + badge('avec code', 'green') : ''}</td>
+          <td>${badge(...(OP[j.operation] || [j.operation, '']))}${j.fonction ? `<br><span class="small muted">${esc(j.fonction)}</span>` : ''}</td>
+          <td>${esc(j.table_nom)}</td><td class="small">${esc(changement(j))}</td></tr>`).join('')}</tbody></table>`
+        : '<p class="muted">Journal vide.</p>'}
+      <p class="small muted">Disponibilité du site : à surveiller par un service externe gratuit (voir docs/PRODUCTION_ET_SAUVEGARDE.md).</p>`;
+  };
+
   V.communication = () => {
     const t = today();
     const enCours = a => a.actif && (!a.debut || a.debut.slice(0, 10) <= t) && (!a.fin || a.fin.slice(0, 10) >= t);
@@ -508,10 +552,21 @@
     const [nom, id] = chemin.split('/');
     return { nom: V[nom] ? nom : 'tableau', id: id ? decodeURIComponent(id) : null, q: new URLSearchParams(qs || '') };
   }
+  let technique = null;   // { erreurs, journal, stockage } : relu à chaque ouverture de l'onglet
+  async function chargerTechnique() {
+    const [erreurs, journal, stockage] = await Promise.all([Sync.pf.erreurs(7), Sync.pf.journal(150), Sync.pf.stockage()]);
+    technique = { erreurs, journal, stockage };
+  }
+  let mfaEnCours = false;   // écran du code ouvert : aucun autre affichage ne le remplace
   async function afficher(recharger = false) {
+    if (mfaEnCours) return;
     const r = route(), vue = $('#cc-vue');
-    try { if (recharger || !clients.length) await charger(); }
-    catch (e) { vue.innerHTML = `<p class="warn">Données indisponibles : ${esc(e.message)}</p>`; return; }
+    try {
+      if (recharger || !clients.length) await charger();
+      if (r.nom === 'technique') await chargerTechnique();
+    }
+    catch (e) { if (!mfaEnCours) vue.innerHTML = `<p class="warn">Données indisponibles : ${esc(e.message)}</p>`; return; }
+    if (mfaEnCours) return;
     vue.innerHTML = V[r.nom](r);
     lier(r);
   }
@@ -545,15 +600,66 @@
     }
   }
 
+  /** Code de l'application d'authentification (TOTP) : inscription la première fois, puis à chaque nouvelle session. */
+  async function ecranMfa(p) {
+    mfaEnCours = true;
+    document.querySelector('.cc-bandeau')?.remove();
+    const vue = $('#cc-vue');
+    $('#cc-moi').textContent = p.email || '';
+    document.querySelector('.cc-onglets')?.classList.add('hidden');
+    let facteurs, ins = null;
+    try {
+      facteurs = await Sync.mfa.facteurs();
+      if (!facteurs.some(f => f.status === 'verified')) ins = await Sync.mfa.inscrire();
+    } catch (e) { vue.innerHTML = `<p class="warn">Double authentification indisponible : ${esc(e.message)}</p>`; return; }
+    const fid = ins ? ins.id : facteurs.find(f => f.status === 'verified').id;
+    const cle = ins ? String(ins.totp?.secret || '').replace(/(.{4})/g, '$1 ').trim() : '';
+    vue.innerHTML = `<div class="card cc-mfa">
+      <h1 style="margin-top:0">${ins ? 'Activer la double authentification' : 'Code de vérification'}</h1>
+      ${ins ? `<ol><li>Installez sur votre téléphone une application d’authentification (Google Authenticator, Microsoft Authenticator, 2FAS…).</li>
+          <li>Ajoutez un compte en scannant ce code :<div class="cc-qr">${QR.svg(ins.totp?.uri || '', 210)}</div>
+            <span class="small">ou saisissez la clé : <code>${esc(cle)}</code></span></li>
+          <li>Saisissez le code à 6 chiffres affiché pour « Perfora » :</li></ol>`
+        : '<p>Ouvrez votre application d’authentification et saisissez le code à 6 chiffres affiché pour « Perfora ».</p>'}
+      <form id="cc-mfa" class="row" style="gap:10px;align-items:center">
+        <input id="cc-mfa-code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" required placeholder="123456"
+          style="font-size:1.6rem;letter-spacing:.2em;max-width:11rem" aria-label="Code à 6 chiffres">
+        <button class="btn primary">Valider</button></form>
+      <p class="small muted">Sans ce code, les droits d’administrateur restent bloqués, même avec le bon mot de passe.
+        Téléphone perdu : procédure de secours dans docs/PRODUCTION_ET_SAUVEGARDE.md.</p></div>`;
+    const champ = $('#cc-mfa-code'); champ.focus();
+    $('#cc-mfa').onsubmit = async ev => {
+      ev.preventDefault();
+      const code = champ.value.replace(/\s/g, '');
+      if (!/^[0-9]{6}$/.test(code)) { toast('6 chiffres'); return; }
+      try {
+        await Sync.mfa.verifier(fid, code);
+        if (!p.adminMfa?.obligatoire) await Sync.pf.mfaActiver();
+        await Sync.chargerProfil();
+        toast(ins ? 'Double authentification activée' : 'Code accepté');
+        document.querySelector('.cc-onglets')?.classList.remove('hidden');
+        mfaEnCours = false;
+        demarrer();
+      } catch (e) { toast(e.message); champ.select(); }
+    };
+  }
+
   async function demarrer() {
     const vue = $('#cc-vue');
     try { await Store.open(); } catch (e) { vue.innerHTML = `<p class="warn">Stockage indisponible : ${esc(e.message)}</p>`; return; }
     if (!Sync.etatCourant().connecte) { vue.innerHTML = `<div class="card"><p style="margin-top:0"><b>Connectez-vous d’abord dans l’appli</b> avec le compte administrateur de la plateforme, puis revenez ici.</p><a class="btn primary" href="../#/reglages">Ouvrir l’appli</a></div>`; return; }
     try { await Sync.chargerProfil(); } catch { /* profil en mémoire */ }
     const p = Sync.profil();
+    if (!p?.adminPlateforme && p?.adminMfa) { await ecranMfa(p); return; }
     if (!p?.adminPlateforme) { vue.innerHTML = '<p class="warn">Réservé à l’administrateur de la plateforme.</p>'; return; }
     $('#cc-moi').textContent = p.nom || p.email;
-    window.addEventListener('hashchange', () => afficher());
+    if (p.adminMfa && !p.adminMfa.obligatoire) {
+      const b = document.createElement('p'); b.className = 'warn cc-bandeau';
+      b.innerHTML = '<span>Double authentification <b>pas encore activée</b> : votre mot de passe seul suffit à administrer toute la plateforme.</span> <button class="btn sm primary" type="button">Activer maintenant</button>';
+      b.querySelector('button').onclick = () => { b.remove(); ecranMfa(p); };
+      vue.before(b);
+    }
+    if (!demarrer.ecoute) { window.addEventListener('hashchange', () => afficher()); demarrer.ecoute = true; }
     afficher(true);
   }
   demarrer();

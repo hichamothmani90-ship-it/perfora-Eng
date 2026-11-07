@@ -65,5 +65,6 @@ begin
   delete from entreprises where id = ent;
   n:=12; test:='nettoyage'; r:=jsonb_build_object('entreprises', (select count(*) from entreprises), 'profils_test', (select count(*) from profils where email like '%@q.test')); return next;
 end $$;
+revoke all on function public.gmao_test_quotas() from public, anon, authenticated;   -- jamais appelable par l'API, même si on oublie le « drop »
 select jsonb_object_agg(n::text || ' ' || test, r)::text as resultats from public.gmao_test_quotas();
 -- Puis : drop function if exists public.gmao_test_quotas();

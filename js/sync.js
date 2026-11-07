@@ -96,7 +96,7 @@ const Sync = (() => {
     if (!r.ok) {
       const j = await r.json().catch(() => ({}));
       const m = j.msg || j.message || j.error_description || '';
-      throw new Error(/weak|at least|characters/i.test(m) ? 'Mot de passe trop faible (8 caractères minimum conseillés)' : /same/i.test(m) ? 'Choisissez un mot de passe différent de l’ancien' : m || `Refusé (${r.status})`);
+      throw new Error(/weak|at least|characters/i.test(m) ? 'Mot de passe trop faible : 10 caractères minimum, lettres et chiffres' : /same/i.test(m) ? 'Choisissez un mot de passe différent de l’ancien' : m || `Refusé (${r.status})`);
     }
   }
 
@@ -192,6 +192,7 @@ const Sync = (() => {
       const rows = await api(`/rest/v1/fiches?select=id,type,data,seq&id=in.(${encodeURIComponent(liste)})`);
       if (rows?.length) await Store.appliquerDistant(rows, { remplacer: true });
     }
+    for (const r of refus.filter(x => x.type !== 'journal')) window.Erreurs?.noter({ nature: 'refus', message: r.motif || 'Refusé par le serveur', detail: `${r.type} ${r.id}` });
     const le = Store.now();
     await majCfg({ refus: [...refus.map(({ patch, ...r }) => ({ ...r, le })), ...(cfg().refus || [])].slice(0, 20) });
     surRefus(refus.filter(r => r.type !== 'journal'));
@@ -264,7 +265,32 @@ const Sync = (() => {
     annonceEnregistrer: (id, v) => rpc('pf_annonce_enregistrer', { p_id: id, p_titre: v.titre, p_texte: v.texte, p_niveau: v.niveau, p_entreprise: v.entrepriseId || null,
       p_debut: v.debut || null, p_fin: v.fin || null, p_actif: v.actif !== false }),
     tarifMaj: (pack, v) => rpc('pf_tarif_maj', { p_pack: pack, p_prix_mensuel: v.prixMensuel ?? null, p_prix_annuel: v.prixAnnuel ?? null, p_note: v.note || null }),
+    // sécurité et supervision (supabase/securite.sql)
+    mfaActiver: () => rpc('pf_mfa_activer'),
+    journal: (limite = 200, avant = null, table = null) => rpc('pf_journal_admin_lire', { p_limite: limite, p_avant: avant, p_table: table }),
+    erreurs: (jours = 7) => rpc('pf_erreurs_lire', { p_jours: jours }),
+    stockage: () => rpc('pf_stockage'),
   };
+  // ---------- double authentification (application d'authentification, TOTP) — administrateur plateforme ----------
+  const mfa = {
+    facteurs: async () => ((await api('/auth/v1/user'))?.factors || []).filter(f => f.factor_type === 'totp'),
+    /** Nouvelle inscription : les inscriptions jamais confirmées sont d'abord retirées. Rend { id, totp: { uri, secret } }. */
+    async inscrire() {
+      for (const f of await mfa.facteurs()) if (f.status !== 'verified') await api(`/auth/v1/factors/${f.id}`, { method: 'DELETE' });
+      return api('/auth/v1/factors', { method: 'POST', body: JSON.stringify({ factor_type: 'totp', issuer: 'Perfora', friendly_name: 'Perfora ' + new Date().toISOString().slice(0, 16) }) });
+    },
+    /** Vérifie un code à 6 chiffres : la session passe au niveau « aal2 » (mot de passe + code). */
+    async verifier(factorId, code) {
+      const ch = await api(`/auth/v1/factors/${factorId}/challenge`, { method: 'POST', body: '{}' });
+      let j;
+      try { j = await api(`/auth/v1/factors/${factorId}/verify`, { method: 'POST', body: JSON.stringify({ challenge_id: ch.id, code: String(code).replace(/\s/g, '') }) }); }
+      catch (e) { throw new Error(/invalid|code/i.test(e.message) ? 'Code incorrect ou expiré : réessayez avec le code affiché maintenant' : e.message); }
+      if (!j?.access_token) throw new Error('Vérification refusée');
+      await majCfg(session(j));
+      notifier();
+    },
+  };
+  const signalerErreurs = liste => rpc('erreurs_signaler', { p_erreurs: liste });
   async function definirProfil(cible, role, nom, actif) {
     await api('/rest/v1/rpc/definir_profil', { method: 'POST', body: JSON.stringify({ cible, nouveau_role: role, nouveau_nom: nom, est_actif: actif }) });
   }
@@ -297,8 +323,10 @@ const Sync = (() => {
       const recus = await recevoir(); // …puis tout ce qui a changé ailleurs
       await majCfg({ dernier: Store.now(), erreur: null });
       if (recus) surReception(recus);
+      window.Erreurs?.envoyer();
     } catch (e) {
       await majCfg({ erreur: e.message || String(e) });
+      if (!RESEAU.test(e.message || '')) window.Erreurs?.noter({ nature: 'synchro', message: e.message || String(e), detail: e.stack || '' });
     } finally {
       enCours = false; notifier();
     }
@@ -330,5 +358,5 @@ const Sync = (() => {
   // Annonces de la plateforme et demande au support (tout compte connecté).
   const mesAnnonces = () => rpc('mes_annonces');
   const supportCreer = (nature, sujet, message) => rpc('support_creer', { p_nature: nature, p_sujet: sujet, p_message: message });
-  return { PROJET, pf, mesAnnonces, supportCreer, lireFichier, profil, chargerProfil, equipe, definirProfil, utilisation, affecterSites, inviter, connecter, deconnecter, synchroniser, planifier, demarrer, etatCourant, lireLienEmail, sessionDepuisLien, changerMotDePasse, demanderLien };
+  return { PROJET, pf, mfa, signalerErreurs, mesAnnonces, supportCreer, lireFichier, profil, chargerProfil, equipe, definirProfil, utilisation, affecterSites, inviter, connecter, deconnecter, synchroniser, planifier, demarrer, etatCourant, lireLienEmail, sessionDepuisLien, changerMotDePasse, demanderLien };
 })();

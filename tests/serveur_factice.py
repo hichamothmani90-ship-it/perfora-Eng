@@ -12,7 +12,7 @@ Aide aux tests : GET /etat ; POST /test/abonnement {"entreprise":"AUTRE","statut
 Quotas (comme supabase/quotas.sql) : rpc/utilisation, rpc/affecter_sites, functions/v1/inviter.
 Console plateforme (comme supabase/plateforme.sql) : rpc/pf_* ; test@gmao.test est administrateur plateforme.
 Lancer : python tests/serveur_factice.py [port]   (8099 par défaut). Données en mémoire."""
-import json, re, secrets, sys, threading, time
+import base64, hashlib, hmac, json, re, secrets, struct, sys, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, unquote
 
@@ -69,6 +69,19 @@ verrou = threading.Lock()
 fiches = {}          # id -> {id, type, data, seq, entreprise, site}
 seq = [0]
 jetons, rafraichis, ENVOIS = {}, {}, []
+# Étape 6 : double authentification (TOTP), niveau de session, erreurs remontées, journal (miroir de supabase/securite.sql).
+NIVEAU, RAFR_NIVEAU = {}, {}          # jeton / jeton de rafraîchissement -> aal1 | aal2
+FACTEURS, DEFIS = {}, {}             # email -> [{id, secret, status, friendly_name}] ; défi -> id du facteur
+ADMIN_MFA = {"test@gmao.test": False}   # comme la recette avant activation : la console propose de l'activer
+ERREURS, JOURNAL = [], []
+
+
+def totp(secret, t=None):
+    cle = base64.b32decode(secret)
+    c = struct.pack(">Q", int((t or time.time()) // 30))
+    h = hmac.new(cle, c, hashlib.sha1).digest()
+    o = h[-1] & 15
+    return "%06d" % ((struct.unpack(">I", h[o:o + 4])[0] & 0x7FFFFFFF) % 1000000)
 
 
 def peut_ecrire(r, t):
@@ -253,10 +266,11 @@ def fichier_autorise(email, nom, ecrire):
     return True
 
 
-def nouvelle_session(email):
+def nouvelle_session(email, niveau="aal1"):
     a, r = secrets.token_hex(16), secrets.token_hex(16)
     jetons[a] = (email, time.time() + 3600)
     rafraichis[r] = email
+    NIVEAU[a], RAFR_NIVEAU[r] = niveau, niveau
     return {"access_token": a, "refresh_token": r, "expires_in": 3600, "user": {"id": "u-" + email, "email": email}}
 
 
@@ -267,7 +281,7 @@ class H(BaseHTTPRequestHandler):
     def cors(self):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Headers", "apikey, authorization, content-type, x-upsert, cache-control")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 
     def repondre(self, code, obj):
         b = json.dumps(obj).encode()
@@ -304,6 +318,21 @@ class H(BaseHTTPRequestHandler):
             return True
         return False
 
+    def do_DELETE(self):
+        if self.reseau_coupe():
+            return
+        email = self.utilisateur()
+        if not email:
+            return self.repondre(401, {"message": "JWT expired"})
+        m = re.match(r"^/auth/v1/factors/([^/]+)$", urlparse(self.path).path)
+        if not m:
+            return self.repondre(404, {"message": "Not found"})
+        f = next((x for x in FACTEURS.get(email, []) if x["id"] == m.group(1)), None)
+        if f and f["status"] == "verified" and self.niveau() != "aal2":
+            return self.repondre(403, {"msg": "AAL2 required"})
+        FACTEURS[email] = [x for x in FACTEURS.get(email, []) if x["id"] != m.group(1)]
+        return self.repondre(200, {"id": m.group(1)})
+
     def do_OPTIONS(self):
         if self.reseau_coupe():
             return
@@ -315,6 +344,12 @@ class H(BaseHTTPRequestHandler):
         RESEAU["octets_max"] = max(RESEAU["octets_max"], int(self.headers.get("Content-Length") or 0))
         n = int(self.headers.get("Content-Length") or 0)
         return json.loads(self.rfile.read(n) or b"{}")
+
+    def niveau(self):
+        return NIVEAU.get((self.headers.get("Authorization") or "").removeprefix("Bearer "), "aal1")
+
+    def est_admin(self, email):
+        return email in ADMINS and (not ADMIN_MFA.get(email, True) or self.niveau() == "aal2")
 
     def utilisateur(self):
         if self.headers.get("apikey") != CLE:
@@ -361,7 +396,7 @@ class H(BaseHTTPRequestHandler):
                     return self.repondre(400, {"error_description": "Invalid login credentials"})
                 return self.repondre(200, nouvelle_session(b["email"]))
             if grant == "refresh_token" and b.get("refresh_token") in rafraichis:
-                return self.repondre(200, nouvelle_session(rafraichis.pop(b["refresh_token"])))
+                return self.repondre(200, nouvelle_session(rafraichis.pop(b["refresh_token"]), RAFR_NIVEAU.pop(b["refresh_token"], "aal1")))
             return self.repondre(400, {"error_description": "Invalid refresh token"})
         if u.path == "/auth/v1/recover":
             if self.headers.get("apikey") != CLE:
@@ -418,6 +453,39 @@ class H(BaseHTTPRequestHandler):
                          "data": {"ref": ref, "nature": b["p_nature"], "sujet": b["p_sujet"].strip(), "description": b["p_message"].strip(), "statut": "ouverte", "priorite": "normale",
                                   "source": "appli", "demandeur": {"nom": p["nom"], "email": email, "role": p["role"]}}}
             return self.repondre(200, {"ref": ref})
+        if u.path == "/auth/v1/factors":
+            sec = base64.b32encode(secrets.token_bytes(20)).decode().rstrip("=")
+            f = {"id": "f-" + secrets.token_hex(6), "secret": sec, "status": "unverified", "friendly_name": self.corps().get("friendly_name")}
+            FACTEURS.setdefault(email, []).append(f)
+            return self.repondre(200, {"id": f["id"], "type": "totp", "friendly_name": f["friendly_name"],
+                                       "totp": {"qr_code": "", "secret": sec, "uri": f"otpauth://totp/Perfora:{email}?secret={sec}&issuer=Perfora"}})
+        m = re.match(r"^/auth/v1/factors/([^/]+)/(challenge|verify)$", u.path)
+        if m:
+            f = next((x for x in FACTEURS.get(email, []) if x["id"] == m.group(1)), None)
+            if not f:
+                return self.repondre(404, {"code": "mfa_factor_not_found", "msg": "Factor not found"})
+            if m.group(2) == "challenge":
+                d = "c-" + secrets.token_hex(6)
+                DEFIS[d] = f["id"]
+                return self.repondre(200, {"id": d, "type": "totp", "expires_at": int(time.time()) + 300})
+            b = self.corps()
+            if DEFIS.pop(b.get("challenge_id"), None) != f["id"]:
+                return self.repondre(422, {"code": "mfa_challenge_expired", "msg": "Challenge expired"})
+            if str(b.get("code")) not in [totp(f["secret"], time.time() + k * 30) for k in (-1, 0, 1)]:
+                return self.repondre(422, {"code": "mfa_verification_failed", "msg": "Invalid TOTP code entered"})
+            f["status"] = "verified"
+            return self.repondre(200, nouvelle_session(email, "aal2"))
+        if u.path == "/rest/v1/rpc/erreurs_signaler":
+            for x in (self.corps().get("p_erreurs") or [])[:20]:
+                msg = str(x.get("message") or "")[:300]
+                ex = next((e for e in ERREURS if e["email"] == email and e["message"] == msg and e["nature"] == x.get("nature")), None)
+                if ex:
+                    ex["nb"] += int(x.get("nb") or 1); ex["dernierLe"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+                else:
+                    ERREURS.append({"id": len(ERREURS) + 1, "email": email, "nature": x.get("nature") or "erreur", "message": msg, "detail": str(x.get("detail") or "")[:1500],
+                                    "page": x.get("page"), "version": x.get("version"), "appareil": x.get("appareil"), "nb": int(x.get("nb") or 1),
+                                    "premierLe": time.strftime("%Y-%m-%dT%H:%M:%S"), "dernierLe": time.strftime("%Y-%m-%dT%H:%M:%S")})
+            return self.repondre(200, 1)
         if u.path == "/rest/v1/rpc/mon_profil":
             return self.mon_profil(email)
         if u.path == "/rest/v1/rpc/definir_profil":
@@ -455,7 +523,7 @@ class H(BaseHTTPRequestHandler):
             b = self.corps()
             em, role, liste = (b.get("email") or "").strip().lower(), b.get("role"), b.get("sites") or []
             if b.get("entrepriseId"):   # invitation par l'administrateur plateforme pour un client
-                if email not in ADMINS:
+                if not self.est_admin(email):
                     return self.repondre(400, {"erreur": "Réservé à l'administrateur plateforme"})
                 ent = code_de(b["entrepriseId"])
                 sites_ent = [k for k, v in SITES.items() if v["entreprise"] == ent]
@@ -588,7 +656,12 @@ class H(BaseHTTPRequestHandler):
         return self.repondre(200, {"acceptes": acceptes, "refuses": refus})
 
     def plateforme(self, email, nom):
-        if email not in ADMINS:
+        if nom == "pf_mfa_activer":
+            if email not in ADMINS or self.niveau() != "aal2":
+                return self.repondre(400, {"message": "Confirmez d'abord un code de l'application d'authentification"})
+            ADMIN_MFA[email] = True
+            return self.repondre(200, {"mfaObligatoire": True})
+        if not self.est_admin(email):
             return self.repondre(400, {"message": "Réservé à l'administrateur plateforme"})
         b = self.corps()
         if nom == "pf_entreprises":
@@ -672,6 +745,16 @@ class H(BaseHTTPRequestHandler):
                     del OBJETS[k]
             del OBJETS[o["id"]]
             return self.repondre(200, None)
+        if nom == "pf_erreurs_lire":
+            return self.repondre(200, [{**e, "entreprise": ENTREPRISES[PROFILS[e["email"]]["entreprise"]]["nom"] if e["email"] in PROFILS else None,
+                                        "role": PROFILS.get(e["email"], {}).get("role")} for e in reversed(ERREURS)])
+        if nom == "pf_journal_admin_lire":
+            return self.repondre(200, list(reversed(JOURNAL))[:int(b.get("p_limite") or 200)])
+        if nom == "pf_stockage":
+            par = {}
+            for n_, (o, _) in FICHIERS.items():
+                par[n_.split("/")[0]] = par.get(n_.split("/")[0], 0) + len(o)
+            return self.repondre(200, {"total": sum(par.values()), "parEntreprise": par, "base": 12 * 1048576})
         if nom == "pf_annonces_lire":
             return self.repondre(200, sorted(ANNONCES.values(), key=lambda a: a["creeLe"], reverse=True))
         if nom == "pf_annonce_enregistrer":
@@ -793,7 +876,8 @@ class H(BaseHTTPRequestHandler):
         return self.repondre(200, {"userId": "u-" + email, "email": email, "nom": p["nom"], "role": p["role"], "personneId": pid, "actif": p["actif"],
                                    "entreprise": {"id": e["id"], "code": e["code"], "nom": e["nom"], "statut": e["statut"], "demo": e.get("demo", False), "reinitLe": e.get("reinitLe")},
                                    "sites": [{"id": s["id"], "code": s["code"], "nom": s["nom"]} for s in sites],
-                                   "siteDefaut": p["defaut"], "abonnement": droits(p["entreprise"]), "adminPlateforme": email in ADMINS})
+                                   "siteDefaut": p["defaut"], "abonnement": droits(p["entreprise"]), "adminPlateforme": self.est_admin(email),
+                                   "adminMfa": {"obligatoire": ADMIN_MFA.get(email, True), "niveau": self.niveau()} if email in ADMINS else None})
 
     def definir_profil(self, email):
         if role_de(email) != "responsable":
@@ -856,7 +940,8 @@ class H(BaseHTTPRequestHandler):
         if not email:
             return self.repondre(401, {"message": "JWT expired"})
         if u.path == "/auth/v1/user":
-            return self.repondre(200, {"id": "u-" + email, "email": email})
+            return self.repondre(200, {"id": "u-" + email, "email": email, "factors": [{"id": f["id"], "factor_type": "totp", "status": f["status"], "friendly_name": f["friendly_name"]}
+                                                                                  for f in FACTEURS.get(email, [])]})
         if u.path.startswith("/storage/v1/object/authenticated/fichiers/"):
             nom = u.path.removeprefix("/storage/v1/object/authenticated/fichiers/")
             if nom not in FICHIERS or not fichier_autorise(email, nom, False):

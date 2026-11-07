@@ -14,7 +14,7 @@ begin
   insert into entreprises(code, nom, demo) values ('TDEMO', 'Test démo', true) returning id into ent;
   insert into abonnements(entreprise_id, pack) values (ent, 'pro');
   insert into sites(entreprise_id, code, nom) values (ent, 'TD', 'Site démo test') returning id into site;
-  perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated', 'aal', 'aal2')::text, true);
   r := pf_reinitialiser_demo(ent);
   select data into ot from fiches where entreprise_id = ent and type = 'ots' and data->>'ref' = 'OT-DEMO-0003';
   res := jsonb_build_object('reinit', r,
@@ -36,5 +36,6 @@ begin
   delete from entreprises where id = ent;
   return res || jsonb_build_object('nettoyage', (select string_agg(code, ', ') from entreprises));
 end $$;
+revoke all on function public.gmao_test_demo() from public, anon, authenticated;   -- jamais appelable par l'API, même si on oublie le « drop »
 select public.gmao_test_demo()::text as resultat;
 -- Puis : drop function if exists public.gmao_test_demo();

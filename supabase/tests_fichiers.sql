@@ -49,5 +49,6 @@ begin
   delete from entreprises where id in (ent, ent2);
   n:=13; test:='nettoyage'; r := jsonb_build_object('entreprises', (select string_agg(code, ', ') from entreprises)); return next;
 end $$;
+revoke all on function public.gmao_test_fichiers() from public, anon, authenticated;   -- jamais appelable par l'API, même si on oublie le « drop »
 select jsonb_object_agg(n::text || ' ' || test, r)::text as resultats from public.gmao_test_fichiers();
 drop function if exists public.gmao_test_fichiers();

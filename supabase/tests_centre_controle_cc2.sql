@@ -25,7 +25,7 @@ begin
   n:=1; test:='non-admin lit les prospects (erreur)';
   begin r := pf_objets_lire('prospect'); exception when others then r := jsonb_build_object('erreur', sqlerrm); end; return next;
 
-  perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated', 'aal', 'aal2')::text, true);
   n:=2; test:='prospect'; p := pf_objet_enregistrer(null, 'prospect', null, '{"societe":"Laiterie test","nom":"Mme X","etape":"nouveau"}'::jsonb);
   r := jsonb_build_object('etape', p->>'etape', 'id_ok', (p->>'id') like 'prospect-%'); return next;
   n:=3; test:='prospect perdu sans motif (erreur)';
@@ -46,7 +46,7 @@ begin
   n:=9; test:='nature inconnue (erreur)';
   begin r := support_creer('autre', 'x', 'y'); exception when others then r := jsonb_build_object('erreur', sqlerrm); end; return next;
 
-  perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated', 'aal', 'aal2')::text, true);
   n:=10; test:='annonce KTEST'; r := jsonb_build_object('id_ok', pf_annonce_enregistrer(null, 'Test KTEST', 'Pour KTEST', 'info', ent, now() - interval '1 hour', null, true) is not null); return next;
   n:=11; test:='annonce KAUTRE'; r := jsonb_build_object('id_ok', pf_annonce_enregistrer(null, 'Test KAUTRE', 'Pour KAUTRE', 'info', ent2, now() - interval '1 hour', null, true) is not null); return next;
   perform set_config('request.jwt.claims', json_build_object('sub', tech, 'role', 'authenticated')::text, true);
@@ -57,7 +57,7 @@ begin
   n:=13; test:='lecture directe des tables de plateforme'; r := jsonb_build_object('pf_objets', (select count(*) from pf_objets), 'pf_annonces', (select count(*) from pf_annonces)); return next;
   reset role;
 
-  perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated', 'aal', 'aal2')::text, true);
   n:=14; test:='suppression du prospect et de ses echanges'; perform pf_objet_supprimer(p->>'id');
   r := jsonb_build_object('echanges_restants', (select count(*) from pf_objets where data->>'prospectId' = p->>'id')); return next;
   n:=15; test:='ticket non supprimable (erreur)';
@@ -73,5 +73,6 @@ begin
   delete from entreprises where id in (ent, ent2);
   n:=17; test:='nettoyage'; r := jsonb_build_object('entreprises', (select string_agg(code, ', ') from entreprises)); return next;
 end $$;
+revoke all on function public.gmao_test_cc2() from public, anon, authenticated;   -- jamais appelable par l'API, même si on oublie le « drop »
 select jsonb_object_agg(n::text || ' ' || test, r)::text as resultats from public.gmao_test_cc2();
 -- Puis, OBLIGATOIREMENT (sinon la fonction reste appelable par l'API) : drop function if exists public.gmao_test_cc2();

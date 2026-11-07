@@ -1,19 +1,30 @@
 -- Tests d'étanchéité multi-entreprise (volet A1). À exécuter dans Supabase → SQL Editor.
 -- Crée une entreprise B, un site A2 et deux techniciens fictifs, vérifie les règles avec la
 -- vraie RLS (set local role authenticated), puis nettoie tout. Résultat : une ligne JSON.
--- Pré-requis : entreprise « DEMO » avec site « TNG » et un responsable (migration multitenant.sql).
+-- Utilise l'entreprise « DEMO » (site TNG, un responsable) si elle existe ; sinon (base neuve, production) crée une
+-- entreprise TEST-A pour le test et l'efface à la fin.
 -- Résultats attendus (6 nov. 2026) : 1 site_ok true · 2,3,4,6,11 refusés avec motif ·
 -- 5 fiches_de_A_visibles 0 · 7 site_ok true · 8 journal_site_A2 true · 9 fiches_A2_visibles 0 ·
 -- 10 fiches_B_visibles 0 · 12 fiches_test 0.
 
 create or replace function public.gmao_test_etancheite() returns table(n int, test text, r jsonb) language plpgsql as $$
 declare
-  entA uuid; tng uuid; entB uuid; siteB uuid; siteA2 uuid; resp uuid;
+  entA uuid; tng uuid; entB uuid; siteB uuid; siteA2 uuid; resp uuid; aCree boolean := false;
+  respA uuid := '00000000-0000-0000-0000-0000000000a0';
   techA uuid := '00000000-0000-0000-0000-0000000000a1';
   techB uuid := '00000000-0000-0000-0000-0000000000b1';
   demA text;
 begin
-  select id into entA from entreprises where code = 'DEMO';
+  select id into entA from entreprises where code = 'DEMO' and not demo;
+  if entA is null or not exists (select 1 from profils where role = 'responsable' and entreprise_id = entA) then
+    -- Base sans « Perfora Démo » (production, base neuve) : entreprise A créée pour le test, effacée à la fin.
+    insert into entreprises(code, nom) values ('TEST-A', 'Test A') returning id into entA;
+    insert into abonnements(entreprise_id, pack) values (entA, 'pro');
+    insert into sites(entreprise_id, code, nom) values (entA, 'TNG', 'Site A test') returning id into tng;
+    insert into profils(user_id, email, nom, role, entreprise_id, site_defaut) values (respA, 'respa@test.test', 'Resp A', 'responsable', entA, tng);
+    insert into fiches(id, type, data, entreprise_id, site_id) values ('x-a-dem', 'demandes', jsonb_build_object('id', 'x-a-dem', 'siteId', tng, 'constat', 'test'), entA, tng);
+    aCree := true;
+  end if;
   select id into tng from sites where entreprise_id = entA and code = 'TNG';
   select user_id into resp from profils where role = 'responsable' and entreprise_id = entA limit 1;
   select id into demA from fiches where entreprise_id = entA and type = 'demandes' limit 1;
@@ -58,8 +69,16 @@ begin
   delete from abonnements where entreprise_id = entB;
   delete from sites where id in (siteB, siteA2);
   delete from entreprises where id = entB;
+  if aCree then
+    delete from fiches where entreprise_id = entA;
+    delete from profils where user_id = respA;
+    delete from abonnements where entreprise_id = entA;
+    delete from sites where entreprise_id = entA;
+    delete from entreprises where id = entA;
+  end if;
   n:=12; test:='nettoyage'; r:=jsonb_build_object('fiches_test', (select count(*) from fiches where id like 'x-%'), 'entreprises', (select count(*) from entreprises), 'sites', (select count(*) from sites), 'profils', (select count(*) from profils)); return next;
 end $$;
+revoke all on function public.gmao_test_etancheite() from public, anon, authenticated;   -- jamais appelable par l'API, même si on oublie le « drop »
 select jsonb_object_agg(n::text || ' ' || test, r)::text as resultats from public.gmao_test_etancheite();
 -- Puis, dans une seconde exécution :
 -- drop function if exists public.gmao_test_etancheite();

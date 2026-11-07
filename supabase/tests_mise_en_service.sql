@@ -31,7 +31,7 @@ begin
   n:=1; test:='non-admin appelle pf_importer (erreur)';
   begin r := pf_importer(ent, 'lot-test-0', 'x.xlsx', lot_ok, true); exception when others then r := jsonb_build_object('erreur', sqlerrm); end; return next;
 
-  perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated', 'aal', 'aal2')::text, true);
   n:=2; test:='verification a blanc : rien ne reste'; r := pf_importer(ent, 'lot-test-1', 'kit.xlsx', lot_ok, true);
   r := r || jsonb_build_object('fiches_restantes', (select count(*) from fiches where entreprise_id = ent)); return next;
   n:=3; test:='doublon de code dans le lot (refus)';
@@ -65,7 +65,7 @@ begin
   n:=13; test:='technicien lit l equipement importe'; r := jsonb_build_object('equipements', (select count(*) from fiches where type = 'equipements' and id = 'm-e1')); return next;
   reset role;
 
-  perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated', 'aal', 'aal2')::text, true);
   n:=14; test:='annulation apres activite du client (erreur)';
   begin r := pf_annuler_lot(ent, 'lot-test-1'); exception when others then r := jsonb_build_object('erreur', sqlerrm); end; return next;
   n:=15; test:='nouveau lot puis annulation immediate (ok)';
@@ -85,5 +85,6 @@ begin
   delete from entreprises where id = ent;
   n:=17; test:='nettoyage'; r := jsonb_build_object('entreprises', (select string_agg(code, ', ') from entreprises)); return next;
 end $$;
+revoke all on function public.gmao_test_mes() from public, anon, authenticated;   -- jamais appelable par l'API, même si on oublie le « drop »
 select jsonb_object_agg(n::text || ' ' || test, r)::text as resultats from public.gmao_test_mes();
 -- Puis : drop function if exists public.gmao_test_mes();
