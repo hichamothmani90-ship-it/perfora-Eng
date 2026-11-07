@@ -4,32 +4,44 @@ Priorités fixées : **1. stabilité, 2. sécurité, 3. expérience d'inscriptio
 Les semaines (S1 = semaine qui suit la validation) sont indicatives. Les fonctions nouvelles attendent que les phases 1 et 2
 soient faites.
 
-## 0. Ce qui est fait
+## 0. Où on en est (7 nov. 2026, appli v32 sur app.perfora.ma)
 
 | Domaine | État |
 |---|---|
 | Socle multi-entreprise, sites, packs, quotas, rôles, invitations | ✅ volet A |
 | Magasin relié au terrain, achats, seuils, valorisation | ✅ volets B et C |
 | Parcours demande → intervention simplifié, clôture validée par le responsable | ✅ v23 – v24 |
-| Énergie : calculs (D1) et serveur (D2, D2 bis compteurs d'équipement) | ✅ écrans à faire (D3 – D5) |
 | Domaine perfora.ma, app.perfora.ma, HTTPS, e-mails en français (Resend) | ✅ phase 1 du cadrage |
-| Kit Excel de démarrage + page Mise en service | ✅ v25 |
-| Centre de contrôle : tableau de bord, clients, abonnements, prospects, support, communication | ✅ v26 – v27 |
+| Kit Excel de démarrage + page Mise en service (import vérifié, lots annulables) | ✅ v25 |
+| Centre de contrôle `app.perfora.ma/console/` : tableau de bord, clients, abonnements, prospects, support, communication, annonces | ✅ v26 – v27 (facturation CC3 : après le comptable) |
+| **Hors ligne** : 12 scénarios testés, 4 défauts corrigés (envoi par lots ≤ 350 Ko, session conservée sur portail Wi-Fi, voyant « Hors réseau », texte refusé affiché) ; essai sur vrai téléphone réussi | ✅ v28 (reste T7 : iPhone 8 jours, vers le 15 nov.) |
+| **Connexion** : écran de connexion à l'ouverture, démo séparée jamais envoyée, pas de question d'envoi pour un technicien ; serveur : refus d'une fiche sur un équipement inconnu ; démos DEMO et VITRINE réinitialisées | ✅ v29 – v30 |
+| **Fichiers joints** : photos et PDF dans l'espace privé « fichiers » de Supabase, hors ligne, droits par entreprise / site / coûts / rôle | ✅ v31 |
+| **Énergie et eau** : calculs (D1), serveur (D2, D2 bis), **terrain (D3)** : compteurs, QR, relevés à faire, contrôle immédiat, remplacement, relevés à examiner, préventif selon les heures avec index à la clôture | ✅ v32 — reste D4 (écran Énergie) et D5 (démo) |
 
-## 0 bis. Chemin vers le pilote (décidé le 7 nov. 2026 : énergie et eau avant le pilote)
+Tests : 87 tests de calcul (`node --test tests/*.test.js`), tests SQL rejoués sur Supabase à chaque script, scénarios
+navigateur avec le serveur factice (réseau simulé : `tests/reseau.py`).
 
-| Ordre | Étape | Pourquoi à cette place | Durée indicative |
+## 0 bis. Chemin vers le pilote (énergie et eau avant le pilote ; offre Supabase gratuite au départ)
+
+| Ordre | Étape | État | Durée indicative |
 |---|---|---|---|
-| 1 | ✅ **Fait (v31, 7 nov. 2026)** — **Fichiers joints** (photos et PDF dans le stockage de fichiers) — 1.2 | Socle des relevés avec photo (D3) et des factures PDF (D4) | 3 – 4 jours |
-| 2 | ✅ **Fait (v32, 7 nov. 2026)** — **D3 Terrain énergie** : compteurs (ressources et équipements), QR, relevés à faire, saisie hors ligne avec contrôle immédiat, préventif selon les heures | Le cœur de l'usage quotidien | 1 semaine |
-| 3 | **D4 Écran Énergie** : consommations avec couverture, relevés à examiner, factures (PDF + montants) et rapprochement, sous-comptages, « créer une demande » depuis un écart | Ce que voit le responsable | 1 semaine |
-| 4 | **D5** : démo énergie (VITRINE / Perfora Démo), guide, tests hors ligne des relevés | Montrer et vérifier | 2 – 3 jours |
-| 5 | **Scripts SQL numérotés** (une seule séquence propre) + **sauvegarde quotidienne maison** + test de restauration | Préparer une production construite d'un seul passage | 3 – 4 jours |
-| 6 | **Sécurité** : compte administrateur séparé + MFA, règles de mot de passe, journal des actions administrateur, limites d'envoi, supervision des erreurs | Avant toute donnée réelle | 1 semaine |
-| 7 | **Production** (projet gratuit) construite par les scripts, tests de sécurité rejoués, app.perfora.ma branchée | 1 à 2 semaines avant le pilote | 1 – 2 jours |
-| 8 | **Pilote** | Avec CNDP déposée et client pilote prêt (côté Hicham) | 4 – 6 semaines |
+| 1 | Fichiers joints (photos et PDF) | ✅ v31 | — |
+| 2 | D3 Énergie sur le terrain | ✅ v32 | — |
+| 3 | **D4 Écran Énergie** : consommations par période avec couverture (par ressource et unité, jamais additionnées), relevés à examiner (tous compteurs), **factures d'énergie** (PDF joint + période exacte + quantité + montant HT, lecture restreinte) et **rapprochement facturé / mesuré**, résidu des sous-comptages « à expliquer », **« créer une demande »** depuis un écart, bilan des cuves si le temps le permet | **prochaine étape** | 1 semaine |
+| 4 | **D5** : démo énergie (compteurs, relevés dont un suspect et un remplacement, facture du 15 au 15) dans VITRINE et Perfora Démo, guide, tests hors ligne des relevés | à faire | 2 – 3 jours |
+| 5 | **Scripts SQL numérotés** (une seule séquence propre) + **sauvegarde quotidienne maison chiffrée** (dépôt GitHub privé) + test de restauration | à faire | 3 – 4 jours |
+| 6 | **Sécurité** : compte administrateur séparé + MFA, règles de mot de passe, journal des actions administrateur, limites d'envoi, supervision des erreurs et du stockage dans le centre de contrôle | à faire | 1 semaine |
+| 7 | **Production** (projet Supabase gratuit) construite par les scripts, tests de sécurité rejoués, app.perfora.ma branchée | 1 à 2 semaines avant le pilote | 1 – 2 jours |
+| 8 | **Pilote** | CNDP déposée + client pilote prêt (côté Hicham) | 4 – 6 semaines |
 
-En parallèle (Hicham) : dépôt CNDP, client pilote, prix des packs, contrat simple.
+Reste environ **3 semaines de travail** de mon côté avant le pilote (D4 → production).
+**En parallèle (Hicham)** : dépôt CNDP (bloquant pour les données réelles), choix du client pilote (pack Entreprise ou
+module énergie accordé), prix des packs, contrat simple, modèle de facture avec le comptable (pour CC3), test T7 iPhone.
+
+Après le pilote : CC3 facturation, CC4 Payzone, classification du parc à l'écran, C bis (inventaire, conditionnement,
+fournisseurs, achats non stockés), volet E (rapports, ratios de production), avertissement en cas de modification d'un
+même champ sur deux téléphones, langue arabe selon les retours du pilote.
 
 ## 1. Phase « Stabilité » (S1 – S3) — priorité 1
 

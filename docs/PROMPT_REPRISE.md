@@ -28,7 +28,19 @@ multi-entreprise) et concepteur d'interfaces terrain mobile-first. Langue : fran
      (décision du 6 nov. 2026 : traçabilité légère, pas de chronomètre).
    Si tu as besoin d'un passage précis, demande à lire le fichier.
 
-3. ÉTAT (fin du 6 nov. 2026, appli v22 publiée sur app.perfora.ma = volets A, B et C terminés) — détail : docs/FEUILLE_DE_ROUTE.md et docs/RECETTE_VOLET_A.md
+3. ÉTAT (7 nov. 2026, appli **v32** sur app.perfora.ma) — **lire d'abord docs/PLANNING_ACTUALISE.md** (§0 « où on en est »,
+   §0 bis « chemin vers le pilote », §8 décisions). Prochaine étape : **D4 écran Énergie** (docs/VOLET_D_CONCEPTION.md §1-8,
+   D3 fait §9). Autres repères : docs/TESTS_HORS_LIGNE.md, docs/CENTRE_CONTROLE_CONCEPTION.md, docs/MISE_EN_SERVICE_CLIENT.md,
+   docs/CLASSIFICATION_PARC.md, docs/DISCUSSION_MODELE_DONNEES.md.
+   - Décisions récentes : offre Supabase gratuite au départ (2 projets : recette actuelle + production créée avant le
+     pilote, sauvegarde maison) ; pas d'inscription libre (essais ouverts par l'administrateur) ; MFA administrateur
+     seulement ; français au lancement (arabe décidé après le pilote) ; énergie et eau avant le pilote ; rester sur
+     Supabase (pas Neon).
+   - Comptes de recette : DEMO « Perfora Démo » et VITRINE sont des **démos** (demo = true, réinitialisables, 39 fiches) ;
+     compte technicien de test hicham.othmani90.tech@gmail.com (VITRINE). Faux serveur actuel : port 8093 (comptes test@,
+     tech2@, tech3@ technicien Tanger, mag@, achat@, expl@, autre@ ; mot de passe test-gmao ; réseau simulé par
+     `python tests/reseau.py 8093 panne|normal|lent|coupures|portail`). Appli locale : ports 8081 et 8082 (deux appareils).
+   - Historique (avant le 7 nov.) : volets A, B et C terminés — détail : docs/FEUILLE_DE_ROUTE.md et docs/RECETTE_VOLET_A.md
    - Appli PWA statique, hors ligne, sans dépendance, sur GitHub Pages :
      https://hichamothmani90-ship-it.github.io/perfora-Eng/ (dépôt hichamothmani90-ship-it/perfora-Eng,
      branche main ; chaque push publie en ~5 min ; si le déploiement Pages échoue, pousser un commit vide).
@@ -48,7 +60,7 @@ multi-entreprise) et concepteur d'interfaces terrain mobile-first. Langue : fran
      othmanihicham99@gmail.com responsable + administrateur plateforme ; hothmani36@outlook.fr magasinier)
      et VITRINE « Vitrine Perfora » (démo réinitialisable, **pack Entreprise** depuis le 6 nov. 2026 pour montrer les achats,
      réinitialisée avec la démo du volet C ; hicham.othmani90@gmail.com responsable). DEMO reste en pack Pro.
-   - Tests : node --test tests/*.test.js (35) ; supabase/tests_*.sql (à rejouer dans le SQL Editor).
+   - Tests : node --test tests/*.test.js (87) ; supabase/tests_*.sql (à rejouer dans le SQL Editor).
      Faux serveur : python tests/serveur_factice.py 8094 (comptes test@ responsable, tech2@ technicien,
      mag@ magasinier, achat@ achats, autre@ autre entreprise ; mot de passe test-gmao ; pack de DEMO modifiable par
      POST /test/abonnement) ; appli : python serveur.py 8081 ;
@@ -72,7 +84,8 @@ multi-entreprise) et concepteur d'interfaces terrain mobile-first. Langue : fran
    - Commits en français, terminés par la ligne Co-Authored-By habituelle.
 
 5. VOLET À TRAITER MAINTENANT :
-   <ex. « Volet A — multi-entreprise, packs et quotas d'utilisateurs par site et par pack »>
+   D4 — écran Énergie (consommations avec couverture, relevés à examiner, factures d'énergie avec PDF et montants en
+   lecture restreinte, rapprochement facturé / mesuré, sous-comptages, « créer une demande » depuis un écart).
    Commence par me proposer le modèle de données, les règles serveur et le découpage en étapes,
    en citant les sections V3 concernées, puis attends ma validation.
 ```
