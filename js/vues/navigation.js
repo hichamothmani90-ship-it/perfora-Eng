@@ -88,6 +88,8 @@
     const aVenir = l.filter(o => !enCours.includes(o) && !attente.includes(o) && !aujourdhui.includes(o));
     const mvts = [...data.mouvements.values()];
     const prets = [...data.besoins.values()].filter(b => l.some(o => o.id === b.otId) && Calculs.etatBesoin(b, mvts) === 'reserve');
+    // R5 : pièces attendues (indisponibles, en achat ou commandées) avec leur étape et la date prévue.
+    const attendues = [...data.besoins.values()].filter(b => l.some(o => o.id === b.otId) && Calculs.etatBesoin(b, mvts) === 'indisponible');
     const rel = App.compteurs && autorise('releve-saisir') ? App.compteurs.dus() : [];
     const aPrendre = presta ? [] : list('demandes').filter(d => d.statut === 'a_examiner').sort((a, b) => (b.creeLe || "").localeCompare(a.creeLe || ""));
     const section = (titre, items, rendu = otCard) => items.length ? `<h2>${titre}</h2>${items.map(rendu).join('')}` : '';
@@ -102,6 +104,7 @@
       ${section('En cours', enCours)}
       ${section('Aujourd’hui', aujourdhui)}
       ${prets.length ? `<h2>Pièces prêtes à récupérer</h2><div class="card"><ul class="lines">${prets.map(b => `<li><span class="grow">${esc(b.qte)} × ${esc(desigBesoin(b))}<br><span class="small muted">pour ${esc(data.ots.get(b.otId)?.ref || '')}</span></span>${badge('Réservée', 'green')}</li>`).join('')}</ul></div>` : ''}
+      ${attendues.length ? `<h2>Pièces attendues</h2><div class="card"><ul class="lines">${attendues.map(b => `<li style="display:block"><div>${esc(b.qte)} × ${esc(desigBesoin(b))} <span class="small muted">pour ${esc(data.ots.get(b.otId)?.ref || '')}</span></div>${App.frisePiece(b)}</li>`).join('')}</ul></div>` : ''}
       ${section('En attente', attente)}
       ${section('À venir', aVenir)}
       ${!l.length ? empty(presta ? 'Aucune intervention ne vous est confiée pour le moment.' : 'Aucun travail affecté. Les demandes à prendre sont ci-dessous.') : ''}

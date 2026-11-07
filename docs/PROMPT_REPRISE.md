@@ -28,12 +28,12 @@ multi-entreprise) et concepteur d'interfaces terrain mobile-first. Langue : fran
      (décision du 6 nov. 2026 : traçabilité légère, pas de chronomètre).
    Si tu as besoin d'un passage précis, demande à lire le fichier.
 
-3. ÉTAT (7 nov. 2026, appli **v39** sur app.perfora.ma) — **lire d'abord docs/PLANNING_ACTUALISE.md** (§0 « où on en est »,
+3. ÉTAT (7 nov. 2026, appli **v40** sur app.perfora.ma) — **lire d'abord docs/PLANNING_ACTUALISE.md** (§0 « où on en est »,
    §0 bis « chemin vers le pilote », §8 décisions). Volet D (énergie et eau) **terminé** (docs/VOLET_D_CONCEPTION.md §7-11). Étapes 5 et 6 faites (docs/PRODUCTION_ET_SAUVEGARDE.md, docs/SECURITE.md).
    Plan à jour : PLANNING_ACTUALISE.md §0 bis (A préparatifs Hicham → B production → C avant le premier client → D/E pilote).
    Prochaine étape : **B — production**, dès que Hicham a créé le projet Supabase de production (A5).
    Refonte en cours (docs/AUDIT_UX_MODELE_DONNEES.md §13) : R1 fait (v36, docs/MAQUETTES_R1.md), R2 fait
-   (v37, docs/MAQUETTES_R2.md §10) ; R3 fait (v38, docs/MAQUETTES_R3.md §14). Stabilisation décidée le 7 nov. : docs/AUDIT_STABILITE_MODELE.md (S1 fait en v39 ; S2, S3 à faire) ; ensuite R5 (maquettes d'abord, validées par Hicham avant de coder). Comptes factices ajoutés : presta@ (prestataire), dir@ (direction).
+   (v37, docs/MAQUETTES_R2.md §10) ; R3 fait (v38, docs/MAQUETTES_R3.md §14). Stabilisation décidée le 7 nov. : docs/AUDIT_STABILITE_MODELE.md (S1 fait en v39 ; S2, S3 à faire) ; R5 fait (v40, docs/MAQUETTES_R5.md §14) ; prochain : S2 puis R4 (maquettes d'abord). Comptes factices ajoutés : presta@ (prestataire), dir@ (direction).
    Administrateur : double authentification ACTIVÉE (7 nov.) : droits seulement en session « aal2 » (code de l'appli d'authentification) ;
    dans le SQL Editor, pour agir en administrateur : claims avec 'aal':'aal2'. Autres repères : docs/TESTS_HORS_LIGNE.md, docs/CENTRE_CONTROLE_CONCEPTION.md, docs/MISE_EN_SERVICE_CLIENT.md,
    docs/CLASSIFICATION_PARC.md, docs/DISCUSSION_MODELE_DONNEES.md.
@@ -60,13 +60,13 @@ multi-entreprise) et concepteur d'interfaces terrain mobile-first. Langue : fran
      (site, dépôt perfora-site) en ligne ; DNS chez Cloudflare (docs/MISE_EN_LIGNE_PERFORA_MA.md). E-mails pro en place (contact@ → Gmail ; envois Supabase par Resend depuis no-reply@perfora.ma). Ensuite volet D (énergie et eau). Ou mise
      en production (docs/RECETTE_VOLET_A.md §4). Démo VITRINE à réinitialiser une fois (nouvelles données magasin).
    - Supabase « gmao-terrain » (réf. oihaqzkqhvyjybijsonc, Frankfurt). Scripts dans l'ordre :
-     schema.sql → roles.sql → multitenant.sql → quotas.sql → plateforme.sql → durcissement.sql → magasin.sql → achats.sql → energie.sql → mise_en_service.sql → centre_controle.sql → centre_controle_cc2.sql → references.sql → fichiers.sql → securite.sql → roles_r1.sql (généré : python scripts/generer_roles_r1.py) → interventions_r2.sql (généré : python scripts/generer_interventions_r2.py) → membres_r3.sql (généré : python scripts/generer_membres_r3.py) → stabilite_s1.sql (généré : python scripts/generer_stabilite_s1.py) → demo.sql → demo_energie.sql (généré : python scripts/generer_demo_energie.py) ; séquence unique pour une base neuve :
+     schema.sql → roles.sql → multitenant.sql → quotas.sql → plateforme.sql → durcissement.sql → magasin.sql → achats.sql → energie.sql → mise_en_service.sql → centre_controle.sql → centre_controle_cc2.sql → references.sql → fichiers.sql → securite.sql → roles_r1.sql (généré : python scripts/generer_roles_r1.py) → interventions_r2.sql (généré : python scripts/generer_interventions_r2.py) → membres_r3.sql (généré : python scripts/generer_membres_r3.py) → stabilite_s1.sql (généré : python scripts/generer_stabilite_s1.py) → magasin_r5.sql (généré : python scripts/generer_magasin_r5.py) → demo.sql → demo_energie.sql (généré : python scripts/generer_demo_energie.py) ; séquence unique pour une base neuve :
      supabase/production/construire_base.sql (générée : python scripts/assembler_sql.py ; --verifier avant un commit) ; tests : tests_etancheite, tests_quotas, tests_plateforme, tests_magasin, tests_demo, tests_achats, tests_energie, tests_mise_en_service, tests_centre_controle, tests_centre_controle_cc2, tests_references, tests_fichiers, tests_securite (tous rejouables en local : bash scripts/sauvegarde/tester_sql.sh) ;
      Edge Function supabase/functions/inviter. Entreprises : DEMO « Perfora Démo » (Site Tanger, pack Pro ;
      othmanihicham99@gmail.com responsable + administrateur plateforme ; hothmani36@outlook.fr magasinier)
      et VITRINE « Vitrine Perfora » (démo réinitialisable, **pack Entreprise** depuis le 6 nov. 2026 pour montrer les achats,
      réinitialisée avec la démo du volet C ; hicham.othmani90@gmail.com responsable). DEMO reste en pack Pro.
-   - Tests : node --test tests/*.test.js (107) ; supabase/tests_*.sql (à rejouer dans le SQL Editor).
+   - Tests : node --test tests/*.test.js (115) ; supabase/tests_*.sql (à rejouer dans le SQL Editor).
      Faux serveur : python tests/serveur_factice.py 8094 (comptes test@ responsable, tech2@ technicien,
      mag@ magasinier, achat@ achats, autre@ autre entreprise ; mot de passe test-gmao ; pack de DEMO modifiable par
      POST /test/abonnement) ; appli : python serveur.py 8081 ;

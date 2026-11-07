@@ -5,7 +5,7 @@
 (() => {
   const { data } = Store;
   /** Version affichée dans Réglages : à incrémenter avec VERSION dans sw.js. */
-  const APP_VERSION = 'v39';
+  const APP_VERSION = 'v40';
   if (window.Erreurs) Erreurs.version = APP_VERSION;
   const $ = s => document.querySelector(s);
   // Multi-site : les listes de fiches de site ne montrent que le site actif (« tous » possible).
@@ -240,15 +240,15 @@
   /** Journal d'audit complet : responsable, direction, administrateur (le serveur ne renvoie aux autres que leurs lignes). */
   const voitJournal = () => !role() || ['responsable', 'pilote'].includes(role()) || estAdminClient();
   const DROITS = {
-    responsable: ['ot-valider-qualif', 'ot-qualifier', 'eq-new', 'eq-edit', 'loc-new', 'prog-new', 'prog-edit', 'ot-rouvrir', 'sync-tout', 'equipe', 'param-cloture', 'cpt-new', 'cpt-edit', 'releve-qualifier', 'seuil-valider', 'seuil-refuser', 'achat-valider', 'achat-completer', 'achat-refuser'],
+    responsable: ['achat-valider-apres', 'achat-refuser-apres', 'param-qui-commande', 'ot-valider-qualif', 'ot-qualifier', 'eq-new', 'eq-edit', 'loc-new', 'prog-new', 'prog-edit', 'ot-rouvrir', 'sync-tout', 'equipe', 'param-cloture', 'cpt-new', 'cpt-edit', 'releve-qualifier', 'seuil-valider', 'seuil-refuser', 'achat-valider', 'achat-completer', 'achat-refuser'],
     terrain: ['ot-new', 'dem-intervenir', 'dem-planifier', 'prog-ot', 'dem-pec', 'dem-classer', 'ot-demarrer', 'ot-planifier', 'ot-annuler', 'ot-suspendre', 'ot-reprendre', 'ot-terminer', 'ot-cloturer',
       'ot-ajout-int', 'ot-retirer', 'ot-ajout-piece', 'ot-annuler-piece', 'ot-ajout-suite', 'ot-lever',
       'bes-new', 'bes-urgent', 'bes-utilise', 'bes-rendre', 'bes-annuler'],
-    magasin: ['art-new', 'mvt', 'mag-reserver', 'mag-remettre', 'mag-indispo', 'mag-rattacher', 'mag-verifier', 'seuil-proposer', 'achat-new', 'achat-soumettre', 'achat-annuler', 'achat-qte', 'achat-recevoir', 'achat-clore', 'iso-decider'],
+    magasin: ['mag-achat', 'mag-achat-ajout', 'mag-commandee', 'art-new', 'mvt', 'mag-reserver', 'mag-remettre', 'mag-indispo', 'mag-rattacher', 'mag-verifier', 'seuil-proposer', 'achat-new', 'achat-soumettre', 'achat-annuler', 'achat-qte', 'achat-recevoir', 'achat-clore', 'iso-decider'],
     achats: ['achat-commande'],
     saisie: ['dem-edit', 'dem-annuler', 'photo-ajout', 'signaler'],
   };
-  const ACT_MODULE = { 'art-new': 'magasin', mvt: 'magasin', 'mag-reserver': 'magasin', 'mag-remettre': 'magasin', 'mag-indispo': 'magasin', 'mag-rattacher': 'magasin', 'mag-verifier': 'magasin', 'seuil-proposer': 'magasin', 'seuil-valider': 'magasin', 'seuil-refuser': 'magasin', 'achat-new': 'achats', 'achat-soumettre': 'achats', 'achat-annuler': 'achats', 'achat-qte': 'achats', 'achat-valider': 'achats', 'achat-completer': 'achats', 'achat-refuser': 'achats', 'achat-commande': 'achats', 'achat-recevoir': 'achats', 'achat-clore': 'achats', 'iso-decider': 'achats', 'bes-new': 'magasin', 'bes-urgent': 'magasin', 'bes-utilise': 'magasin', 'bes-rendre': 'magasin', 'bes-annuler': 'magasin', 'prog-new': 'preventif', 'prog-edit': 'preventif', 'prog-ot': 'preventif' };
+  const ACT_MODULE = { 'mag-achat': 'achats', 'mag-achat-ajout': 'achats', 'mag-commandee': 'magasin', 'achat-valider-apres': 'achats', 'achat-refuser-apres': 'achats', 'param-qui-commande': 'achats', 'art-new': 'magasin', mvt: 'magasin', 'mag-reserver': 'magasin', 'mag-remettre': 'magasin', 'mag-indispo': 'magasin', 'mag-rattacher': 'magasin', 'mag-verifier': 'magasin', 'seuil-proposer': 'magasin', 'seuil-valider': 'magasin', 'seuil-refuser': 'magasin', 'achat-new': 'achats', 'achat-soumettre': 'achats', 'achat-annuler': 'achats', 'achat-qte': 'achats', 'achat-valider': 'achats', 'achat-completer': 'achats', 'achat-refuser': 'achats', 'achat-commande': 'achats', 'achat-recevoir': 'achats', 'achat-clore': 'achats', 'iso-decider': 'achats', 'bes-new': 'magasin', 'bes-urgent': 'magasin', 'bes-utilise': 'magasin', 'bes-rendre': 'magasin', 'bes-annuler': 'magasin', 'prog-new': 'preventif', 'prog-edit': 'preventif', 'prog-ot': 'preventif' };
   // Réglages de l'entreprise (une fiche « parametres », écrite par le responsable, lue par tous).
   const parametres = () => data.parametres.get('parametres-' + (Sync.profil()?.entreprise?.id || 'local')) || null;
   /** Clôture réservée au responsable (réglage) : les autres terminent, le responsable valide. */
@@ -260,6 +260,8 @@
     if (act === 'releve-saisir' || act === 'cpt-rupture') return !r || (ecritureOK() && ['technicien', 'prestataire', 'exploitation', 'responsable'].includes(r));
     // Factures d'énergie : responsable et achats (miroir de energie.sql).
     if (act === 'fact-saisir') return aModule('energie') && (!r || (ecritureOK() && ['responsable', 'achats'].includes(r)));
+    // R5 (Q2 bis) : la commande est renseignée par la personne désignée (Achats par défaut, magasinier sur réglage), le responsable toujours.
+    if (act === 'achat-commande') return aModule('achats') && (!r || ecritureOK()) && Calculs.peutCommander(r, parametres()?.quiCommande || 'achats');
     if (ACT_MODULE[act] && !aModule(ACT_MODULE[act])) return false;
     if (r && !ecritureOK() && Object.values(DROITS).some(l => l.includes(act))) return false;
     if (!r || r === 'responsable') return true;
@@ -407,6 +409,9 @@
     const prev = preventifsSansOT(7);
     const rel = App.compteurs && autorise('releve-saisir') ? App.compteurs.dus() : [];
     const nrj = App.energie ? App.energie.aExaminer() : 0;
+    const achatsVus = aModule('achats') && estResp() ? list('achats') : [];
+    const urgAValider = Calculs.urgentsAValider(achatsVus);
+    const aCommander = (parametres()?.quiCommande === 'responsable') ? achatsVus.filter(d => ['validee', 'transmise'].includes(d.statut) || (d.statut === 'soumise' && d.urgent)) : [];
     return `<h1>Aujourd’hui <span class="muted small" style="font-weight:400">${fmtY(today())}</span></h1>
       ${!me ? `<p class="warn">Indiquez qui utilise cet appareil pour signer vos saisies. <a href="#" data-act="who">Choisir</a></p>` : ''}
       ${rappelSauvegarde()}
@@ -417,7 +422,10 @@
         <a class="tile" href="#/preventif"><b>${prev.length}</b><span>Préventifs à lancer (7 j)</span></a>
         ${rel.length ? `<a class="tile ${rel.some(x => x.retardJours > 0) ? 'amber' : ''}" href="#/compteurs"><b>${rel.length}</b><span>Relevés à faire</span></a>` : ''}
         ${nrj ? `<a class="tile amber" href="#/energie?o=examiner"><b>${nrj}</b><span>Énergie : à examiner</span></a>` : ''}
+        ${urgAValider.length ? `<a class="tile red" href="#/achats"><b>${urgAValider.length}</b><span>Achats urgents à valider</span></a>` : ''}
+        ${aCommander.length ? `<a class="tile blue" href="#/achats?f=commander"><b>${aCommander.length}</b><span>Achats à commander</span></a>` : ''}
       </div>
+      ${urgAValider.length && App.carteAchat ? `<h2>Achats urgents à valider <span class="muted small" style="font-weight:400">· commandés avant validation</span></h2>${urgAValider.map(App.carteAchat).join('')}` : ''}
       ${rel.length ? `<h2>Relevés à faire aujourd’hui</h2>${rel.slice(0, 5).map(App.carteReleveDu).join('')}${rel.length > 5 ? `<a class="btn ghost" href="#/compteurs">Tous les relevés à faire (${rel.length})</a>` : ''}` : ''}
       ${indispo.length ? `<h2>Indisponibles</h2>${indispo.map(eqCard).join('')}` : ''}
       ${aValider.length ? `<h2>Interventions à valider</h2>${aValider.map(otCard).join('')}` : ''}
@@ -744,6 +752,13 @@
   // Stock par site : celui de l'intervention, pas le site affiché sur l'appareil.
   const dispo = (id, siteId) => Calculs.stockDisponible([...data.besoins.values()], [...data.mouvements.values()], id, siteId);
   const optsArticles = siteId => list('articles').filter(a => a.actif !== false).map(a => [a.id, `${a.designation} · disponible ${dispo(a.id, siteId)} ${a.unite || ''}`]);
+  /** R5 : étapes d'une pièce (demandée → … → remise), calculées depuis la pièce, sa demande d'achat et les mouvements. */
+  function frisePiece(b) {
+    const et = Calculs.suiviBesoin(b, list('achats'), [...data.mouvements.values()]);
+    if (et.length <= 3 && !et.some(e => e.cle === 'reservee' && e.fait)) return '';
+    const cour = et.findIndex(e => !e.fait);
+    return `<div class="suivi-piece">${et.map((e, i) => `<span class="${e.fait ? 'fait' : i === cour ? 'cour' : ''}">${e.fait ? '✓ ' : ''}${esc(e.libelle)}${e.date ? ' ' + esc(fmtY(e.date)) : ''}</span>`).join('')}</div>`;
+  }
   /** R2 : une seule liste — chaque pièce montre son état (demandée → réservée → remise / en main → utilisée ou rendue). */
   function blocPieces(o, titre = 'Pièces') {
     const mvts = [...data.mouvements.values()];
@@ -758,6 +773,7 @@
         r.ecart && '<b>écart à expliquer</b>', b.delai && `délai annoncé ${esc(fmtY(b.delai))}`].filter(Boolean).join(' · ');
       return `<li class="${actif ? '' : 'off'}" style="display:block"><div>${esc(b.qte)} × ${esc(desigBesoin(b))}${b.articleId ? '' : ' <span class="muted small">(hors catalogue)</span>'} ${b.urgent ? badge('Urgent', 'red') : ''} ${badge(r.utilise && !r.detenu ? 'Utilisée' : L.etatBesoin[e], r.utilise && !r.detenu ? 'green' : CLS_BESOIN[e] || '')}</div>
         <div class="small muted">Demandée ${esc(fmtY(b.demandeLe || b.creeLe))} par ${esc(b.demandeur || b.creePar)}${suivi ? ' · ' + suivi : ''}</div>
+        ${actif ? frisePiece(b) : ''}
         ${btn ? `<div class="actions" style="margin:8px 0 0">${btn}</div>` : ''}</li>`;
     });
     // Pièces déclarées sans demande au magasin : hors stock, ou sorties directement (avant le volet B).
@@ -968,13 +984,16 @@
       ${blocEntreprise()}
       <h2>Membres</h2><div class="card"><p class="small muted" style="margin-top:0">Une seule liste : les membres avec ou sans accès à l’appli, leurs équipes, leur société et leurs habilitations.</p><div class="actions" style="margin-bottom:0"><a class="btn primary" href="#/membres">Membres</a><a class="btn" href="#/equipes">Équipes</a><a class="btn" href="#/societes">Sociétés</a></div></div>
       <h2>Règles de l’entreprise</h2><div class="card"><div class="row"><span class="grow"><b>Clôture des interventions validée par le responsable</b><br><span class="small muted">${parametres()?.clotureParResponsable ? 'Activé : les techniciens terminent, le responsable valide la clôture.' : 'Désactivé : les techniciens clôturent eux-mêmes leurs interventions.'}</span></span>${badge(parametres()?.clotureParResponsable ? 'Activé' : 'Désactivé', parametres()?.clotureParResponsable ? 'green' : '')}</div>
-        <div class="actions" style="margin-bottom:0"><button class="btn sm" data-act="param-cloture">${parametres()?.clotureParResponsable ? 'Désactiver' : 'Activer'}</button></div></div>
+        <div class="actions" style="margin-bottom:0"><button class="btn sm" data-act="param-cloture">${parametres()?.clotureParResponsable ? 'Désactiver' : 'Activer'}</button></div>
+        ${aModule('achats') ? `<div class="row" style="margin-top:12px"><span class="grow"><b>Qui passe les commandes aux fournisseurs ?</b><br><span class="small muted">${esc(QUI_COMMANDE[parametres()?.quiCommande || 'achats'])}. Le responsable peut toujours commander lui-même.</span></span></div>
+        <div class="actions" style="margin-bottom:0"><button class="btn sm" data-act="param-qui-commande">Changer</button></div>` : ''}</div>
       <h2>Lieux</h2><div class="card"><ul class="lines">${list('localisations').map(l => `<li><span class="grow">${esc(locPath(l.id))} <span class="muted small">· ${esc(l.code)}</span></span></li>`).join('') || '<li class="muted">Aucun lieu.</li>'}</ul><button class="btn sm" data-act="loc-new">+ Lieu</button></div>
       <h2>Données</h2><div class="card"><p class="small muted" style="margin-top:0">${connecte ? 'Le serveur sauvegarde chaque nuit. Export pour vos archives ou un tableur.' : `Dernière sauvegarde : <b>${(x => x.depuis ? fmtY(x.depuis) + ` (${x.modifs} modification(s) depuis)` : 'jamais')(etatSauvegarde())}</b>. Exportez sur le téléphone, importez sur le PC (ou l’inverse) : les fiches sont fusionnées.`}</p>
         <div class="actions"><button class="btn" data-act="export">Exporter (JSON)</button>${connecte ? '' : '<button class="btn" data-act="import">Importer</button>'}<button class="btn" data-act="csv">Interventions (CSV Excel)</button></div>
         <input type="file" id="importFile" accept=".json,application/json" class="hidden"></div>`;
   };
 
+  const QUI_COMMANDE = { achats: 'Le rôle Achats', responsable: 'Le responsable', magasinier: 'Le magasinier' };
   const MODULES = { base: 'Demandes et interventions', preventif: 'Préventif', magasin: 'Magasin', rapports: 'Rapports', achats: 'Achats', energie: 'Énergie et eau', imports: 'Imports Excel' };
   function blocEntreprise() {
     const p = Sync.profil();
@@ -1448,6 +1467,15 @@
     return true;
   }
   A['ot-cloturer'] = async el => { await cloturer(data.ots.get(el.dataset.id)); };
+  A['param-qui-commande'] = async () => {
+    const v = await askForm({ title: 'Qui passe les commandes ?', values: { qui: parametres()?.quiCommande || 'achats' }, fields: [
+      { name: 'qui', label: 'Les demandes d’achat validées (ou urgentes) sont commandées par', type: 'chips', options: QUI_COMMANDE, required: true },
+      { type: 'info', text: 'Sans compte Achats actif, choisissez le responsable ou le magasinier : les demandes à commander arrivent sur son accueil.' }] });
+    if (!v) return;
+    const id = 'parametres-' + (Sync.profil()?.entreprise?.id || 'local');
+    await Store.save('parametres', { ...(data.parametres.get(id) || { id }), quiCommande: v.qui }, { action: 'reglage' });
+    render();
+  };
   A['param-cloture'] = async () => {
     const id = 'parametres-' + (Sync.profil()?.entreprise?.id || 'local');
     const cur = data.parametres.get(id) || { id };
@@ -2169,7 +2197,7 @@
   }
 
   // Aides communes pour les écrans par domaine (js/vues/*.js, scripts classiques chargés après app.js).
-  window.App = { version: APP_VERSION, otCard, demCard, eqCard, actifs, otOuvert, demandeOuverte, estAdminClient, voitJournal, modeDemo, preventifsSansOT, V, A, L, esc, badge, empty, seg, search, askForm, askConfirm, askText, alertBox, toast, edit, list, render, fmt, fmtY, today, refDe,
+  window.App = { version: APP_VERSION, frisePiece, parametres, otCard, demCard, eqCard, actifs, otOuvert, demandeOuverte, estAdminClient, voitJournal, modeDemo, preventifsSansOT, V, A, L, esc, badge, empty, seg, search, askForm, askConfirm, askText, alertBox, toast, edit, list, render, fmt, fmtY, today, refDe,
     role, autorise, aModule, siteActif, nomSite, mesSites, desigBesoin, CLS_BESOIN, leverAttentesPieces, exportCsv, AFTER, adressePublique, eq, locPath, ajouterFichier, progCard, fieldHtml };
 
   let annonces = [];

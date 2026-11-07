@@ -25,7 +25,8 @@ droit administrateur de l'entreprise, prestataire limité à ses interventions, 
 intervention en étapes, qualification proposée / validée, arrêts planifiés / non planifiés, saisie rapide, Signaler en
 trois questions. **R3 fait (v38)** : une seule liste de membres (avec ou sans accès), équipes, sociétés prestataires, habilitations,
 accès donnés par l'administrateur depuis la fiche du membre. **Stabilisation d'abord** (audit du 7 nov., docs/AUDIT_STABILITE_MODELE.md) : **lot S1 fait (v39)** (fusion des listes, périmètre r3,
-version minimale) ; ensuite R5 ; S2 avant R4 ; S3 avec la production. Ensuite **R5** (magasin ↔ achats relié ; maquettes d'abord).
+version minimale) ; ensuite R5 ; S2 avant R4 ; S3 avec la production. **R5 fait (v40)** : pièce indisponible → achat lié → réservée à la réception, achat urgent, qui commande. Prochain :
+**S2** (stabilisation, avant R4), puis **R4** (tableaux de bord, MTBF / MTTR ; maquettes d'abord).
 
 ## 0 bis. Plan actualisé jusqu'au pilote
 

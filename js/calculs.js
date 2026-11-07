@@ -729,6 +729,64 @@
   /** Intervention confiée à l'une des équipes données. */
   const otDeMesEquipes = (o, equipeIds) => !!o.equipeId && (equipeIds || []).includes(o.equipeId);
 
+  // ---------- lot R5 : magasin ↔ achats relié (docs/MAQUETTES_R5.md) ----------
+  const ACHAT_VALIDE = ['validee', 'transmise', 'commandee', 'partiellement_recue', 'recue', 'close'];
+  /** Ligne de demande d'achat liée à une pièce (besoin). */
+  function achatDuBesoin(b, achats) {
+    let da = b.achatId ? achats.find(a => a.id === b.achatId) : achats.find(a => (a.lignes || []).some(l => l.besoinId === b.id));
+    // Technicien : il ne lit pas les achats (prix) ; le serveur recopie sur la pièce un résumé sans prix (suiviAchat).
+    const s = b.suiviAchat;
+    if (!da && s && s.achatId) da = { id: s.achatId, ref: s.ref, statut: s.statut, urgent: s.urgent, fournisseur: s.fournisseur, dateCommande: s.dateCommande,
+      livraisonPrevue: s.livraisonPrevue, valideLe: s.valideLe, lignes: [{ id: s.ligneId, besoinId: b.id, qte: s.qte ?? b.qte }] };
+    if (!da || ['annulee', 'refusee'].includes(da.statut)) return null;
+    const l = (da.lignes || []).find(x => x.id === b.ligneId) || (da.lignes || []).find(x => x.besoinId === b.id) || null;
+    return { da, l };
+  }
+  /** Étapes d'une pièce demandée pour une intervention, calculées sans nouvelle saisie :
+      demandée → (indisponible → achat demandé → validé → commandé → livraison prévue → reçu) → réservée → remise.
+      Renvoie [{ cle, libelle, fait, date }] ; « courante » = première étape non faite. */
+  function suiviBesoin(b, achats, mouvements) {
+    const e = etatBesoin(b, mouvements), remis = e === 'remis';
+    const reservee = abs(b.qteReservee) > 0 || remis || e === 'partiellement_remis';
+    const lien = achatDuBesoin(b, achats || []);
+    const etapes = [{ cle: 'demandee', libelle: 'Demandée', fait: true, date: b.demandeLe || b.creeLe || null }];
+    const commande = lien ? null : b.commande;
+    if (lien || commande || b.statut === 'indisponible') {
+      etapes.push({ cle: 'indisponible', libelle: 'Indisponible', fait: true, date: null });
+      if (!lien && !commande && b.delai && !reservee) etapes.push({ cle: 'livraison', libelle: 'Délai annoncé', fait: false, date: b.delai });
+      if (lien) {
+        const { da, l } = lien, st = da.statut;
+        etapes.push({ cle: 'achat', libelle: 'Achat demandé ' + (da.ref || ''), fait: true, date: da.redigeLe || da.creeLe || null });
+        if (!da.urgent) etapes.push({ cle: 'validee', libelle: 'Validé', fait: ACHAT_VALIDE.includes(st), date: da.valideLe || null });
+        const cmd = ACHAT_COMMANDE.includes(st) || st === 'close';
+        etapes.push({ cle: 'commandee', libelle: 'Commandée' + (da.fournisseur ? ' · ' + da.fournisseur : ''), fait: cmd, date: da.dateCommande || null });
+        const recu = l ? receptionLigne(da, l, mouvements).recu > 0 : false;
+        if (da.livraisonPrevue && !recu && !remis) etapes.push({ cle: 'livraison', libelle: 'Livraison prévue', fait: false, date: da.livraisonPrevue });
+        etapes.push({ cle: 'recue', libelle: 'Reçue', fait: recu || remis, date: null });
+      } else if (commande) {
+        etapes.push({ cle: 'commandee', libelle: 'Commandée' + (commande.fournisseur ? ' · ' + commande.fournisseur : ''), fait: true, date: commande.le || null });
+        if (commande.livraisonPrevue && !reservee) etapes.push({ cle: 'livraison', libelle: 'Livraison prévue', fait: false, date: commande.livraisonPrevue });
+      }
+    }
+    etapes.push({ cle: 'reservee', libelle: 'Réservée', fait: reservee, date: b.reserveLe || null });
+    etapes.push({ cle: 'remise', libelle: 'Remise', fait: remis, date: null });
+    // Une étape faite plus loin vaut pour les précédentes (ex. remise directe sans réservation).
+    for (let i = etapes.length - 2; i >= 0; i--) if (etapes[i + 1].fait && etapes[i].cle !== 'livraison') etapes[i].fait = true;
+    return etapes;
+  }
+  /** Pièces en attente d'un article (indisponibles ou pas encore réservées), urgentes d'abord puis les plus anciennes :
+      à proposer à la réservation lors d'une entrée en stock. reste = quantité encore à réserver. */
+  function besoinsEnAttenteArticle(besoins, mouvements, articleId, siteId) {
+    return besoins.filter(b => b.articleId === articleId && (!siteId || !b.siteId || b.siteId === siteId))
+      .map(b => ({ b, etat: etatBesoin(b, mouvements), reste: Math.max(0, abs(b.qte) - Math.max(abs(b.qteReservee), qteRemise(mouvements, b.id))) }))
+      .filter(x => ['demande', 'indisponible', 'partiellement_remis', 'reserve'].includes(x.etat) && x.reste > 0)
+      .sort((x, y) => !!y.b.urgent - !!x.b.urgent || (x.b.demandeLe || x.b.creeLe || '').localeCompare(y.b.demandeLe || y.b.creeLe || ''));
+  }
+  /** Demandes d'achat urgentes commandées (ou soumises) mais pas encore validées : à valider après coup. */
+  const urgentsAValider = achats => achats.filter(a => a.urgent && !a.valideLe && !a.refusApresCoup && !['annulee', 'refusee', 'brouillon'].includes(a.statut));
+  /** Peut renseigner la commande : le rôle désigné (Achats par défaut), le responsable toujours. */
+  const peutCommander = (role, quiCommande) => !role || role === 'responsable' || role === 'achats' || (role === 'magasinier' && quiCommande === 'magasinier');
+
   // ---------- lot S1 : listes fusionnées élément par élément (miroir de supabase/stabilite_s1.sql) ----------
   /** Clé d'un élément : son id (objet), sa valeur (texte, nombre, booléen) ; null sinon. */
   const cleElement = e => e === null || e === undefined || Array.isArray(e) ? null
@@ -772,7 +830,7 @@
     return p;
   }
 
-  const Calculs = { cleElement, listeFusionnable, decrireListe, fusionPatch, nomComparable, doublonsNom, habilitationEchue, habilitationsEchues, equipesDe, otConfiee, otDeMesEquipes, demoEnergie, bornesMois, moisDecale, tableauEnergie, controleReleve, echeanceCompteur, UNITES, UNITES_RESSOURCE, ANOMALIES_CONFIRMABLES, analyserReleves, consommationPeriode, rapprochementFacture, residuSousComptage, totauxParUnite, relevesDus, bilanCombustible, totalFactures,
+  const Calculs = { achatDuBesoin, suiviBesoin, besoinsEnAttenteArticle, urgentsAValider, peutCommander, cleElement, listeFusionnable, decrireListe, fusionPatch, nomComparable, doublonsNom, habilitationEchue, habilitationsEchues, equipesDe, otConfiee, otDeMesEquipes, demoEnergie, bornesMois, moisDecale, tableauEnergie, controleReleve, echeanceCompteur, UNITES, UNITES_RESSOURCE, ANOMALIES_CONFIRMABLES, analyserReleves, consommationPeriode, rapprochementFacture, residuSousComptage, totauxParUnite, relevesDus, bilanCombustible, totalFactures,
     montantCommande, isolementsEnAttente, consommationHebdo, seuilIndicatif, seuilActif, besoinsNonCouverts, receptionLigne, etatAchat, qteEnCommande, qteIsolee, situationArticle, aReapprovisionner, prixMAD, valorisation, coutConsomme, besoinsAServir, attentesALever, piecesDetenues, stockPhysique, qteReservee, stockDisponible, etatBesoin, rapprochementBesoin, retraitsAVerifier, qteRemise, addDays, daysBetween, minutesBetween, dureeUnion, mediane, NATURE_DU_BESOIN, ETAT_RANK, otOuvert, demandeOuverte, indexOtsParDemande, etatEquipement, verifierCloture, qualification, typeArret, typeArretPropose, aQualifier, ETAT_SIGNALE, echeanceSuivante, indicateurs };
   if (typeof module === 'object' && module.exports) module.exports = Calculs; else root.Calculs = Calculs;
 })(this);

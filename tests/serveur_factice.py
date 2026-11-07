@@ -120,6 +120,38 @@ def cloture_par_responsable(ent):
     return bool(f and f["entreprise"] == ent and f["data"].get("clotureParResponsable"))
 
 
+# Lot R5 (miroir de supabase/magasin_r5.sql) : qui commande, commande d'une demande validée ou urgente.
+def r5_qui_commande(ent):
+    f = fiches.get("parametres-" + ENTREPRISES[ent]["id"])
+    return (f and f["entreprise"] == ent and f["data"].get("quiCommande")) or "achats"
+
+
+def r5_suivi_besoins(daid, ent):
+    d = fiches[daid]["data"]
+    for l in d.get("lignes") or []:
+        b = fiches.get(l.get("besoinId") or "")
+        if not (b and b["type"] == "besoins" and b["entreprise"] == ent):
+            continue
+        resume = {k: v for k, v in {"achatId": daid, "ligneId": l.get("id"), "ref": d.get("ref"), "statut": d.get("statut"), "urgent": d.get("urgent"),
+                                    "fournisseur": d.get("fournisseur"), "dateCommande": d.get("dateCommande"), "livraisonPrevue": d.get("livraisonPrevue"),
+                                    "valideLe": d.get("valideLe"), "qte": l.get("qteCommandee", l.get("qte"))}.items() if v is not None}
+        if b["data"].get("suiviAchat") != resume:
+            seq[0] += 1
+            b["data"]["suiviAchat"] = resume
+            b["seq"] = seq[0]
+
+
+CHAMPS_COMMANDE = {"statut", "fournisseur", "fournisseurId", "refCommande", "dateCommande", "livraisonPrevue", "devise", "taux",
+                   "lignes", "commandeLe", "commandePar", "modifieLe", "modifiePar"}
+
+
+def r5_commande_acceptee(r, d, pa, ent):
+    return ((r == "achats" or (r == "magasinier" and r5_qui_commande(ent) == "magasinier"))
+            and (pa.get("statut") or "commandee") in ("transmise", "commandee")
+            and (d.get("statut") in ("validee", "transmise", "commandee", "partiellement_recue", "recue") or (d.get("urgent") is True and d.get("statut") == "soumise"))
+            and all(k in CHAMPS_COMMANDE for k in pa))
+
+
 def module_compteur(t, pa, ex, ent, mod):
     """D2 bis : un compteur d'équipement (et ses relevés, son journal) relève du préventif."""
     exd = (ex or {}).get("data", {})
@@ -822,6 +854,10 @@ class H(BaseHTTPRequestHandler):
                     motif = "un seuil validé ne se modifie pas : proposez une nouvelle version"
                 elif t == "seuils" and not ex and not pa.get("articleId"):
                     motif = "un seuil se rattache à un article"
+                elif t == "achats" and (pa.get("urgent", exd.get("urgent")) is True) and not str(pa.get("motifUrgence") or exd.get("motifUrgence") or "").strip():
+                    motif = "achat urgent : indiquer le motif (ex. machine à l'arrêt)"
+                elif t == "achats" and ex and r in ("achats", "magasinier") and r5_commande_acceptee(r, exd, pa, ent):
+                    motif = None
                 elif t == "achats" and r == "achats" and not ex:
                     motif = "une demande d'achat est rédigée par le magasin ou le responsable"
                 elif t == "achats" and r == "achats" and ex["data"].get("statut") not in ("validee", "transmise", "commandee", "partiellement_recue", "recue"):
@@ -895,6 +931,8 @@ class H(BaseHTTPRequestHandler):
                     pa = s1_fusion_listes(ex["data"], pa, listes)
                 data = {**(ex["data"] if ex else {}), **pa, **({"siteId": s} if s else {})}
                 fiches[f["id"]] = {"id": f["id"], "type": t, "data": data, "seq": seq[0], "entreprise": ent, "site": s, "auteur": ex.get("auteur", email) if ex else email}
+                if t == "achats":   # R5 : résumé sans prix recopié sur les pièces liées
+                    r5_suivi_besoins(f["id"], ent)
         return self.repondre(200, {"acceptes": acceptes, "refuses": refus})
 
     def plateforme(self, email, nom):

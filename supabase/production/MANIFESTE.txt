@@ -19,6 +19,7 @@ Séquence de construction d'une base Perfora neuve (générée par scripts/assem
 17_interventions_r2.sql      supabase/interventions_r2.sql  sha256:1adb58e1a07caded
 18_membres_r3.sql            supabase/membres_r3.sql  sha256:41d62da7f62651bb
 19_stabilite_s1.sql          supabase/stabilite_s1.sql  sha256:89903bcafc20da74
-20_demo.sql                  supabase/demo.sql  sha256:8e724fa0fbc29b27
-21_demo_energie.sql          supabase/demo_energie.sql  sha256:7d45dd219704c0d0
+20_magasin_r5.sql            supabase/magasin_r5.sql  sha256:1b0bf2bfda01977a
+21_demo.sql                  supabase/demo.sql  sha256:8e724fa0fbc29b27
+22_demo_energie.sql          supabase/demo_energie.sql  sha256:7d45dd219704c0d0
 99_controles.sql             (contrôles de fin, généré)

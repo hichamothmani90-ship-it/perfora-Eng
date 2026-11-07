@@ -1,4 +1,4 @@
--- ===== 21_demo_energie.sql — copie générée de supabase/demo_energie.sql (empreinte 7d45dd219704c0d0) : ne pas modifier ici =====
+-- ===== 22_demo_energie.sql — copie générée de supabase/demo_energie.sql (empreinte 7d45dd219704c0d0) : ne pas modifier ici =====
 -- GMAO terrain — démo : énergie et eau (volet D, étape D5). APRÈS fichiers.sql (et demo.sql).
 -- FICHIER GÉNÉRÉ par scripts/generer_demo_energie.py depuis Calculs.demoEnergie (js/calculs.js) : ne pas modifier à la main.
 -- Scénario : arrivée générale + 3 sous-compteurs (résidu ≈ 7 % « à expliquer »), compteur de la ligne remplacé il y a

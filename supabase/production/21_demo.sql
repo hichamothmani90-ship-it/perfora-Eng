@@ -1,4 +1,4 @@
--- ===== 20_demo.sql — copie générée de supabase/demo.sql (empreinte 8e724fa0fbc29b27) : ne pas modifier ici =====
+-- ===== 21_demo.sql — copie générée de supabase/demo.sql (empreinte 8e724fa0fbc29b27) : ne pas modifier ici =====
 -- GMAO terrain — démo commerciale (rejouable). APRÈS achats.sql.
 -- Remplace pf_reinitialiser_demo de plateforme.sql (ne pas rejouer plateforme.sql en entier après achats.sql :
 -- controle_invitation y est dans sa version d'avant le rôle « achats »).

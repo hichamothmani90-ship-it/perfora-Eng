@@ -3,7 +3,7 @@
    Le stock est par site : physique = somme des mouvements ; disponible = physique − réservé.
    Script classique chargé après app.js : il utilise les aides exposées sur window.App. */
 (() => {
-  const { V, A, L, esc, badge, empty, seg, search, askForm, askConfirm, toast, list, render, fmtY, refDe, role, siteActif, nomSite, desigBesoin, CLS_BESOIN } = App;
+  const { V, A, L, esc, badge, empty, seg, search, askForm, askConfirm, toast, list, render, fmtY, refDe, role, siteActif, nomSite, desigBesoin, CLS_BESOIN, aModule, autorise } = App;
   const { data } = Store;
 
   // Site de calcul : le site affiché (« tous » = tous les sites additionnés).
@@ -28,12 +28,20 @@
         `<button class="btn sm primary" data-act="mag-remettre" ${k}>Remettre</button>`,
         etat !== 'indisponible' ? `<button class="btn sm ghost" data-act="mag-indispo" ${k}>Indisponible</button>` : ''].join('')
       : `<button class="btn sm primary" data-act="mag-rattacher" ${k}>Rattacher à un article</button><button class="btn sm ghost" data-act="mag-indispo" ${k}>Indisponible</button>`;
+    // R5 : pièce manquante → demande d'achat liée (ou suivi « commandée » sans module Achats).
+    const manque = etat === 'indisponible' || !b.articleId || (etat === 'demande' && Calculs.stockDisponible(list('besoins'), mvts(), b.articleId, b.siteId) < reste);
+    const lien = Calculs.achatDuBesoin(b, list('achats')), sansStock = ['demande', 'indisponible'].includes(etat) && manque && !lien && !b.commande;
+    const daOuverte = sansStock ? daOuvertes(b)[0] : null;
+    const btnAchat = !sansStock ? '' : aModule('achats') && autorise('mag-achat')
+      ? `<button class="btn sm" data-act="mag-achat" ${k}>Demander l’achat</button>${daOuverte ? `<button class="btn sm ghost" data-act="mag-achat-ajout" ${k} data-sub="${daOuverte.id}">Ajouter à ${esc(daOuverte.ref)}</button>` : ''}`
+      : !aModule('achats') && b.articleId ? `<button class="btn sm" data-act="mag-commandee" ${k}>Commandée</button>` : '';
     const o = otDe(b), e = eqDe(b);
     return `<div class="card"><div class="row"><span class="t grow">${esc(reste || b.qte)} × ${esc(desigBesoin(b))}</span>${b.urgent ? badge('Urgent', 'red') : ''}${badge(L.etatBesoin[etat], CLS_BESOIN[etat] || '')}</div>
       <div class="s">${o ? `<a href="#/ot/${o.id}">${esc(o.ref)}</a>` : ''}${e ? ' · ' + esc(e.designation) : ''}${siteActif() === 'tous' && b.siteId ? ' · ' + esc(nomSite(b.siteId)) : ''}</div>
       <div class="s">Demandée ${esc(fmtY(b.demandeLe || b.creeLe))} par ${esc(b.demandeur || b.creePar)} · ${esc(stockTxt)}${b.qteReservee ? ` · réservé ${esc(b.qteReservee)}` : ''}${r.remis ? ` · remis ${r.remis}` : ''}${b.delai ? ` · délai ${esc(fmtY(b.delai))}` : ''}</div>
       ${b.note ? `<div class="s">« ${esc(b.note)} »</div>` : ''}
-      <div class="actions" style="margin:8px 0 0">${btn}</div></div>`;
+      ${lien || b.commande ? App.frisePiece(b) : ''}
+      <div class="actions" style="margin:8px 0 0">${btn}${btnAchat}</div></div>`;
   }
   function carteRetrait(m) {
     const a = data.articles.get(m.articleId);
@@ -87,11 +95,13 @@
   V.accueilMagasin = () => {
     const serv = aServir(), verif = aVerifier(), mini = App.reappro ? App.reappro().map(x => x.article) : articles().filter(sousMini);
     const urg = serv.filter(x => x.b.urgent && x.etat !== 'indisponible');
+    const aCommander = aModule('achats') && App.parametres()?.quiCommande === 'magasinier' ? list('achats').filter(d => ['validee', 'transmise'].includes(d.statut) || (d.statut === 'soumise' && d.urgent)) : [];
     return `<h1>Magasin <span class="muted small" style="font-weight:400">${esc(fmtY(Store.now().slice(0, 10)))}</span></h1>
       <div class="tiles">
         <a class="tile red" href="#/magasin?t=servir"><b>${urg.length}</b><span>Demandes urgentes</span></a>
         <a class="tile amber" href="#/magasin?t=servir"><b>${serv.length}</b><span>Demandes à servir</span></a>
         <a class="tile blue" href="#/magasin?t=verifier"><b>${verif.length}</b><span>Retraits à vérifier</span></a>
+        ${aCommander.length ? `<a class="tile blue" href="#/achats?f=commander"><b>${aCommander.length}</b><span>Achats à commander</span></a>` : ''}
         <a class="tile" href="${App.reappro ? '#/reappro' : '#/magasin?t=stock'}"><b>${mini.length}</b><span>${App.reappro ? 'À réapprovisionner' : 'Articles sous le mini'}</span></a>
       </div>
       <h2>À servir</h2>${serv.length ? serv.slice(0, 6).map(carteBesoin).join('') + (serv.length > 6 ? `<a class="btn ghost" href="#/magasin?t=servir">Voir les ${serv.length}</a>` : '') : empty('Aucune demande en attente.')}
@@ -101,6 +111,90 @@
 
   // ---------- actions ----------
   const qteRemise = b => Calculs.qteRemise(mvts(), b.id);
+  /** Demandes d'achat encore modifiables du même site (on y ajoute la pièce plutôt que d'en créer une autre). */
+  function daOuvertes(b) {
+    return list('achats').filter(d => ['brouillon', 'soumise', 'a_completer'].includes(d.statut) && (d.siteId || null) === (b.siteId || null) && !d.urgent === !b.urgent)
+      .sort((x, y) => (y.creeLe || '').localeCompare(x.creeLe || ''));
+  }
+  const ligneDe = (b, qte) => {
+    const o = otDe(b), e = eqDe(b);
+    return { id: Store.uid(), articleId: b.articleId || null, ...(b.articleId ? {} : { description: desigBesoin(b) }), qte, unite: data.articles.get(b.articleId)?.unite || null,
+      besoinId: b.id, otId: b.otId || null, motif: `Pour ${o?.ref || 'intervention'}${e ? ' · ' + e.designation : ''}` };
+  };
+  const resteBesoin = b => Math.max(0, Number(b.qte) - qteRemise(b) - Math.max(0, (Number(b.qteReservee) || 0) - qteRemise(b)));
+  /** R5 : « Demander l'achat » — demande d'achat pré-remplie, liée à la pièce et à l'intervention, soumise au responsable. */
+  A['mag-achat'] = async el => {
+    const b = data.besoins.get(el.dataset.id), o = otDe(b), e = eqDe(b);
+    const v = await askForm({ title: 'Demander l’achat', ok: 'Créer la demande d’achat', values: { qte: resteBesoin(b) || Number(b.qte), urgent: !!b.urgent }, fields: [
+      { type: 'info', text: `${desigBesoin(b)} pour ${o?.ref || 'l’intervention'}${e ? ' · ' + e.designation : ''}. La demande part au responsable ; la pièce affichera chaque étape au technicien.` },
+      { name: 'qte', label: 'Quantité', type: 'number', required: true },
+      { name: 'urgent', label: 'Urgent : commande possible avant la validation (le responsable valide ensuite)', type: 'checkbox' },
+      { name: 'motifUrgence', label: 'Motif de l’urgence (si urgent)', type: 'text', placeholder: 'ex. presse à l’arrêt' }] });
+    if (!v || !(v.qte > 0)) return;
+    if (v.urgent && !v.motifUrgence) { toast('Indiquez le motif de l’urgence'); return; }
+    const ligne = ligneDe(b, v.qte), now = Store.now(), qui = Store.currentUserName();
+    const da = { id: Store.uid(), ref: await Store.nextRef('DA'), statut: 'soumise', origine: 'besoin', ...(b.siteId ? { siteId: b.siteId } : {}),
+      redigePar: qui, redigeLe: now, soumiseLe: now, soumisePar: qui, ...(v.urgent ? { urgent: true, motifUrgence: v.motifUrgence } : {}), lignes: [ligne] };
+    await Store.save('achats', da, { action: 'demande_achat' });
+    await Store.update('besoins', b.id, { statut: 'indisponible', achatId: da.id, ligneId: ligne.id }, { action: 'achat_demande' });
+    toast(v.urgent ? `${da.ref} créée (urgente) : à commander tout de suite` : `${da.ref} créée et soumise au responsable`);
+    render();
+  };
+  A['mag-achat-ajout'] = async el => {
+    const b = data.besoins.get(el.dataset.id), da = data.achats.get(el.dataset.sub);
+    if (!da || !['brouillon', 'soumise', 'a_completer'].includes(da.statut)) { toast('Cette demande d’achat n’est plus modifiable'); render(); return; }
+    const v = await askForm({ title: 'Ajouter à ' + da.ref, ok: 'Ajouter', values: { qte: resteBesoin(b) || Number(b.qte) }, fields: [
+      { type: 'info', text: `${desigBesoin(b)} : une ligne de plus sur ${da.ref} (${(da.lignes || []).length} ligne(s)).` },
+      { name: 'qte', label: 'Quantité', type: 'number', required: true }] });
+    if (!v || !(v.qte > 0)) return;
+    const ligne = ligneDe(b, v.qte);
+    await Store.update('achats', da.id, { lignes: [...(da.lignes || []), ligne] }, { action: 'ajout_ligne' });
+    await Store.update('besoins', b.id, { statut: 'indisponible', achatId: da.id, ligneId: ligne.id }, { action: 'achat_demande' });
+    toast('Ajouté à ' + da.ref); render();
+  };
+  /** Sans module Achats (pack Pro) : la commande passée est notée sur la pièce. */
+  const fournisseursOpts = () => list('fournisseurs').filter(f => f.actif !== false && !(f.prestataire && !f.fournisseur)).sort((a, b) => (a.nom || '').localeCompare(b.nom || '')).map(f => [f.id, f.nom]);
+  App.fournisseursOpts = fournisseursOpts;
+  A['mag-commandee'] = async el => {
+    const b = data.besoins.get(el.dataset.id);
+    const v = await askForm({ title: 'Pièce commandée', values: { le: Store.now().slice(0, 10) }, fields: [
+      { name: 'fournisseurId', label: 'Fournisseur', type: 'select', options: fournisseursOpts(), empty: '— Autre (à écrire) —' },
+      { name: 'fournisseur', label: 'Autre fournisseur', type: 'text' },
+      { name: 'le', label: 'Date de commande', type: 'date', required: true },
+      { name: 'livraisonPrevue', label: 'Livraison prévue', type: 'date' }] });
+    if (!v) return;
+    const f = v.fournisseurId ? data.fournisseurs.get(v.fournisseurId) : null;
+    const livraison = v.livraisonPrevue || (f?.delaiJours ? Calculs.addDays(v.le, Number(f.delaiJours)).slice(0, 10) : null);
+    await Store.update('besoins', b.id, { statut: 'indisponible', delai: livraison, commande: { fournisseurId: f?.id || null, fournisseur: f?.nom || v.fournisseur || null, le: v.le, livraisonPrevue: livraison } }, { action: 'commande_notee' });
+    toast('Commande notée sur la pièce'); render();
+  };
+  /** Réserve n pièces de plus pour un besoin (réception, entrée en stock). */
+  async function reserverBesoin(b, n) {
+    const cur = data.besoins.get(b.id) || b;
+    await Store.update('besoins', cur.id, { qteReservee: Math.max(Number(cur.qteReservee) || 0, qteRemise(cur)) + n, statut: 'reserve', delai: null, reserveLe: Store.now(), reservePar: Store.currentUserName() }, { action: 'reservation' });
+  }
+  App.reserverBesoin = reserverBesoin;
+  /** R5 : à toute entrée en stock, proposer de réserver pour les pièces en attente de l'article (urgentes, puis plus anciennes). */
+  async function proposerReservations(articleId, siteId, { exclure = [] } = {}) {
+    const dispo = Calculs.stockDisponible(list('besoins'), mvts(), articleId, siteId);
+    const att = Calculs.besoinsEnAttenteArticle(list('besoins'), mvts(), articleId, siteId).filter(x => !exclure.includes(x.b.id)).slice(0, 8);
+    if (!att.length || dispo <= 0) return;
+    const a = data.articles.get(articleId), values = {};
+    let reste = dispo;
+    const fields = [{ type: 'info', text: `${a?.designation || 'Article'} : ${dispo} ${a?.unite || ''} disponible(s). Pièces en attente de cet article :` }];
+    for (const x of att) {
+      const n = Math.min(x.reste, Math.max(0, reste)); reste -= n;
+      values['r_' + x.b.id] = n > 0;
+      const o = otDe(x.b), e = eqDe(x.b);
+      fields.push({ name: 'r_' + x.b.id, type: 'checkbox', label: `Réserver ${Math.min(x.reste, dispo)} pour ${o?.ref || '—'}${e ? ' · ' + e.designation : ''}${x.b.urgent ? ' (urgent)' : ''}` });
+    }
+    const v = await askForm({ title: 'Réserver pour les pièces en attente ?', ok: 'Réserver', cancel: 'Plus tard', values, fields });
+    if (!v) return;
+    let d = dispo, n = 0;
+    for (const x of att) { if (!v['r_' + x.b.id] || d <= 0) continue; const q = Math.min(x.reste, d); d -= q; await reserverBesoin(x.b, q); n++; }
+    if (n) toast(`${n} pièce(s) réservée(s) : les techniciens les voient « prêtes au magasin »`);
+  }
+  App.proposerReservations = proposerReservations;
   A['mag-reserver'] = async el => {
     const b = data.besoins.get(el.dataset.id);
     const dispo = Calculs.stockDisponible(list('besoins'), mvts(), b.articleId, b.siteId) + Math.max(0, (Number(b.qteReservee) || 0) - qteRemise(b));
@@ -176,6 +270,7 @@
     const m = { id: Store.uid(), articleId: a.id, type, qte, otId: null, le: Store.now(), motif: v.motif };
     await Store.save('mouvements', m);
     if (type === 'entree' && v.prix != null) await Store.save('valorisations', { id: Store.uid(), mouvementId: m.id, ...(m.siteId ? { siteId: m.siteId } : {}), prixUnitaire: v.prix, devise: 'MAD', statut: 'connu' }, { action: 'prix_reception' });
+    if (type === 'entree') await proposerReservations(a.id, m.siteId || siteCalc());
     render();
   };
 })();

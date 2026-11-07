@@ -23,7 +23,7 @@
   // ---------- listes ----------
   function carteAchat(da) {
     const e = etat(da), m = voitCouts() && da.lignes?.some(l => l.prixUnitaire != null) ? Calculs.montantCommande(da) : null;
-    return `<a class="card" href="#/achat/${da.id}"><div class="row"><span class="t grow">${esc(da.ref)}${da.fournisseur ? ' · ' + esc(da.fournisseur) : ''}</span>${enRetard(da) ? badge('En retard', 'red') : ''}${badge(STATUT[e] || e, CLS[e] || '')}</div>
+    return `<a class="card" href="#/achat/${da.id}"><div class="row"><span class="t grow">${esc(da.ref)}${da.fournisseur ? ' · ' + esc(da.fournisseur) : ''}</span>${da.urgent ? badge('Urgent', 'red') : ''}${Calculs.urgentsAValider([da]).length ? badge('À valider après coup', 'amber') : ''}${enRetard(da) ? badge('En retard', 'red') : ''}${badge(STATUT[e] || e, CLS[e] || '')}</div>
       <div class="s">${(da.lignes || []).map(l => `${q(Number(l.qteCommandee ?? l.qte) || 0)} × ${esc(nomArt(l))}`).slice(0, 3).join(' · ')}${(da.lignes || []).length > 3 ? ' …' : ''}</div>
       <div class="s">${esc(fmtY(da.redigeLe || da.creeLe))} par ${esc(da.redigePar || da.creePar)}${da.livraisonPrevue ? ' · livraison prévue ' + esc(fmtY(da.livraisonPrevue)) : ''}${m ? ' · ' + mad(m.montant) + (m.complet ? '' : ' (prix incomplets)') : ''}${siteActif() === 'tous' && da.siteId ? ' · ' + esc(nomSite(da.siteId)) : ''}</div></a>`;
   }
@@ -32,7 +32,7 @@
 
   const GROUPES = [
     ['valider', 'À valider (responsable)', e => e === 'soumise'],
-    ['commander', 'À commander (achats)', e => ['validee', 'transmise'].includes(e)],
+    ['commander', 'À commander', (e, d) => ['validee', 'transmise'].includes(e) || (e === 'soumise' && d.urgent)],
     ['receptionner', 'À réceptionner', e => ['commandee', 'partiellement_recue'].includes(e)],
     ['preparer', 'Brouillons et à compléter', e => ['brouillon', 'a_completer'].includes(e)],
     ['terminees', 'Terminées', e => ['recue', 'close', 'refusee', 'annulee'].includes(e)],
@@ -43,7 +43,7 @@
     const das = list('achats').sort((a, b) => (b.creeLe || '').localeCompare(a.creeLe || ''));
     const f = r.q.get('f') || 'encours';
     const iso = Calculs.isolementsEnAttente(mvts());
-    const groupes = GROUPES.map(([k, lab, ok]) => [k, lab, das.filter(d => ok(etat(d)))]);
+    const groupes = GROUPES.map(([k, lab, ok]) => [k, lab, das.filter(d => ok(etat(d), d))]);
     const vus = f === 'encours' ? groupes.filter(([k, , l]) => k !== 'terminees' && l.length) : groupes.filter(([k]) => k === f);
     return `<h1>Achats</h1>
       ${seg([['#/achats', 'En cours', 'encours'], ...groupes.map(([k, lab, l]) => [`#/achats?f=${k}`, `${lab.split(' (')[0]} (${l.length})`, k])], f)}
@@ -67,20 +67,23 @@
     const lignes = (da.lignes || []).map(l => {
       const a = data.articles.get(l.articleId), rc = Calculs.receptionLigne(da, l, mvts()), p = Calculs.prixMAD(l);
       return `<li style="display:block"><div class="row"><span class="grow">${esc(nomArt(l))} <span class="small muted">${esc(a?.ref || '')}</span></span><b>${q(Number(l.qteCommandee ?? l.qte) || 0)} ${esc(l.unite || a?.unite || '')}</b>${modifiable ? `<button class="btn sm ghost" data-act="achat-qte" ${k} data-sub="${l.id}">Modifier</button>` : ''}</div>
-        <div class="small muted">${l.motif ? esc(l.motif) : ''}${l.qteCommandee != null && Number(l.qteCommandee) !== Number(l.qte) ? ` · demandé ${q(Number(l.qte))}` : ''}${voitCouts() && l.prixUnitaire != null ? ` · ${p == null ? esc(l.prixUnitaire + ' ' + (l.devise || '')) + ' (sans conversion)' : mad(p)} / u` : ''}${commandee ? ` · reçu ${q(rc.recu)} (utilisable ${q(rc.utilisable)}${rc.isole ? `, isolé ${q(rc.isole)}` : ''}) · <b>reste ${q(rc.reliquat)}</b>` : ''}</div></li>`;
+        <div class="small muted">${l.otId && data.ots.get(l.otId) ? `<a href="#/ot/${l.otId}">${esc(data.ots.get(l.otId).ref)}</a> · ` : ''}${l.motif ? esc(l.motif) : ''}${l.qteCommandee != null && Number(l.qteCommandee) !== Number(l.qte) ? ` · demandé ${q(Number(l.qte))}` : ''}${voitCouts() && l.prixUnitaire != null ? ` · ${p == null ? esc(l.prixUnitaire + ' ' + (l.devise || '')) + ' (sans conversion)' : mad(p)} / u` : ''}${commandee ? ` · reçu ${q(rc.recu)} (utilisable ${q(rc.utilisable)}${rc.isole ? `, isolé ${q(rc.isole)}` : ''}) · <b>reste ${q(rc.reliquat)}</b>` : ''}</div></li>`;
     }).join('');
     const m = voitCouts() ? Calculs.montantCommande(da) : null;
     const reliquat = (da.lignes || []).reduce((s, l) => s + Calculs.receptionLigne(da, l, mvts()).reliquat, 0);
     const act = [];
     if (modifiable) act.push(`<button class="btn primary" data-act="achat-soumettre" ${k}>Soumettre au responsable</button>`);
     if (da.statut === 'soumise') act.push(`<button class="btn primary" data-act="achat-valider" ${k}>Valider</button><button class="btn" data-act="achat-completer" ${k}>À compléter</button><button class="btn ghost danger" data-act="achat-refuser" ${k}>Refuser</button>`);
-    if (['validee', 'transmise'].includes(da.statut)) act.push(`<button class="btn primary" data-act="achat-commande" ${k}>Renseigner la commande</button>`);
+    if (['validee', 'transmise'].includes(da.statut) || (da.statut === 'soumise' && da.urgent)) act.push(`<button class="btn ${da.statut === 'soumise' ? '' : 'primary'}" data-act="achat-commande" ${k}>Renseigner la commande${da.statut === 'soumise' ? ' (urgent, avant validation)' : ''}</button>`);
+    if (Calculs.urgentsAValider([da]).length && da.statut !== 'soumise') act.push(`<button class="btn primary" data-act="achat-valider-apres" ${k}>Valider après coup</button><button class="btn ghost danger" data-act="achat-refuser-apres" ${k}>Refuser après coup</button>`);
     if (['commandee', 'partiellement_recue'].includes(e)) act.push(`<button class="btn primary" data-act="achat-recevoir" ${k}>Réceptionner</button>`);
     if (['commandee', 'partiellement_recue', 'recue'].includes(e) && da.statut !== 'close') act.push(`<button class="btn ghost" data-act="achat-clore" ${k}>Clore</button>`);
     if (['brouillon', 'soumise', 'a_completer'].includes(da.statut)) act.push(`<button class="btn ghost danger" data-act="achat-annuler" ${k}>Annuler</button>`);
     const jal = [
       da.soumiseLe && `Soumise le ${fmtY(da.soumiseLe)} par ${da.soumisePar}`,
-      da.valideLe && `Validée le ${fmtY(da.valideLe)} par ${da.validePar}`,
+      da.urgent && `Urgente : « ${da.motifUrgence || ''} »`,
+      da.valideLe && `Validée${da.valideApresCoup ? ' après coup' : ''} le ${fmtY(da.valideLe)} par ${da.validePar}`,
+      da.refusApresCoup && `Refusée après coup le ${fmtY(da.refuseApresCoupLe)} par ${da.refuseApresCoupPar} : « ${da.refusApresCoup} »`,
       da.motifCompletion && da.statut === 'a_completer' && `À compléter : « ${da.motifCompletion} »`,
       da.motifRefus && `Refusée : « ${da.motifRefus} »`,
       da.commandeLe && `Commande saisie le ${fmtY(da.commandeLe)} par ${da.commandePar}`,
@@ -116,6 +119,17 @@
     await maj(da.id, { statut: 'validee', valideLe: Store.now(), validePar: Store.currentUserName() }, { action: 'validation' });
     toast('Demande validée : à commander');
   };
+  /** R5 : achat urgent commandé avant validation — le responsable valide (ou refuse) après coup ; tout reste au journal. */
+  A['achat-valider-apres'] = async el => {
+    const da = data.achats.get(el.dataset.id);
+    if (!(await askConfirm('Valider après coup', `${da.ref} a été commandée en urgence (« ${da.motifUrgence || ''} »). La valider ?`, 'Valider'))) return;
+    await maj(da.id, { valideLe: Store.now(), validePar: Store.currentUserName(), valideApresCoup: true }, { action: 'validation_apres_coup' });
+    toast('Achat urgent validé');
+  };
+  A['achat-refuser-apres'] = async el => {
+    const m = await askText('Refuser après coup', 'Motif (la commande reste tracée)');
+    if (m) await maj(el.dataset.id, { refusApresCoup: m, refuseApresCoupLe: Store.now(), refuseApresCoupPar: Store.currentUserName() }, { action: 'refus_apres_coup', motif: m });
+  };
   A['achat-completer'] = async el => {
     const m = await askText('Demande à compléter', 'Ce qu’il faut préciser (visible par le magasin)');
     if (m) await maj(el.dataset.id, { statut: 'a_completer', motifCompletion: m }, { action: 'a_completer', motif: m });
@@ -128,19 +142,24 @@
   A['achat-commande'] = async el => {
     const da = data.achats.get(el.dataset.id);
     const fields = [
-      { name: 'fournisseur', label: 'Fournisseur', type: 'text', required: true },
+      { name: 'fournisseurId', label: 'Fournisseur', type: 'select', options: App.fournisseursOpts ? App.fournisseursOpts() : [], empty: '— Autre (à écrire) —' },
+      { name: 'fournisseur', label: 'Autre fournisseur (si absent de la liste)', type: 'text' },
       { name: 'refCommande', label: 'Référence de la commande', type: 'text', required: true },
       { name: 'dateCommande', label: 'Date de commande', type: 'date', required: true },
-      { name: 'livraisonPrevue', label: 'Livraison prévue', type: 'date' },
+      { name: 'livraisonPrevue', label: 'Livraison prévue (vide : délai habituel du fournisseur)', type: 'date' },
       { name: 'devise', label: 'Devise des prix', type: 'chips', options: { MAD: 'MAD', EUR: 'EUR', USD: 'USD' }, required: true },
       { type: 'info', text: 'Quantité commandée et prix unitaire HT par ligne. Prix inconnu : laisser vide (jamais 0).' },
       ...da.lignes.flatMap(l => [
         { name: 'q_' + l.id, label: `${nomArt(l)} — quantité commandée`, type: 'number', required: true },
         { name: 'p_' + l.id, label: `${nomArt(l)} — prix unitaire HT`, type: 'number' }])];
-    const values = { fournisseur: da.fournisseur, refCommande: da.refCommande, dateCommande: da.dateCommande || today(), livraisonPrevue: da.livraisonPrevue, devise: da.devise || 'MAD' };
+    const values = { fournisseurId: da.fournisseurId || '', fournisseur: da.fournisseurId ? '' : da.fournisseur, refCommande: da.refCommande, dateCommande: da.dateCommande || today(), livraisonPrevue: da.livraisonPrevue, devise: da.devise || 'MAD' };
     for (const l of da.lignes) { values['q_' + l.id] = l.qteCommandee ?? l.qte; values['p_' + l.id] = l.prixUnitaire; }
     const v = await askForm({ title: 'Commande passée chez le fournisseur', ok: 'Enregistrer', values, fields });
     if (!v) return;
+    const fo = v.fournisseurId ? data.fournisseurs.get(v.fournisseurId) : null;
+    if (!fo && !v.fournisseur) { toast('Choisissez ou écrivez le fournisseur'); return; }
+    v.fournisseur = fo?.nom || v.fournisseur;
+    if (!v.livraisonPrevue && fo?.delaiJours) v.livraisonPrevue = Calculs.addDays(v.dateCommande, Number(fo.delaiJours)).slice(0, 10);
     let taux = null;
     if (v.devise !== 'MAD') {
       const t = await askForm({ title: 'Conversion en MAD', values: { taux: da.taux }, fields: [{ type: 'info', text: `Prix en ${v.devise}. Sans taux, les prix restent « non valorisés » (V3 §18 : conversion explicite).` }, { name: 'taux', label: `1 ${v.devise} = ? MAD`, type: 'number' }] });
@@ -148,7 +167,7 @@
     }
     const lignes = da.lignes.map(l => { const p = v['p_' + l.id];
       return { ...l, qteCommandee: v['q_' + l.id], prixUnitaire: p, devise: v.devise, prixUnitaireMAD: p != null && v.devise !== 'MAD' && taux ? Math.round(p * taux * 100) / 100 : null }; });
-    await maj(da.id, { statut: 'commandee', fournisseur: v.fournisseur, refCommande: v.refCommande, dateCommande: v.dateCommande, livraisonPrevue: v.livraisonPrevue, devise: v.devise, taux,
+    await maj(da.id, { statut: 'commandee', fournisseurId: fo?.id || null, fournisseur: v.fournisseur, refCommande: v.refCommande, dateCommande: v.dateCommande, livraisonPrevue: v.livraisonPrevue, devise: v.devise, taux,
       lignes, commandeLe: Store.now(), commandePar: Store.currentUserName() }, { action: 'commande_externe' });
     toast('Commande enregistrée : à réceptionner');
   };
@@ -158,13 +177,14 @@
     const ouvertes = da.lignes.map(l => ({ l, rc: Calculs.receptionLigne(da, l, mvts()) })).filter(x => x.rc.reliquat > 0);
     if (!ouvertes.length) { toast('Tout est reçu'); return; }
     const values = { bl: '' };
-    for (const { l, rc } of ouvertes) { values['r_' + l.id] = rc.reliquat; values['i_' + l.id] = 0; }
+    for (const { l, rc } of ouvertes) { values['r_' + l.id] = rc.reliquat; values['i_' + l.id] = 0; values['res_' + l.id] = true; }
     const v = await askForm({ title: 'Réception ' + da.ref, ok: 'Enregistrer la réception', values, fields: [
       { name: 'bl', label: 'Bon de livraison', type: 'text' },
       { type: 'info', text: 'Quantité reçue par ligne, dont isolée (douteuse, endommagée) : l’isolé n’entre pas dans le stock utilisable.' },
       ...ouvertes.flatMap(({ l, rc }) => [
         { name: 'r_' + l.id, label: `${nomArt(l)} — reçu (reste ${q(rc.reliquat)})`, type: 'number', required: true },
-        { name: 'i_' + l.id, label: `${nomArt(l)} — dont isolé`, type: 'number' }]),
+        { name: 'i_' + l.id, label: `${nomArt(l)} — dont isolé`, type: 'number' },
+        ...(besoinOuvert(l) ? [{ name: 'res_' + l.id, type: 'checkbox', label: `Réserver pour ${data.ots.get(besoinOuvert(l).otId)?.ref || 'l’intervention'} (pièce attendue)` }] : [])]),
       { name: 'motifIso', label: 'Motif de l’isolement (si isolé)', type: 'text' }] });
     if (!v) return;
     for (const { l, rc } of ouvertes) {
@@ -188,8 +208,24 @@
       }
       n++;
     }
-    toast(n ? 'Réception enregistrée' : 'Rien de reçu'); render();
+    // R5 : la pièce attendue par une intervention est réservée pour elle (jamais au-delà du reçu utilisable).
+    const reservees = [];
+    for (const { l } of ouvertes) {
+      const b = besoinOuvert(l), utilisable = (Number(v['r_' + l.id]) || 0) - (Number(v['i_' + l.id]) || 0);
+      if (!b || !v['res_' + l.id] || utilisable <= 0 || !App.reserverBesoin) continue;
+      const reste = Calculs.besoinsEnAttenteArticle([b], mvts(), b.articleId, null)[0]?.reste ?? Math.max(0, Number(b.qte) - (Number(b.qteReservee) || 0));
+      if (reste > 0) { await App.reserverBesoin(b, Math.min(reste, utilisable)); reservees.push(b.id); }
+    }
+    toast(n ? `Réception enregistrée${reservees.length ? ` · ${reservees.length} pièce(s) réservée(s) pour leur intervention` : ''}` : 'Rien de reçu');
+    // Reste du stock reçu : proposer aux autres pièces en attente de ces articles.
+    if (App.proposerReservations) for (const art of new Set(ouvertes.map(x => x.l.articleId).filter(Boolean))) await App.proposerReservations(art, da.siteId, { exclure: reservees });
+    render();
   };
+  /** Pièce (besoin) encore attendue liée à une ligne de commande. */
+  function besoinOuvert(l) {
+    const b = l.besoinId ? data.besoins.get(l.besoinId) : null;
+    return b && b.articleId && ['demande', 'indisponible', 'reserve', 'partiellement_remis'].includes(Calculs.etatBesoin(b, mvts())) ? b : null;
+  }
   A['achat-clore'] = async el => {
     const da = data.achats.get(el.dataset.id);
     const reliquat = (da.lignes || []).reduce((s, l) => s + Calculs.receptionLigne(da, l, mvts()).reliquat, 0);
@@ -237,7 +273,7 @@
 
   // ---------- accueil du rôle achats ----------
   V.accueilAchats = () => {
-    const das = list('achats'), aCommander = das.filter(d => ['validee', 'transmise'].includes(etat(d))), enCours = das.filter(d => ['commandee', 'partiellement_recue'].includes(etat(d)));
+    const das = list('achats'), aCommander = das.filter(d => ['validee', 'transmise'].includes(etat(d)) || (d.statut === 'soumise' && d.urgent)), enCours = das.filter(d => ['commandee', 'partiellement_recue'].includes(etat(d)));
     const retard = enCours.filter(enRetard);
     return `<h1>Achats <span class="muted small" style="font-weight:400">${esc(fmtY(today()))}</span></h1>
       <div class="tiles"><a class="tile blue" href="#/achats?f=commander"><b>${aCommander.length}</b><span>À commander</span></a><a class="tile" href="#/achats?f=receptionner"><b>${enCours.length}</b><span>Commandes en cours</span></a><a class="tile red" href="#/achats?f=receptionner"><b>${retard.length}</b><span>Livraisons en retard</span></a></div>
