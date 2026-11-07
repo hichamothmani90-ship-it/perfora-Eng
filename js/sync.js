@@ -187,7 +187,8 @@ const Sync = (() => {
     // Démo commerciale réinitialisée sur le serveur : on repart de zéro (données de démo uniquement).
     const ri = p?.entreprise?.reinitLe || null;
     if (p?.entreprise?.demo && ri && Store.device().reinitLe !== ri) {
-      if (Store.device().reinitLe) { await Store.viderMetier(); await majCfg({ curseur: 0 }); }
+      // Appareil déjà synchronisé (même s'il n'avait jamais vu de réinitialisation : entreprise devenue démo) → on repart de zéro.
+      if (Store.device().reinitLe || (cfg().curseur || 0) > 0) { await Store.viderMetier(); await majCfg({ curseur: 0 }); }
       await Store.persistMeta({ ...Store.device(), reinitLe: ri });
     }
     await majCfg({ profil: p, profilLe: Date.now() });
