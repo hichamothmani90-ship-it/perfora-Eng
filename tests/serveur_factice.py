@@ -22,6 +22,8 @@ APPEND_ONLY = {"journal", "mouvements", "photos"}
 TYPES = {"localisations", "equipements", "personnes", "demandes", "ots", "programmes", "articles", "mouvements", "journal", "photos", "besoins", "seuils", "achats", "valorisations", "compteurs", "releves", "factures_energie", "parametres", "fournisseurs"}
 COMMUNS = {"personnes", "articles", "parametres", "fournisseurs"}
 LOTS, ETAPES = {}, {}     # reprise des données (supabase/mise_en_service.sql)
+FICHES_CLIENT = {}        # centre de contrôle (supabase/centre_controle.sql)
+TARIFS = {"essentiel": {}, "pro": {}, "entreprise": {}}
 COUTS = {"achats", "valorisations", "factures_energie"}          # lecture restreinte (supabase/achats.sql, energie.sql)
 VOIT_COUTS = {"responsable", "magasinier", "achats", "pilote"}
 
@@ -475,6 +477,30 @@ class H(BaseHTTPRequestHandler):
                             "fiches": sum(1 for f in fiches.values() if f["entreprise"] == c), "photos": sum(1 for f in fiches.values() if f["entreprise"] == c and f["type"] == "photos"),
                             "derniereActivite": None})
             return self.repondre(200, out)
+        if nom == "pf_clients":
+            out = []
+            for c, e in sorted(ENTREPRISES.items(), key=lambda x: x[1]["nom"]):
+                d = droits(c)
+                recus = [f for f in fiches.values() if f["entreprise"] == c and not f["data"].get("lotImport")]
+                out.append({"id": e["id"], "code": c, "nom": e["nom"], "statut": e["statut"], "demo": e.get("demo", False),
+                            "abonnement": {**d, "debut": e.get("debut", "2026-11-01"), "prix": e.get("prix"), "periodicite": e.get("periodicite", "mensuel"),
+                                           "remisePct": e.get("remisePct", 0), "conditions": e.get("conditions"), "statutAbonnement": e["statut"], "derogations": e.get("derog", {})},
+                            "actifs": actifs_entreprise(c),
+                            "sites": [{"id": k, "code": v["code"], "nom": v["nom"], "actif": True} for k, v in SITES.items() if v["entreprise"] == c],
+                            "responsables": sorted(m for m, pp in PROFILS.items() if pp["entreprise"] == c and pp["role"] == "responsable" and pp["actif"]),
+                            "fiches": sum(1 for f in fiches.values() if f["entreprise"] == c), "activite7j": len(recus),
+                            "derniereActivite": e.get("derniereActivite") or (time.strftime("%Y-%m-%dT%H:%M:%S") if recus else None),
+                            "miseEnService": ETAPES.get(c), "fiche": FICHES_CLIENT.get(c)})
+            return self.repondre(200, out)
+        if nom == "pf_tarifs_lire":
+            return self.repondre(200, [{"pack": k, "packNom": v["nom"], "modules": v["modules"], "maxSites": v["maxSites"], "maxUtilisateursSite": v["maxUtilisateursSite"],
+                                        "maxUtilisateursTotal": v["maxUtilisateursTotal"], "prixMensuel": TARIFS[k].get("m"), "prixAnnuel": TARIFS[k].get("a"), "note": TARIFS[k].get("n")}
+                                       for k, v in PACKS.items()])
+        if nom == "pf_tarif_maj":
+            if b.get("p_pack") not in TARIFS:
+                return self.repondre(400, {"message": "Pack inconnu"})
+            TARIFS[b["p_pack"]] = {"m": b.get("p_prix_mensuel"), "a": b.get("p_prix_annuel"), "n": b.get("p_note")}
+            return self.repondre(200, None)
         if nom == "pf_creer_entreprise":
             code = (b.get("p_code") or "").strip().upper()
             if not code or code in ENTREPRISES:
@@ -517,6 +543,21 @@ class H(BaseHTTPRequestHandler):
                                    "data": {**d, "id": fid, "siteId": site, "creeLe": d.get("creeLe", "2026-11-06T08:00"), "modifieLe": "2026-11-06T08:00"}}
             e["reinitLe"] = time.strftime("%Y-%m-%dT%H:%M:%S")
             return self.repondre(200, {"fiches": len(seed), "reinitLe": e["reinitLe"]})
+        if nom == "pf_client_maj":
+            dd = b.get("p_data") or {}
+            if dd.get("ice") and not re.match(r"^[0-9]{15}$", dd["ice"]):
+                return self.repondre(400, {"message": "ICE : 15 chiffres"})
+            FICHES_CLIENT[code] = dd
+            return self.repondre(200, dd)
+        if nom == "pf_abonnement_conditions":
+            if b.get("p_periodicite") not in ("mensuel", "annuel"):
+                return self.repondre(400, {"message": "Périodicité : mensuel ou annuel"})
+            if b.get("p_prix") is not None and b["p_prix"] < 0:
+                return self.repondre(400, {"message": "Prix négatif"})
+            e.update({"prix": b.get("p_prix"), "periodicite": b["p_periodicite"], "remisePct": b.get("p_remise") or 0, "conditions": b.get("p_conditions")})
+            if b.get("p_debut"):
+                e["debut"] = b["p_debut"]
+            return self.repondre(200, None)
         if nom == "pf_referentiel":
             mine = lambda t: [f for f in fiches.values() if f["entreprise"] == code and f["type"] == t]
             return self.repondre(200, {

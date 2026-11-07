@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1d4ed8">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Perfora · Centre de contrôle</title>
+  <link rel="icon" href="../icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../css/app.css">
+  <link rel="stylesheet" href="console.css">
+</head>
+<body class="cc">
+  <header class="cc-top">
+    <a href="#/tableau" class="cc-marque"><img src="../icon.svg" alt="" width="26" height="26"> <span>Perfora · Centre de contrôle</span></a>
+    <span class="cc-moi" id="cc-moi"></span>
+    <a class="btn sm ghost" href="../#/plateforme">Ouvrir l’appli</a>
+  </header>
+  <nav class="cc-onglets" aria-label="Onglets du centre de contrôle">
+    <a href="#/tableau" data-onglet="tableau">Tableau de bord</a>
+    <a href="#/clients" data-onglet="clients">Clients</a>
+    <a href="#/abonnements" data-onglet="abonnements">Abonnements</a>
+    <span class="cc-bientot" title="Étape CC2">Prospects</span>
+    <span class="cc-bientot" title="Étape CC2">Support</span>
+    <span class="cc-bientot" title="Étape CC3">Facturation</span>
+    <span class="cc-bientot" title="Étape CC2">Communication</span>
+  </nav>
+  <main id="cc-vue" class="cc-vue"><p class="muted">Chargement…</p></main>
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script src="../js/store.js"></script>
+  <script src="../js/sync.js"></script>
+  <script src="calculs_console.js"></script>
+  <script src="console.js"></script>
+</body>
+</html>

@@ -1,0 +1,36 @@
+/* Centre de contrôle : mise en page pour ordinateur, sur la base de css/app.css. */
+body.cc { padding: 0 0 40px; }
+.cc main.cc-vue { max-width: 1240px; }
+.cc-top { display: flex; align-items: center; gap: 12px; padding: 10px 24px; background: var(--card); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
+.cc-marque { display: flex; align-items: center; gap: 8px; font-weight: 750; color: var(--ink); }
+.cc-moi { margin-left: auto; font-size: .85rem; color: var(--muted); }
+.cc-onglets { display: flex; gap: 4px; padding: 0 24px; background: var(--card); border-bottom: 1px solid var(--line); overflow-x: auto; }
+.cc-onglets a, .cc-onglets .cc-bientot { padding: 12px 14px; white-space: nowrap; border-bottom: 3px solid transparent; color: var(--ink); }
+.cc-onglets a.on { color: var(--blue); border-bottom-color: var(--blue); font-weight: 650; }
+.cc-onglets .cc-bientot { color: var(--muted); opacity: .55; cursor: default; }
+.cc-vue { max-width: 1240px; margin: 0 auto; padding: 20px 24px; }
+.cc-vue h1 { margin: 0 0 14px; }
+.cc-vue h2 { margin: 24px 0 10px; font-size: 1.1rem; }
+.cc .tiles { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+.cc-table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; font-size: .92rem; }
+.cc-table th { text-align: left; font-size: .78rem; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); background: var(--bg); padding: 9px 10px; border-bottom: 1px solid var(--line); }
+.cc-table td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.cc-table tr:last-child td { border-bottom: 0; }
+.cc-table tr.lien { cursor: pointer; }
+.cc-table tr.lien:hover td { background: var(--blue-soft); }
+.cc-table .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cc-deux { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; align-items: start; }
+@media (max-width: 900px) { .cc-deux { grid-template-columns: 1fr; } }
+.cc-champs { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+.cc-champs .plein { grid-column: 1 / -1; }
+.cc-alerte { display: flex; gap: 10px; align-items: baseline; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+.cc-alerte:last-child { border-bottom: 0; }
+.cc-outils { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.cc-outils input[type=search] { max-width: 320px; }
+.cc .btn.sm { min-height: 34px; padding: 0 10px; font-size: .86rem; }
+dialog.cc-dlg { border: 0; border-radius: 14px; padding: 0; width: min(640px, 94vw); box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+dialog.cc-dlg form { padding: 18px 20px; }
+dialog.cc-dlg h3 { margin: 0 0 10px; }
+dialog.cc-dlg .actions { justify-content: flex-end; }
+.cc-deux > div { min-width: 0; }
+.cc-table input { width: 100%; min-width: 110px; min-height: 36px; }

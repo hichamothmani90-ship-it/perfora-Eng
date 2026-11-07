@@ -5,7 +5,7 @@
 (() => {
   const { data } = Store;
   /** Version affichée dans Réglages : à incrémenter avec VERSION dans sw.js. */
-  const APP_VERSION = 'v25';
+  const APP_VERSION = 'v26';
   const $ = s => document.querySelector(s);
   // Multi-site : les listes de fiches de site ne montrent que le site actif (« tous » possible).
   // Les fiches sans site (anciennes ou pas encore synchronisées) restent visibles.
@@ -636,7 +636,7 @@
 
   V.plateforme = () => Sync.profil()?.adminPlateforme
     ? `<h1>Console plateforme</h1><p class="small muted">Réservée à l’administrateur plateforme. Chaque action est vérifiée par le serveur.</p>
-       <div class="actions"><button class="btn primary" type="button" id="pf-creer">+ Nouvelle entreprise</button><button class="btn" type="button" id="pf-actualiser">Actualiser</button></div>
+       <div class="actions"><a class="btn primary" href="console/">Centre de contrôle (ordinateur)</a><button class="btn" type="button" id="pf-creer">+ Nouvelle entreprise</button><button class="btn" type="button" id="pf-actualiser">Actualiser</button></div>
        <div id="pf-liste"><p class="muted">Chargement…</p></div>`
     : empty('Réservé à l’administrateur plateforme.');
 

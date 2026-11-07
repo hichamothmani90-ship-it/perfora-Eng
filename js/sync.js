@@ -201,6 +201,12 @@ const Sync = (() => {
     annulerLot: (ent, lot) => rpc('pf_annuler_lot', { p_entreprise: ent, p_lot: lot }),
     mesLire: ent => rpc('pf_mes_lire', { p_entreprise: ent }),
     mesEtape: (ent, cle, fait) => rpc('pf_mes_etape', { p_entreprise: ent, p_cle: cle, p_fait: !!fait }),
+    // centre de contrôle (supabase/centre_controle.sql)
+    clients: () => rpc('pf_clients'),
+    clientMaj: (ent, data) => rpc('pf_client_maj', { p_entreprise: ent, p_data: data }),
+    conditions: (ent, v) => rpc('pf_abonnement_conditions', { p_entreprise: ent, p_prix: v.prix ?? null, p_periodicite: v.periodicite || 'mensuel', p_remise: v.remisePct ?? 0, p_debut: v.debut || null, p_conditions: v.conditions || null }),
+    tarifs: () => rpc('pf_tarifs_lire'),
+    tarifMaj: (pack, v) => rpc('pf_tarif_maj', { p_pack: pack, p_prix_mensuel: v.prixMensuel ?? null, p_prix_annuel: v.prixAnnuel ?? null, p_note: v.note || null }),
   };
   async function definirProfil(cible, role, nom, actif) {
     await api('/rest/v1/rpc/definir_profil', { method: 'POST', body: JSON.stringify({ cible, nouveau_role: role, nouveau_nom: nom, est_actif: actif }) });

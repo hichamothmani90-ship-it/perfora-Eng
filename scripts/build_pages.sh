@@ -13,6 +13,7 @@ if [ "$cible" = "app" ]; then
   cp -r css js dist/
   cp deploy/app/_headers dist/_headers
   mkdir -p dist/kit && cp kit/Kit_demarrage_Perfora.xlsx dist/kit/   # kit vide, téléchargeable depuis la console
+  cp -r console dist/                                                  # centre de contrôle (administrateur) : app.perfora.ma/console/
 else
   echo "Cible inconnue : $cible (seule « app » existe ; le site est dans le dépôt perfora-site)" >&2; exit 1
 fi
