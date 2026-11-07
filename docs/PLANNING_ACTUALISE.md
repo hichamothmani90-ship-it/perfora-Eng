@@ -16,6 +16,21 @@ soient faites.
 | Kit Excel de démarrage + page Mise en service | ✅ v25 |
 | Centre de contrôle : tableau de bord, clients, abonnements, prospects, support, communication | ✅ v26 – v27 |
 
+## 0 bis. Chemin vers le pilote (décidé le 7 nov. 2026 : énergie et eau avant le pilote)
+
+| Ordre | Étape | Pourquoi à cette place | Durée indicative |
+|---|---|---|---|
+| 1 | **Fichiers joints** (photos et PDF dans le stockage de fichiers) — 1.2 | Socle des relevés avec photo (D3) et des factures PDF (D4) | 3 – 4 jours |
+| 2 | **D3 Terrain énergie** : compteurs (ressources et équipements), QR, relevés à faire, saisie hors ligne avec contrôle immédiat, préventif selon les heures | Le cœur de l'usage quotidien | 1 semaine |
+| 3 | **D4 Écran Énergie** : consommations avec couverture, relevés à examiner, factures (PDF + montants) et rapprochement, sous-comptages, « créer une demande » depuis un écart | Ce que voit le responsable | 1 semaine |
+| 4 | **D5** : démo énergie (VITRINE / Perfora Démo), guide, tests hors ligne des relevés | Montrer et vérifier | 2 – 3 jours |
+| 5 | **Scripts SQL numérotés** (une seule séquence propre) + **sauvegarde quotidienne maison** + test de restauration | Préparer une production construite d'un seul passage | 3 – 4 jours |
+| 6 | **Sécurité** : compte administrateur séparé + MFA, règles de mot de passe, journal des actions administrateur, limites d'envoi, supervision des erreurs | Avant toute donnée réelle | 1 semaine |
+| 7 | **Production** (projet gratuit) construite par les scripts, tests de sécurité rejoués, app.perfora.ma branchée | 1 à 2 semaines avant le pilote | 1 – 2 jours |
+| 8 | **Pilote** | Avec CNDP déposée et client pilote prêt (côté Hicham) | 4 – 6 semaines |
+
+En parallèle (Hicham) : dépôt CNDP, client pilote, prix des packs, contrat simple.
+
 ## 1. Phase « Stabilité » (S1 – S3) — priorité 1
 
 | # | Chantier | Pourquoi | Qui |
@@ -87,7 +102,7 @@ nouvel utilisateur arrive sur une appli vide qui propose « Charger la démo ».
 
 | # | Chantier |
 |---|---|
-| 5.0 | **État énergie et eau (7 nov. 2026)** : calculs (D1) et serveur (D2, D2 bis) faits ; **aucun écran encore** : compteurs, relevés, consommations, factures et rapprochement arrivent en D3 – D5 ci-dessous. À avancer avant le pilote si le client pilote en a besoin (pack Entreprise). |
+| 5.0 | **Énergie et eau : avancées avant le pilote** (décision du 7 nov. 2026) — voir §0 bis, étapes 2 à 4. Calculs (D1) et serveur (D2, D2 bis) faits. |
 | 5.1 | **D3** : relevés de compteurs sur le terrain (QR, hors ligne, contrôle immédiat), compteurs d'équipement et **préventif selon l'usage** (heures) |
 | 5.2 | **Classification du parc** à l'écran (catalogue, criticité A/B/C guidée, parent, réglementaire, écran « À classer ») |
 | 5.3 | **Inventaire du magasin** (prioritaire dans C bis), puis emplacement, conditionnement, liste des fournisseurs, achats non stockés |
