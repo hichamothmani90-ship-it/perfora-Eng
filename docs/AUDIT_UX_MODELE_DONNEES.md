@@ -201,8 +201,8 @@ Centre de coût (volet E).
 bornes connues, durée cumulée). Pas de définition affichée, pas de filtre site / équipement / famille, pas de tendance,
 pas de lien « que faire ».
 
-> ⚠️ Remplacé par la décision Q9 (§13) : pas de suivi des temps d'arrêt ; MTBF sur le calendrier du site, délai de
-> remise en état automatique à la place du MTTR, pas de taux de disponibilité. Tableau d'origine conservé pour mémoire.
+> Complété par la décision Q9 (§13) : arrêts suivis en **planifié / non planifié** ; MTTR et MTBF sur les arrêts
+> **non planifiés** ; disponibilité avec la part planifiée et non planifiée ; temps des intervenants jamais suivis.
 
 **MTBF, MTTR, disponibilité** 🔴 — définitions proposées, compatibles avec les données saisies :
 
@@ -340,7 +340,7 @@ surtout l'appli). Chaque lot : maquette écran par écran validée par Hicham **
 | Q6 | Le technicien **propose** nature et priorité ; le **responsable valide** (trace au journal). | R2 : qualification « proposée » / « validée » sur l'intervention |
 | Q7 | **Journal d'audit restreint** : responsable, direction, administrateur du client ; le technicien garde l'historique de ses fiches. | R1 : lecture du journal restreinte côté serveur |
 | Q8 | **Planification de la semaine** (qui fait quoi quand), version simple pour le responsable, **dès le pilote**. | nouveau lot R9 |
-| Q9 | **Aucun suivi des temps** : ni temps des intervenants (déjà décidé), ni **heures d'arrêt de production**. Indicateurs : **MTBF** = temps d'ouverture du calendrier du site ÷ nombre de pannes ; à la place du MTTR, un **délai de remise en état** calculé automatiquement (heure du signalement → intervention terminée), sans rien chronométrer ; **pas de taux de disponibilité**. Sur l'intervention : une simple case **« machine à l'arrêt » oui / non**, sans heure de début ni de fin. | R2 : bloc « Arrêt de production » réduit à oui / non ; R4 : indicateurs ci-contre ; section « Arrêts de production » des indicateurs retirée ; les heures d'arrêt déjà saisies restent dans l'historique, non affichées |
+| Q9 | **Temps des intervenants : jamais suivis.** **Arrêts de production : suivis** (début, remise à disposition), en distinguant **planifié** (préventif, arrêt programmé, travaux prévus) et **non planifié** (panne). Le type est proposé selon la nature de l'intervention (préventive / travaux → planifié ; corrective → non planifié) et modifiable. Indicateurs : **MTBF** = (temps d'ouverture du calendrier du site − arrêts non planifiés) ÷ nombre de pannes ; **MTTR** = durée moyenne des arrêts non planifiés (pannes bornées) ; **disponibilité** = (ouverture − tous les arrêts) ÷ ouverture, avec la part planifiée / non planifiée ; pannes non bornées comptées à part (« n sur m connues »). (Corrigé le 7 nov. : une première version retirait le suivi des arrêts.) | R2 : bloc « Arrêt de production » = oui / non + planifié / non planifié + début et fin (facultatifs, mais demandés à la clôture d'une panne) ; R4 : MTBF, MTTR, disponibilité par équipement et par site |
 
 ### Plan de refonte mis à jour (avant le pilote)
 
@@ -350,7 +350,7 @@ surtout l'appli). Chaque lot : maquette écran par écran validée par Hicham **
 | 2 | **R2 Fiche intervention en étapes** | Préparer / Réaliser / Terminer ; qualification proposée puis validée ; activités fréquentes ; une seule liste de pièces ; saisie rapide ; Signaler allégé | 3 – 4 jours |
 | 3 | **R3 Membres, équipes, administrateur du client** | une seule notion « membre » (avec ou sans compte), équipes, société prestataire, rôle admin client, invitations par l'admin client | 3 – 4 jours |
 | 4 | **R5 Magasin ↔ achats relié** | pièce indisponible → achat lié → réservation à la réception → attente levée ; achat urgent ; « qui commande » (Achats ou repli) | 2 – 3 jours |
-| 5 | **R4 Tableaux de bord, MTBF et délai de remise en état** | calendrier de production par site ; MTBF = ouverture ÷ pannes ; délai de remise en état automatique (signalement → terminé) ; pas de temps d'arrêt ni de disponibilité ; définitions affichées ; tableaux de bord responsable / direction / technicien ; indicateurs sur la fiche équipement ; résumé énergie du mois | 4 – 5 jours |
+| 5 | **R4 Tableaux de bord, MTBF / MTTR / disponibilité** | calendrier de production par site ; arrêts planifiés et non planifiés ; MTBF et MTTR sur les arrêts non planifiés ; disponibilité avec la part planifiée / non planifiée ; définitions affichées ; tableaux de bord responsable / direction / technicien ; indicateurs sur la fiche équipement ; résumé énergie du mois | 4 – 5 jours |
 | 6 | **R9 Planification de la semaine** | vue semaine par technicien / équipe, glisser une intervention sur un créneau, charge du préventif | 2 – 3 jours |
 | 7 | R8 Packs (4 niveaux) | packs et quotas, console | 1 jour |
 | après | R7 QR · R6 fiche équipement et classification · C bis | selon le client pilote | — |

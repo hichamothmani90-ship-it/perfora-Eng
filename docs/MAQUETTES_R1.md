@@ -1,8 +1,8 @@
 # Lot R1 — navigation et droits par rôle : maquettes et spécification (à valider)
 
 Source : audit (docs/AUDIT_UX_MODELE_DONNEES.md §1, §3, §4) et décisions du 7 nov. 2026 (Q1, Q2 bis, Q3, Q7, Q9).
-Note : dans la maquette interactive, les tuiles « Disponibilité » et « MTTR » de la direction sont remplacées par
-« Pannes du mois » et « Délai de remise en état » (décision Q9).
+Note (décision Q9 corrigée) : les tuiles de la direction restent Disponibilité, MTBF et MTTR ; arrêts suivis en planifié /
+non planifié ; temps des intervenants jamais suivis.
 Maquette interactive présentée dans la conversation du 7 nov. (rôle par rôle : accueil, menu, mon compte, entreprise).
 **Rien n'est codé tant que ce document n'est pas validé.**
 
@@ -30,7 +30,7 @@ Maquette interactive présentée dans la conversation du 7 nov. (rôle par rôle
 | Exploitation (opérateur) | Signaler · Mes signalements · Relevés · Parc | grand bouton « Signaler un problème » (QR), mes signalements avec leur suivi, mes relevés |
 | Magasinier | Magasin · Articles · Réappro · Réceptions · Plus | accueil actuel conservé (à servir, retraits à vérifier, à réapprovisionner) + livraisons attendues |
 | Achats | Achats · À commander · Commandes · Réceptions · Plus | accueil actuel conservé (à commander, en cours, en retard) + urgences |
-| Direction | Tableau de bord · Indicateurs · Énergie · Coûts | 6 chiffres cliquables (pannes du mois, MTBF, délai de remise en état, préventif à l'heure, énergie du mois, coût du mois) — **contenu réel au lot R4** ; en R1 : tuiles disponibles aujourd'hui + emplacements. Ni disponibilité ni MTTR (décision Q9 : aucun suivi des temps d'arrêt) |
+| Direction | Tableau de bord · Indicateurs · Énergie · Coûts | 6 chiffres cliquables (disponibilité avec part planifiée / non planifiée, MTBF, MTTR, préventif à l'heure, énergie du mois, coût du mois) — **contenu réel au lot R4** ; en R1 : tuiles disponibles aujourd'hui + emplacements |
 
 « Travaux » du responsable s'ouvre en **Liste | Semaine** (le planning de la semaine est le lot R9 ; en R1 l'onglet
 « Semaine » n'apparaît pas encore).
