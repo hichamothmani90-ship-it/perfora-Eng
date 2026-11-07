@@ -60,6 +60,7 @@ const Store = (() => {
       await persistMeta({ id: 'device', code: randomCode(), personneId: null });
     }
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+    await appliquerInconnus();
   }
 
   function persist(t, objs) {
@@ -135,6 +136,13 @@ const Store = (() => {
     if (cloudActif() && METIER.includes(t)) {
       // Patch = seulement les champs modifiés (fusion champ par champ côté serveur).
       const p = prev ? Object.fromEntries(entries.map(e => [e.champ, obj[e.champ] ?? null]).concat([['modifieLe', ts], ['modifiePar', user]])) : obj;
+      // S1 : pour une liste, on décrit les éléments ajoutés / modifiés / retirés : le serveur fusionne élément par élément,
+      // et un ajout fait au même moment sur un autre appareil n'est plus écrasé.
+      if (prev) {
+        const listes = {};
+        for (const e of entries) { const dsc = Array.isArray(prev[e.champ]) && Array.isArray(obj[e.champ]) ? Calculs.decrireListe(prev[e.champ], obj[e.champ]) : null; if (dsc) listes[e.champ] = dsc; }
+        if (Object.keys(listes).length) p.$listes = listes;
+      }
       envois.push(sortie(t, obj.id, p));
       for (const e of j) envois.push(sortie('journal', e.id, e));
     }
@@ -173,21 +181,39 @@ const Store = (() => {
   /** Applique des fiches reçues du serveur, sans journal ni renvoi.
       Les modifications locales pas encore envoyées restent prioritaires sur ce qui arrive. */
   async function appliquerDistant(rows, { remplacer = false } = {}) {
+    // Modifications locales pas encore envoyées, dans l'ordre de saisie (appliquées comme le serveur le fera : S1).
     const enAttente = new Map();
-    for (const s of data.sortie.values()) enAttente.set(s.rid, { ...(enAttente.get(s.rid) || {}), ...s.patch });
-    const parType = new Map();
+    for (const s of fileEnvoi()) { if (!enAttente.has(s.rid)) enAttente.set(s.rid, []); enAttente.get(s.rid).push(s.patch); }
+    const parType = new Map(), inconnus = [];
     for (const r of rows) {
-      if (!METIER.includes(r.type) || !r.data || typeof r.data.id !== 'string') continue;
+      if (!r.data || typeof r.data.id !== 'string') continue;
+      // S1 : fiche d'un type que cette version ne connaît pas encore : gardée de côté, appliquée après la mise à jour.
+      if (!METIER.includes(r.type)) { inconnus.push({ id: r.id, type: r.type, data: r.data }); continue; }
       // Fusion : local < serveur < modifications locales non envoyées. Un champ absent côté
       // serveur ne fait jamais disparaître la valeur locale.
       // remplacer : version serveur telle quelle (annule une modification locale refusée).
-      const obj = APPEND_ONLY.includes(r.type) || remplacer ? r.data : { ...(data[r.type].get(r.id) || {}), ...r.data, ...(enAttente.get(r.id) || {}) };
+      let obj = APPEND_ONLY.includes(r.type) || remplacer ? r.data : { ...(data[r.type].get(r.id) || {}), ...r.data };
+      if (!APPEND_ONLY.includes(r.type) && !remplacer) for (const pa of enAttente.get(r.id) || []) obj = { ...obj, ...Calculs.fusionPatch(obj, pa) };
       data[r.type].set(obj.id, obj);
       if (!parType.has(r.type)) parType.set(r.type, []);
       parType.get(r.type).push(obj);
     }
     for (const [t, objs] of parType) await persist(t, objs);
+    if (inconnus.length) {
+      const deja = new Map((data.meta.get('inconnus')?.rows || []).map(x => [x.id, x]));
+      for (const x of inconnus) deja.set(x.id, x);
+      await persistMeta({ id: 'inconnus', rows: [...deja.values()].slice(-5000) });
+    }
     return rows.length;
+  }
+  /** Après une mise à jour de l'appli : applique les fiches gardées de côté dont le type est désormais connu. */
+  async function appliquerInconnus() {
+    const rows = data.meta.get('inconnus')?.rows || [];
+    const connus = rows.filter(x => METIER.includes(x.type)), reste = rows.filter(x => !METIER.includes(x.type));
+    if (!connus.length) return 0;
+    await appliquerDistant(connus);
+    await persistMeta({ id: 'inconnus', rows: reste });
+    return connus.length;
   }
 
   async function update(t, id, patch, opts) {

@@ -183,6 +183,62 @@ def controle_quota(code, sites, sauf=None):
     return None
 
 
+# Lot S1 (miroir de supabase/stabilite_s1.sql) : version minimale de l'appli, fusion des listes élément par élément.
+REGLAGES = {"version_minimale": "v0"}   # POST /test/version_minimale {"valeur": "v39"}
+
+
+def version_num(v):
+    d = "".join(c for c in str(v or "") if c.isdigit())
+    return int(d) if d else 0
+
+
+def s1_cle(e):
+    if isinstance(e, dict):
+        return None if e.get("id") is None else str(e["id"])
+    if e is None or isinstance(e, list):
+        return None
+    return ("true" if e else "false") if isinstance(e, bool) else str(e)
+
+
+def s1_fusionnable(a):
+    return isinstance(a, list) and all(s1_cle(x) is not None for x in a)
+
+
+def s1_fusion_listes(d, pa, listes):
+    """Seuls les éléments ajoutés ou modifiés (listes[champ].modifies) remplacent ceux du serveur ; retraits retirés.
+    Sans description (ancienne appli) : tout ce qui est envoyé compte comme modifié, rien n'est retiré."""
+    if not d:
+        return pa
+    out = dict(pa)
+    for k, b in pa.items():
+        a = d.get(k)
+        if not (s1_fusionnable(a) and s1_fusionnable(b)):
+            continue
+        m = (listes or {}).get(k) if isinstance((listes or {}).get(k), dict) else {}
+        rem = {str(x) for x in (m.get("retraits") or [])}
+        mod = {str(x) for x in m["modifies"]} if isinstance(m.get("modifies"), list) else {s1_cle(x) for x in b}
+        parcle = {}
+        for x in b:
+            parcle.setdefault(s1_cle(x), x)
+        res, vus = [], set()
+        for e in a:
+            c = s1_cle(e)
+            if c in vus:
+                continue
+            vus.add(c)
+            if c in rem:
+                continue
+            res.append(parcle[c] if c in mod and c in parcle else e)
+        for e in b:
+            c = s1_cle(e)
+            if c in vus or c in rem or c not in mod:
+                continue
+            vus.add(c)
+            res.append(e)
+        out[k] = res
+    return out
+
+
 def est_admin_client(email):
     p = PROFILS.get(email)
     return bool(p and p["actif"] and p.get("admin"))
@@ -508,6 +564,9 @@ class H(BaseHTTPRequestHandler):
                 return self.repondre(401, {"message": "Invalid API key"})
             ENVOIS.append({"email": self.corps().get("email"), "redirect_to": parse_qs(u.query).get("redirect_to", [""])[0]})
             return self.repondre(200, {})
+        if u.path == "/test/version_minimale":
+            REGLAGES["version_minimale"] = self.corps().get("valeur") or "v0"
+            return self.repondre(200, REGLAGES)
         if u.path == "/test/reseau":
             b = self.corps()
             RESEAU.update({k: b[k] for k in ("mode", "delai") if k in b})
@@ -701,9 +760,13 @@ class H(BaseHTTPRequestHandler):
         acceptes, refus, refuses = 0, [], set()
         terrain = r in ("technicien", "prestataire")
         gere = r == "responsable" or est_admin_client(email)   # R3 : membres, équipes, sociétés prestataires
+        corps = self.corps()
+        if version_num(corps.get("version")) < version_num(REGLAGES["version_minimale"]):   # S1
+            return self.repondre(400, {"message": f"Version de l'appli trop ancienne ({corps.get('version') or 'inconnue'}) : rechargez la page pour passer à la version {REGLAGES['version_minimale']} ou plus récente. Vos saisies restent sur l'appareil.", "code": "P0001"})
         with verrou:
-            for f in self.corps().get("lot", []):
-                t, pa = f.get("type"), f.get("patch") or {}
+            for f in corps.get("lot", []):
+                t, pa = f.get("type"), dict(f.get("patch") or {})
+                listes = pa.pop("$listes", None)   # S1 : changements de listes décrits par l'appareil
                 cible = pa.get("entite") if t == "journal" else t
                 ex = fiches.get(f["id"])
                 motif, s = None, None
@@ -828,6 +891,8 @@ class H(BaseHTTPRequestHandler):
                 if ex and t in APPEND_ONLY and t != "mouvements":
                     continue
                 seq[0] += 1
+                if ex and t not in APPEND_ONLY:
+                    pa = s1_fusion_listes(ex["data"], pa, listes)
                 data = {**(ex["data"] if ex else {}), **pa, **({"siteId": s} if s else {})}
                 fiches[f["id"]] = {"id": f["id"], "type": t, "data": data, "seq": seq[0], "entreprise": ent, "site": s, "auteur": ex.get("auteur", email) if ex else email}
         return self.repondre(200, {"acceptes": acceptes, "refuses": refus})

@@ -1,7 +1,7 @@
 """Séquence SQL numérotée pour construire une base Perfora neuve (production) — étape 5 du chemin vers le pilote.
 
 Les scripts de supabase/ restent la source (historique, tests) ; ce programme en fait une séquence unique et ordonnée :
-  supabase/production/01_schema.sql … 20_demo_energie.sql, 99_controles.sql   (copies numérotées, générées)
+  supabase/production/01_schema.sql … 21_demo_energie.sql, 99_controles.sql   (copies numérotées, générées)
   supabase/production/construire_base.sql                                       (tout, dans l'ordre, en un seul fichier)
   supabase/production/MANIFESTE.txt                                             (ordre + empreinte SHA-256 de chaque source)
 
@@ -19,7 +19,7 @@ DEST = os.path.join(SRC, "production")
 
 # Ordre validé (docs/PROMPT_REPRISE.md) ; chaque script suppose les précédents.
 ORDRE = ["schema", "roles", "multitenant", "quotas", "plateforme", "durcissement", "magasin", "achats", "energie",
-         "mise_en_service", "centre_controle", "centre_controle_cc2", "references", "fichiers", "securite", "roles_r1", "interventions_r2", "membres_r3", "demo", "demo_energie"]
+         "mise_en_service", "centre_controle", "centre_controle_cc2", "references", "fichiers", "securite", "roles_r1", "interventions_r2", "membres_r3", "stabilite_s1", "demo", "demo_energie"]
 
 CONTROLES = """-- 99 — contrôles de fin de construction (base neuve). Rejouable.
 -- 1) multitenant.sql a créé « Perfora Démo » pour migrer d'anciennes données : sur une base neuve elle est vide,

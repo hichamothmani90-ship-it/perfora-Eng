@@ -729,7 +729,50 @@
   /** Intervention confiée à l'une des équipes données. */
   const otDeMesEquipes = (o, equipeIds) => !!o.equipeId && (equipeIds || []).includes(o.equipeId);
 
-  const Calculs = { nomComparable, doublonsNom, habilitationEchue, habilitationsEchues, equipesDe, otConfiee, otDeMesEquipes, demoEnergie, bornesMois, moisDecale, tableauEnergie, controleReleve, echeanceCompteur, UNITES, UNITES_RESSOURCE, ANOMALIES_CONFIRMABLES, analyserReleves, consommationPeriode, rapprochementFacture, residuSousComptage, totauxParUnite, relevesDus, bilanCombustible, totalFactures,
+  // ---------- lot S1 : listes fusionnées élément par élément (miroir de supabase/stabilite_s1.sql) ----------
+  /** Clé d'un élément : son id (objet), sa valeur (texte, nombre, booléen) ; null sinon. */
+  const cleElement = e => e === null || e === undefined || Array.isArray(e) ? null
+    : typeof e === 'object' ? (e.id === null || e.id === undefined ? null : String(e.id)) : String(e);
+  const listeFusionnable = a => Array.isArray(a) && a.every(x => cleElement(x) !== null);
+  /** Changements d'une liste : clés ajoutées ou modifiées, clés retirées ; null si la liste ne se fusionne pas. */
+  function decrireListe(avant, apres) {
+    if (!listeFusionnable(avant) || !listeFusionnable(apres)) return null;
+    const av = new Map(avant.map(x => [cleElement(x), JSON.stringify(x)]));
+    const ap = new Set(apres.map(cleElement));
+    return { modifies: apres.filter(x => av.get(cleElement(x)) !== JSON.stringify(x)).map(cleElement), retraits: [...av.keys()].filter(k => !ap.has(k)) };
+  }
+  /** Applique un patch (et sa description « $listes ») à une fiche, comme le serveur : renvoie le patch fusionné. */
+  function fusionPatch(d, patch) {
+    const { $listes: listes, ...p } = patch || {};
+    if (!d) return p;
+    for (const [k, b] of Object.entries(p)) {
+      const a = d[k];
+      if (!listeFusionnable(a) || !listeFusionnable(b)) continue;
+      const m = listes && typeof listes[k] === 'object' && listes[k] ? listes[k] : {};
+      const rem = new Set((m.retraits || []).map(String));
+      const mod = new Set(Array.isArray(m.modifies) ? m.modifies.map(String) : b.map(cleElement));
+      const parCle = new Map();
+      for (const x of b) if (!parCle.has(cleElement(x))) parCle.set(cleElement(x), x);
+      const res = [], vus = new Set();
+      for (const e of a) {
+        const c = cleElement(e);
+        if (vus.has(c)) continue;
+        vus.add(c);
+        if (rem.has(c)) continue;
+        res.push(mod.has(c) && parCle.has(c) ? parCle.get(c) : e);
+      }
+      for (const e of b) {
+        const c = cleElement(e);
+        if (vus.has(c) || rem.has(c) || !mod.has(c)) continue;
+        vus.add(c);
+        res.push(e);
+      }
+      p[k] = res;
+    }
+    return p;
+  }
+
+  const Calculs = { cleElement, listeFusionnable, decrireListe, fusionPatch, nomComparable, doublonsNom, habilitationEchue, habilitationsEchues, equipesDe, otConfiee, otDeMesEquipes, demoEnergie, bornesMois, moisDecale, tableauEnergie, controleReleve, echeanceCompteur, UNITES, UNITES_RESSOURCE, ANOMALIES_CONFIRMABLES, analyserReleves, consommationPeriode, rapprochementFacture, residuSousComptage, totauxParUnite, relevesDus, bilanCombustible, totalFactures,
     montantCommande, isolementsEnAttente, consommationHebdo, seuilIndicatif, seuilActif, besoinsNonCouverts, receptionLigne, etatAchat, qteEnCommande, qteIsolee, situationArticle, aReapprovisionner, prixMAD, valorisation, coutConsomme, besoinsAServir, attentesALever, piecesDetenues, stockPhysique, qteReservee, stockDisponible, etatBesoin, rapprochementBesoin, retraitsAVerifier, qteRemise, addDays, daysBetween, minutesBetween, dureeUnion, mediane, NATURE_DU_BESOIN, ETAT_RANK, otOuvert, demandeOuverte, indexOtsParDemande, etatEquipement, verifierCloture, qualification, typeArret, typeArretPropose, aQualifier, ETAT_SIGNALE, echeanceSuivante, indicateurs };
   if (typeof module === 'object' && module.exports) module.exports = Calculs; else root.Calculs = Calculs;
 })(this);

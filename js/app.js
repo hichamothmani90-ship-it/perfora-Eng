@@ -5,7 +5,7 @@
 (() => {
   const { data } = Store;
   /** Version affichée dans Réglages : à incrémenter avec VERSION dans sw.js. */
-  const APP_VERSION = 'v38';
+  const APP_VERSION = 'v39';
   if (window.Erreurs) Erreurs.version = APP_VERSION;
   const $ = s => document.querySelector(s);
   // Multi-site : les listes de fiches de site ne montrent que le site actif (« tous » possible).
@@ -2169,7 +2169,7 @@
   }
 
   // Aides communes pour les écrans par domaine (js/vues/*.js, scripts classiques chargés après app.js).
-  window.App = { otCard, demCard, eqCard, actifs, otOuvert, demandeOuverte, estAdminClient, voitJournal, modeDemo, preventifsSansOT, V, A, L, esc, badge, empty, seg, search, askForm, askConfirm, askText, alertBox, toast, edit, list, render, fmt, fmtY, today, refDe,
+  window.App = { version: APP_VERSION, otCard, demCard, eqCard, actifs, otOuvert, demandeOuverte, estAdminClient, voitJournal, modeDemo, preventifsSansOT, V, A, L, esc, badge, empty, seg, search, askForm, askConfirm, askText, alertBox, toast, edit, list, render, fmt, fmtY, today, refDe,
     role, autorise, aModule, siteActif, nomSite, mesSites, desigBesoin, CLS_BESOIN, leverAttentesPieces, exportCsv, AFTER, adressePublique, eq, locPath, ajouterFichier, progCard, fieldHtml };
 
   let annonces = [];
@@ -2190,6 +2190,19 @@
     chargerAnnonces();
   }).catch(err => {
     $('#view').innerHTML = `<p class="warn">Stockage local indisponible : ${esc(err.message)}. Vérifiez que le navigateur n’est pas en navigation privée.</p>`;
+  });
+  // S1 : le serveur refuse une version trop ancienne : on charge la nouvelle (une fois toutes les 2 minutes au plus,
+  // jamais en pleine saisie ; sinon un bandeau propose de recharger).
+  window.addEventListener('perfora-version-requise', async () => {
+    try { const reg = await navigator.serviceWorker?.getRegistration(); await reg?.update(); } catch { /* hors ligne */ }
+    const dernier = Number(sessionStorage.getItem('majImposee') || 0);
+    if (!enSaisie() && Date.now() - dernier > 120000) { sessionStorage.setItem('majImposee', String(Date.now())); location.reload(); return; }
+    if ($('#maj')) return;
+    const d = document.createElement('div');
+    d.id = 'maj'; d.className = 'maj';
+    d.innerHTML = 'Mise à jour obligatoire de l’appli <button class="btn sm primary" type="button">Recharger</button>';
+    d.querySelector('button').onclick = () => location.reload();
+    document.body.append(d);
   });
   // Démarrage une fois tous les scripts chargés (les écrans de js/vues/ s'enregistrent avant le premier affichage).
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', lancer); else lancer();

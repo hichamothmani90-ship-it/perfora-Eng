@@ -181,7 +181,7 @@ const Sync = (() => {
       }
       if (!lot.length) return n;
       await deposerContenus(lot);
-      const rep = await api('/rest/v1/rpc/push_fiches', { method: 'POST', body: JSON.stringify({ lot: lot.map(s => ({ id: s.rid, type: s.type, patch: s.patch })) }) });
+      const rep = await api('/rest/v1/rpc/push_fiches', { method: 'POST', body: JSON.stringify({ lot: lot.map(s => ({ id: s.rid, type: s.type, patch: s.patch })), version: window.App?.version || null }) });
       const refus = (Array.isArray(rep?.refuses) ? rep.refuses : [])
         .map(r => ({ ...r, patch: lot.filter(s => s.rid === r.id).reduce((p, s) => ({ ...p, ...s.patch }), {}) }));
       await Store.retirerEnvoyes(lot.map(s => s.id));
@@ -206,7 +206,9 @@ const Sync = (() => {
   }
 
   // ---------- profil et équipe (rôles contrôlés par le serveur) ----------
-  const PERIMETRE = 'r1';   // version des règles de lecture du serveur (supabase/roles_r1.sql)
+  // Version des règles de lecture du serveur : à relever à chaque nouveau type de fiche ou lecture élargie (une relecture
+  // complète, une fois). r1 : supabase/roles_r1.sql ; r3 : équipes, interventions confiées à la société (membres_r3.sql).
+  const PERIMETRE = 'r3';
   async function chargerProfil() {
     const p = await api('/rest/v1/rpc/mon_profil', { method: 'POST', body: '{}' });
     // Multi-entreprise : un appareil ne mélange jamais les données de deux entreprises.
@@ -343,7 +345,9 @@ const Sync = (() => {
       window.Erreurs?.envoyer();
     } catch (e) {
       await majCfg({ erreur: e.message || String(e) });
-      if (!RESEAU.test(e.message || '')) window.Erreurs?.noter({ nature: 'synchro', message: e.message || String(e), detail: e.stack || '' });
+      // S1 : version de l'appli refusée par le serveur → l'appli se met à jour (les saisies restent en attente).
+      if (/version de l.appli trop ancienne/i.test(e.message || '')) window.dispatchEvent(new CustomEvent('perfora-version-requise', { detail: e.message }));
+      else if (!RESEAU.test(e.message || '')) window.Erreurs?.noter({ nature: 'synchro', message: e.message || String(e), detail: e.stack || '' });
     } finally {
       enCours = false; notifier();
     }
