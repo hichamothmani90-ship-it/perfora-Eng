@@ -493,6 +493,10 @@ class H(BaseHTTPRequestHandler):
                     motif = "clôture réservée au responsable (réglage de l'entreprise) : terminez l'intervention, le responsable la clôture"
                 elif t == "parametres" and f["id"] != "parametres-" + ENTREPRISES[ent]["id"]:
                     motif = "paramètres : identifiant réservé à l'entreprise"
+                # intégrité (miroir de supabase/references.sql)
+                elif t in ("demandes", "ots", "programmes") and not ex and pa.get("equipementId") and not (
+                        (lambda x: x and x["type"] == "equipements" and x["entreprise"] == ent)(fiches.get(pa["equipementId"]))):
+                    motif = "équipement inconnu de l'entreprise (créé hors connexion ou supprimé ?)"
                 # volet D (miroir de supabase/energie.sql)
                 elif t == "compteurs" and ex and any(k in pa and pa[k] != ex["data"].get(k) for k in ("mode", "unite", "coefficient", "usage")) \
                         and any(x["type"] == "releves" and x["entreprise"] == ent and x["data"].get("compteurId") == f["id"] for x in fiches.values()):

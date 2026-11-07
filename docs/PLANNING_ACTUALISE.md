@@ -64,7 +64,7 @@ nouvel utilisateur arrive sur une appli vide qui propose « Charger la démo ».
 
 | # | Chantier |
 |---|---|
-| 3.1 | **Écran de connexion dès l'ouverture** : e-mail + mot de passe, « Recevoir un lien de connexion », « Mot de passe oublié », messages d'erreur clairs ; plus aucun champ technique (le serveur est fixé) |
+| 3.1 | ✅ **Fait (v29, 7 nov. 2026)** : écran de connexion à l'ouverture, démo séparée (« Découvrir la démo », jamais envoyée, effacée à la connexion), plus de question d'envoi pour les comptes non responsables. **Écran de connexion dès l'ouverture** : e-mail + mot de passe, « Recevoir un lien de connexion », « Mot de passe oublié », messages d'erreur clairs ; plus aucun champ technique (le serveur est fixé) |
 | 3.2 | **Première connexion guidée** après invitation : choix du mot de passe → « Ajouter à l'écran d'accueil » (indispensable sur iPhone, voir §6) → choix du site → courte visite de 3 écrans selon le rôle |
 | 3.3 | **Invitation par WhatsApp** en plus de l'e-mail (lien à usage unique, valable 24 h) : beaucoup de techniciens n'ouvrent pas leurs e-mails |
 | 3.4 | **Premiers pas du responsable** : liste à cocher (inviter l'équipe, imprimer les QR, vérifier les criticités, créer 3 programmes préventifs) |

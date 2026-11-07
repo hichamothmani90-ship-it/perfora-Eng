@@ -221,3 +221,10 @@ video.scan { width: 100%; border-radius: 10px; background: #000; }
 
 .maj { position: fixed; left: 50%; transform: translateX(-50%); top: calc(var(--top-h) + 8px); z-index: 60; display: flex; gap: 10px; align-items: center; width: max-content; max-width: 92vw; white-space: nowrap;
   background: var(--ink); color: #fff; padding: 8px 8px 8px 14px; border-radius: 12px; font-size: .9rem; box-shadow: 0 6px 18px rgba(0,0,0,.2); }
+
+/* Écran de connexion : ni onglets, ni bouton Signaler, ni voyants */
+body.ecran-connexion .tabs, body.ecran-connexion #fab, body.ecran-connexion #sync, body.ecran-connexion #site, body.ecran-connexion #who { display: none !important; }
+body.ecran-connexion { padding-bottom: 24px; }
+.connexion { max-width: 420px; margin: 0 auto; }
+.connexion-marque { display: flex; gap: 12px; align-items: center; margin: 12px 0 18px; font-size: 1.1rem; }
+.btn.block { width: 100%; }

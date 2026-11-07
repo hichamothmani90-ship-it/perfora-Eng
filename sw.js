@@ -1,6 +1,6 @@
 /* Hors ligne : l'application est mise en cache et s'ouvre sans réseau.
    Changer VERSION à chaque livraison pour forcer la mise à jour. */
-const VERSION = 'gmao-terrain-v28';
+const VERSION = 'gmao-terrain-v29';
 const FILES = ['./', './index.html', './css/app.css', './js/store.js', './js/sync.js', './js/calculs.js', './js/qr.js', './js/app.js', './js/vues/magasin.js', './js/vues/reappro.js', './js/vues/achats.js', './js/vues/mise_en_service.js', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', e => {

@@ -5,7 +5,7 @@
 (() => {
   const { data } = Store;
   /** Version affichée dans Réglages : à incrémenter avec VERSION dans sw.js. */
-  const APP_VERSION = 'v28';
+  const APP_VERSION = 'v29';
   const $ = s => document.querySelector(s);
   // Multi-site : les listes de fiches de site ne montrent que le site actif (« tous » possible).
   // Les fiches sans site (anciennes ou pas encore synchronisées) restent visibles.
@@ -290,13 +290,64 @@
   // ---------- vues ----------
   const V = {};
 
+  // Mode démonstration : données fictives sur l'appareil, jamais envoyées à une entreprise (effacées à la connexion).
+  const modeDemo = () => !!data.meta.get('mode')?.demo;
+  // Sans compte connecté (et hors démonstration) : l'appli s'ouvre sur l'écran de connexion.
+  const doitSeConnecter = () => !Sync.etatCourant().connecte && !modeDemo();
+  const local = ['localhost', '127.0.0.1'].includes(location.hostname);
+
+  V.connexion = () => {
+    const c = data.meta.get('cloud') || {}, attente = data.sortie.size;
+    return `<div class="connexion">
+      <div class="connexion-marque"><img src="icon.svg" alt="" width="44" height="44"><div><b>Perfora</b><br><span class="small muted">GMAO de terrain</span></div></div>
+      <h1>Connexion</h1>
+      ${c.url && !c.refresh ? `<p class="warn small">Votre session a expiré : reconnectez-vous avec le même compte.${attente ? ` <b>${attente} saisie(s) en attente</b> sur ce téléphone partiront ensuite.` : ''}</p>` : ''}
+      <form id="cnx" class="card" novalidate>
+        <label class="f" for="cnx-email" style="margin-top:0">E-mail</label><input id="cnx-email" name="email" type="email" autocomplete="username" required value="${esc(c.email || '')}">
+        <label class="f" for="cnx-mdp">Mot de passe</label><input id="cnx-mdp" name="mdp" type="password" autocomplete="current-password" required>
+        ${local ? `<label class="f" for="cnx-url">Serveur (test local)</label><input id="cnx-url" name="url" type="url" value="${esc(c.url || Sync.PROJET.url)}"><label class="f" for="cnx-cle">Clé (test local)</label><input id="cnx-cle" name="cle" type="text" value="${esc(c.url && c.cle ? c.cle : Sync.PROJET.cle)}">` : ''}
+        <div class="actions" style="margin-bottom:0"><button class="btn primary block" type="submit">Se connecter</button></div>
+        <p class="small" style="margin:12px 0 0"><a href="#" data-act="sync-lien">Première connexion ou mot de passe oublié</a></p>
+      </form>
+      <p class="small muted">Votre compte est créé par votre responsable (ou par Perfora) : vous recevez une invitation par e-mail.</p>
+      <div class="card"><b>Découvrir Perfora</b><p class="small muted" style="margin:4px 0 8px">Démonstration sur cet appareil, avec des données fictives. Rien n’est envoyé ; tout est effacé à la connexion.</p>
+        <button class="btn" type="button" data-act="demo-decouvrir">Découvrir la démo</button>
+        <a class="btn ghost" href="https://perfora.ma" target="_blank" rel="noopener">perfora.ma</a></div>
+    </div>`;
+  };
+  function apresConnexion() {
+    const f = $('#cnx');
+    if (!f) return;
+    if (!f.email.value) f.email.focus(); else f.mdp.focus();
+    f.onsubmit = async ev => {
+      ev.preventDefault();
+      const email = f.email.value.trim(), mdp = f.mdp.value;
+      if (!email || !mdp) { toast('E-mail et mot de passe'); return; }
+      const b = f.querySelector('button[type=submit]'); b.disabled = true; b.textContent = 'Connexion…';
+      try {
+        const premiere = await Sync.connecter({ url: f.url?.value || Sync.PROJET.url, cle: f.cle?.value || Sync.PROJET.cle, email, motDePasse: mdp });
+        try { await Sync.chargerProfil(); } catch (e) { toast(e.message); }
+        await premiereConnexion(premiere);
+        location.hash = '#/accueil';
+        render();
+        Sync.synchroniser().then(() => render());
+      } catch (e) {
+        b.disabled = false; b.textContent = 'Se connecter';
+        if (/incorrect/.test(e.message)) await alertBox('Connexion refusée', ['E-mail ou mot de passe incorrect.', 'Jamais choisi de mot de passe (compte créé par invitation) ? Utilisez « Première connexion ou mot de passe oublié » : vous recevrez un lien par e-mail.']);
+        else await alertBox('Connexion impossible', [e.message, /injoignable|lent|réseau/i.test(e.message) ? 'Vérifiez la connexion internet du téléphone, puis réessayez.' : '']);
+      }
+    };
+  }
+
   V.accueil = () => {
     if (role() === 'magasinier' && aModule('magasin') && V.accueilMagasin) return V.accueilMagasin();
     if (role() === 'achats' && aModule('achats') && V.accueilAchats) return V.accueilAchats();
     if (!data.equipements.size) {
+      if (Sync.etatCourant().connecte) return `<h1>Bienvenue</h1><div class="card"><p>${Sync.etatCourant().dernier ? 'Aucun équipement dans votre entreprise pour l’instant.' : 'Chargement de vos données…'}</p>
+        <p class="small muted">${estResp() ? 'Créez vos équipements (Parc), ou demandez à Perfora d’importer votre liste.' : 'Votre responsable prépare le parc : il apparaîtra ici automatiquement.'}</p>
+        ${estResp() ? '<div class="actions"><a class="btn primary" href="#/parc">Créer mes équipements</a></div>' : ''}</div>`;
       return `<h1>Bienvenue</h1><div class="card"><p>Aucune donnée sur cet appareil.</p>
-        <div class="actions"><button class="btn primary" data-act="demo">Charger la démo</button><a class="btn" href="#/parc">Créer mes équipements</a></div>
-        <p class="small muted">Tout est enregistré sur cet appareil, même sans réseau. Exportez régulièrement une sauvegarde (Réglages).</p></div>`;
+        <div class="actions"><button class="btn primary" data-act="demo-decouvrir">Découvrir la démo</button></div></div>`;
     }
     const dem = list('demandes').filter(demandeOuverte);
     const aEx = dem.filter(d => d.statut === 'a_examiner').sort((a, b) => b.creeLe.localeCompare(a.creeLe));
@@ -668,7 +719,7 @@
       <h2>Sauvegarde et partage entre appareils</h2><div class="card"><p style="margin-top:0">Dernière sauvegarde : <b>${(s => s.depuis ? fmtY(s.depuis) + ` (${s.modifs} modification(s) depuis)` : 'jamais')(etatSauvegarde())}</b></p><p class="small muted">Exportez sur le téléphone, importez sur le PC (ou l’inverse) : les fiches sont fusionnées, la version la plus récente est gardée, rien n’est supprimé.</p>
         <div class="actions"><button class="btn primary" data-act="export">Exporter (JSON)</button><button class="btn" data-act="import">Importer</button><button class="btn" data-act="csv">Interventions (CSV Excel)</button></div>
         <input type="file" id="importFile" accept=".json,application/json" class="hidden"></div>
-      <h2>Démonstration</h2><div class="card">${data.equipements.size ? '<p class="small muted" style="margin:0">La démo se charge uniquement sur un appareil vide.</p>' : '<button class="btn" data-act="demo">Charger la démo</button>'}</div>
+      ${modeDemo() ? `<h2>Démonstration</h2><div class="card"><p class="small muted" style="margin-top:0">Données fictives sur cet appareil uniquement.</p><button class="btn" data-act="demo-quitter">Quitter la démo et se connecter</button></div>` : ''}
       <h2>Zone sensible</h2><div class="card"><button class="btn danger" data-act="wipe">Effacer toutes les données de cet appareil</button><p class="small muted">Exportez d’abord une sauvegarde.</p></div>`;
   };
 
@@ -734,6 +785,7 @@
 
   // ---------- comportements après affichage ----------
   const AFTER = {};
+  AFTER.connexion = apresConnexion;
   AFTER.reglages = async () => {
     const box = $('#equipe');
     if (!box) return;
@@ -1457,7 +1509,7 @@
       try { await Sync.chargerProfil(); } catch (e) { toast(e.message); }
       // Premier branchement : tout ce qui existe déjà sur l'appareil part au serveur (fusion, sans
       // suppression), sinon une fiche modifiée plus tard n'arriverait qu'en partie ailleurs.
-      await premierEnvoiSiBesoin(premiere);
+      await premiereConnexion(premiere);
       toast('Connecté · synchronisation en cours');
       await Sync.synchroniser();
       render();
@@ -1476,6 +1528,27 @@
       await alertBox('E-mail envoyé', [`Si ${v.email} correspond à un compte, un lien vient d’être envoyé.`, 'Cliquez dessus : l’appli s’ouvrira et vous demandera de choisir votre mot de passe.', 'Pensez à regarder dans les courriers indésirables.']);
     } catch (e) { toast('Échec : ' + e.message); }
   };
+  /** Après une connexion : les données de démonstration ne partent jamais vers une entreprise ; un compte qui n'est pas
+      responsable ne se voit jamais proposer d'envoyer des données locales (il repart des données du serveur). */
+  async function premiereConnexion(premiere) {
+    const nb = data.equipements.size + data.demandes.size + data.ots.size;
+    // Démo chargée avant cette version (sans repère) : références « -DM- » de la démo, sur un appareil dont le code n'est pas DM.
+    const demoAncienne = Store.device().code !== 'DM' && [...data.demandes.values(), ...data.ots.values()].some(x => /-DM-\d/.test(x.ref || ''));
+    if (modeDemo() || demoAncienne) {
+      await Store.viderMetier();
+      await Store.persistMeta({ id: 'mode', demo: false });
+      if (nb) toast('Données de démonstration effacées : chargement de vos données');
+      return;
+    }
+    if (!premiere || !nb) return;
+    if (Sync.profil()?.role && Sync.profil().role !== 'responsable') {
+      if (data.sortie.size) return; // saisies du compte en attente : elles partent normalement
+      await Store.viderMetier();
+      toast('Chargement de vos données depuis le serveur');
+      return;
+    }
+    await premierEnvoiSiBesoin(premiere);
+  }
   async function premierEnvoiSiBesoin(premiere) {
     const nb = data.equipements.size + data.demandes.size + data.ots.size;
     if (!premiere || !nb) return;
@@ -1509,7 +1582,7 @@
           try { await Sync.changerMotDePasse(v.p1); break; } catch (e) { toast(e.message); }
         }
       }
-      await premierEnvoiSiBesoin(premiere);
+      await premiereConnexion(premiere);
       toast(`Connecté : ${email}`);
       await Sync.synchroniser();
     } catch (e) { await alertBox('Lien de connexion', [e.message]); }
@@ -1531,7 +1604,23 @@
     if (v?.c !== 'EFFACER') return;
     await Store.wipe(); location.hash = '#/accueil'; render();
   };
-  A.demo = async () => { if (data.equipements.size) return; await chargerDemo(); toast('Démo chargée'); location.hash = '#/accueil'; render(); };
+  A.demo = async () => A['demo-decouvrir']();
+  A['demo-decouvrir'] = async () => {
+    if (data.sortie.size) { await alertBox('Saisies en attente', [`${data.sortie.size} saisie(s) de votre compte n’ont pas encore été envoyées.`, 'Connectez-vous d’abord pour les envoyer.']); return; }
+    if (Sync.etatCourant().connecte) { toast('Déconnectez-vous d’abord (Réglages)'); return; }
+    await Store.viderMetier();
+    await Store.persistMeta({ id: 'mode', demo: true });
+    await chargerDemo();
+    await Store.retirerEnvoyes(Store.fileEnvoi().map(s => s.id)); // la démo ne part jamais vers un serveur
+    toast('Démonstration : données fictives');
+    location.hash = '#/accueil'; render();
+  };
+  A['demo-quitter'] = async () => {
+    if (!(await askConfirm('Quitter la démonstration', 'Les données fictives seront effacées de cet appareil.', 'Quitter'))) return;
+    await Store.viderMetier();
+    await Store.persistMeta({ id: 'mode', demo: false });
+    location.hash = '#/connexion'; render();
+  };
 
   // ---------- démo (exemple de la procédure, sans chronologie détaillée) ----------
   async function chargerDemo() {
@@ -1618,6 +1707,9 @@
   function render() {
     cacheEtat = null;
     R = parseHash();
+    if (doitSeConnecter()) R = { name: 'connexion', id: null, q: new URLSearchParams() };
+    else if (R.name === 'connexion') R = { name: 'accueil', id: null, q: new URLSearchParams() };
+    document.body.classList.toggle('ecran-connexion', R.name === 'connexion');
     const fn = V[R.name] || V.accueil;
     $('#view').innerHTML = fn(R);
     const tab = TAB_OF[R.name] ?? R.name;
@@ -1639,6 +1731,7 @@
     // Transition : l'ancienne adresse GitHub Pages invite à passer sur app.perfora.ma (données hors ligne liées à l'adresse).
     if (location.hostname.endsWith('github.io')) $('#view').insertAdjacentHTML('afterbegin', '<p class="info"><b>Perfora déménage sur <a href="https://app.perfora.ma/">app.perfora.ma</a>.</b> Attendez « ☁ À jour » (rien en attente d’envoi), puis ouvrez la nouvelle adresse et reconnectez-vous : vos données reviennent du serveur. Ajoutez-la à l’écran d’accueil.</p>');
     if (pf && !ecritureOK()) $('#view').insertAdjacentHTML('afterbegin', '<p class="warn">Abonnement suspendu ou expiré : consultation seule. Vos données restent accessibles et exportables.</p>');
+    if (modeDemo() && R.name !== 'connexion') $('#view').insertAdjacentHTML('afterbegin', '<p class="info" style="display:flex;gap:8px;align-items:center"><span class="grow"><b>Démonstration</b> · données fictives, sur cet appareil uniquement.</span><button class="btn sm" type="button" data-act="demo-quitter">Se connecter</button></p>');
     // Annonces de la plateforme (maintenance, nouveauté) : masquables, mémorisées sur l'appareil.
     const vues = data.meta.get('annonces')?.vues || [];
     for (const a of annonces.filter(x => !vues.includes(x.id))) {
