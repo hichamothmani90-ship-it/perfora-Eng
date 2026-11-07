@@ -5,7 +5,7 @@
 (() => {
   const { data } = Store;
   /** Version affichée dans Réglages : à incrémenter avec VERSION dans sw.js. */
-  const APP_VERSION = 'v26';
+  const APP_VERSION = 'v27';
   const $ = s => document.querySelector(s);
   // Multi-site : les listes de fiches de site ne montrent que le site actif (« tous » possible).
   // Les fiches sans site (anciennes ou pas encore synchronisées) restent visibles.
@@ -659,6 +659,8 @@
       ${estResp() ? `<h2>Règles de l’entreprise</h2><div class="card"><div class="row"><span class="grow"><b>Clôture des interventions validée par le responsable</b><br><span class="small muted">${parametres()?.clotureParResponsable ? 'Activé : les techniciens terminent, vous validez la clôture (accueil « Interventions à valider »).' : 'Désactivé : les techniciens clôturent eux-mêmes leurs interventions.'}</span></span>${badge(parametres()?.clotureParResponsable ? 'Activé' : 'Désactivé', parametres()?.clotureParResponsable ? 'green' : '')}</div>
         <div class="actions" style="margin-bottom:0"><button class="btn sm" data-act="param-cloture">${parametres()?.clotureParResponsable ? 'Désactiver' : 'Activer'}</button></div></div>` : ''}
       ${Sync.profil()?.role === 'responsable' ? `<h2>Équipe et droits</h2><div class="card" id="equipe"><p class="muted small" style="margin:0">Chargement de l’équipe…</p></div>` : ''}
+      ${Sync.profil() ? `<h2>Support Perfora</h2><div class="card"><p class="small muted" style="margin-top:0">Une question, une anomalie, une idée d’amélioration ? Le support vous répond.</p>
+        <div class="actions" style="margin-bottom:0"><button class="btn primary" type="button" data-act="support">Contacter le support</button><a class="btn" target="_blank" rel="noopener" href="https://wa.me/212680032888">WhatsApp</a></div></div>` : ''}
       <h2>Adresse de l’application</h2><div class="card"><p class="small muted" style="margin-top:0">Adresse utilisée dans les QR codes. Elle doit être accessible depuis les téléphones (HTTPS).</p>
         <input type="text" value="${esc(adressePublique())}" data-bind="meta|adresse|url" inputmode="url"></div>
       <h2>Personnes</h2><div class="card"><ul class="lines">${list('personnes').map(p => `<li><span class="grow">${esc(p.nom)} <span class="muted small">· ${esc(L.role[p.role])}${p.societe ? ' · ' + esc(p.societe) : ''}</span></span><button class="btn sm ghost" data-act="pers-edit" data-id="${p.id}">Modifier</button></li>`).join('') || '<li class="muted">Aucune personne.</li>'}</ul><button class="btn sm" data-act="pers-new">+ Personne</button></div>
@@ -1007,6 +1009,17 @@
     render();
   };
 
+  A.support = async () => {
+    const v = await askForm({ title: 'Contacter le support', ok: 'Envoyer', values: { nature: 'question' }, fields: [
+      { name: 'nature', label: 'Nature', type: 'chips', options: { question: 'Question', anomalie: 'Anomalie', evolution: 'Idée d’amélioration', facturation: 'Facturation' }, required: true },
+      { name: 'sujet', label: 'Sujet', type: 'text', required: true },
+      { name: 'message', label: 'Message (que faisiez-vous, sur quel écran ?)', type: 'textarea', required: true }] });
+    if (!v) return;
+    try {
+      const r = await Sync.supportCreer(v.nature, v.sujet, `${v.message}\n\n— ${APP_VERSION} · ${location.hash || '#/'} · ${navigator.userAgent.slice(0, 120)}`);
+      await alertBox('Demande envoyée', [`Référence ${r.ref}. Le support vous recontacte (e-mail ou WhatsApp).`]);
+    } catch (e) { await alertBox('Envoi impossible', [e.message + ' — vous pouvez aussi écrire sur WhatsApp.']); }
+  };
   A['dem-pec'] = async el => {
     const me = Store.currentUser();
     if (!me) { toast('Choisissez d’abord qui utilise cet appareil'); return A.who(); }
@@ -1626,6 +1639,15 @@
     // Transition : l'ancienne adresse GitHub Pages invite à passer sur app.perfora.ma (données hors ligne liées à l'adresse).
     if (location.hostname.endsWith('github.io')) $('#view').insertAdjacentHTML('afterbegin', '<p class="info"><b>Perfora déménage sur <a href="https://app.perfora.ma/">app.perfora.ma</a>.</b> Attendez « ☁ À jour » (rien en attente d’envoi), puis ouvrez la nouvelle adresse et reconnectez-vous : vos données reviennent du serveur. Ajoutez-la à l’écran d’accueil.</p>');
     if (pf && !ecritureOK()) $('#view').insertAdjacentHTML('afterbegin', '<p class="warn">Abonnement suspendu ou expiré : consultation seule. Vos données restent accessibles et exportables.</p>');
+    // Annonces de la plateforme (maintenance, nouveauté) : masquables, mémorisées sur l'appareil.
+    const vues = data.meta.get('annonces')?.vues || [];
+    for (const a of annonces.filter(x => !vues.includes(x.id))) {
+      $('#view').insertAdjacentHTML('afterbegin', `<p class="${a.niveau === 'attention' ? 'warn' : 'info'}" style="display:flex;gap:8px;align-items:flex-start"><span class="grow"><b>${esc(a.titre)}</b><br>${esc(a.texte)}</span><button class="btn sm ghost" type="button" data-masquer-annonce="${esc(a.id)}" aria-label="Masquer">✕</button></p>`);
+    }
+    document.querySelectorAll('[data-masquer-annonce]').forEach(b => b.onclick = async () => {
+      await Store.persistMeta({ id: 'annonces', vues: [...vues, b.dataset.masquerAnnonce].slice(-50) });
+      render();
+    });
     const me = Store.currentUser();
     $('#who').textContent = me ? '👤 ' + me.nom : '👤 Qui êtes-vous ?';
     if (role()) {
@@ -1706,6 +1728,8 @@
   window.App = { V, A, L, esc, badge, empty, seg, search, askForm, askConfirm, askText, alertBox, toast, edit, list, render, fmt, fmtY, today, refDe,
     role, autorise, aModule, siteActif, nomSite, mesSites, desigBesoin, CLS_BESOIN, leverAttentesPieces, exportCsv, AFTER, adressePublique };
 
+  let annonces = [];
+  const chargerAnnonces = () => { if (Sync.profil()) Sync.mesAnnonces().then(a => { annonces = Array.isArray(a) ? a : []; if (annonces.length && !enSaisie()) render(); }).catch(() => {}); };
   const lancer = () => Store.open().then(async () => {
     net();
     const lien = !!Sync.lireLienEmail(location.hash); // retour d'un e-mail d'invitation : pas d'affichage de page avant
@@ -1717,6 +1741,7 @@
       if (!enSaisie()) render();
     } });
     if (lien) await traiterLienEmail();
+    chargerAnnonces();
   }).catch(err => {
     $('#view').innerHTML = `<p class="warn">Stockage local indisponible : ${esc(err.message)}. Vérifiez que le navigateur n’est pas en navigation privée.</p>`;
   });

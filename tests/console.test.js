@@ -55,3 +55,42 @@ test('ICE : 15 chiffres', () => {
   assert.ok(K.iceValide(''));
   assert.ok(!K.iceValide('12345'));
 });
+
+test('WhatsApp : numéros marocains et internationaux ; texte encodé', () => {
+  assert.equal(K.numeroWhatsApp('06 61 23 45 67'), '212661234567');
+  assert.equal(K.numeroWhatsApp('+212 6 61 23 45 67'), '212661234567');
+  assert.equal(K.numeroWhatsApp('00212661234567'), '212661234567');
+  assert.equal(K.numeroWhatsApp('+33 6 12 34 56 78'), '33612345678');
+  assert.equal(K.numeroWhatsApp('123'), null);
+  assert.equal(K.lienWhatsApp('0661234567', 'Bonjour & merci'), 'https://wa.me/212661234567?text=Bonjour%20%26%20merci');
+});
+
+test('modèles : variables remplies ; variable sans valeur visible et signalée', () => {
+  const r = K.remplir('Bonjour {contact}, échéance le {fin} ({montant}).', { contact: 'M. Bennani', fin: '30/11/2026' });
+  assert.equal(r.texte, 'Bonjour M. Bennani, échéance le 30/11/2026 ({montant}).');
+  assert.deepEqual(r.manquantes, ['montant']);
+});
+
+test('prospects à relancer : action due ou absente ; gagnés et perdus exclus ; pipeline', () => {
+  const P = [
+    { id: 'a', etape: 'contacte', prochaineAction: { date: '2026-11-08', texte: 'Rappeler' } },
+    { id: 'b', etape: 'demo_prevue', prochaineAction: { date: '2026-11-20' } },
+    { id: 'c', etape: 'nouveau' },
+    { id: 'd', etape: 'essai', prochaineAction: { date: '2026-11-01' } },
+    { id: 'e', etape: 'gagne', prochaineAction: { date: '2026-11-01' } },
+    { id: 'f', etape: 'perdu', motifPerte: 'Prix' },
+  ];
+  assert.deepEqual(K.aRelancer(P, T).map(x => x.p.id), ['d', 'a', 'c']);
+  assert.equal(K.aRelancer(P, T)[0].retard, 9);
+  assert.deepEqual(K.pipeline(P), { nouveau: 1, contacte: 1, demo_prevue: 1, demo_faite: 0, essai: 1, gagne: 1, perdu: 1 });
+});
+
+test('support : en retard d’abord, puis priorité, puis ancienneté ; résolues exclues', () => {
+  const S = [
+    { id: '1', statut: 'ouverte', priorite: 'normale', creeLe: '2026-11-01T08:00:00Z' },
+    { id: '2', statut: 'en_cours', priorite: 'urgente', creeLe: '2026-11-09T08:00:00Z' },
+    { id: '3', statut: 'ouverte', priorite: 'basse', creeLe: '2026-11-02T08:00:00Z', echeance: '2026-11-05' },
+    { id: '4', statut: 'resolue', priorite: 'urgente', creeLe: '2026-10-01T08:00:00Z' },
+  ];
+  assert.deepEqual(K.supportOuvert(S, T).map(x => x.t.id), ['3', '2', '1']);
+});

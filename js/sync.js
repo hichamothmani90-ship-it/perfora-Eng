@@ -206,6 +206,12 @@ const Sync = (() => {
     clientMaj: (ent, data) => rpc('pf_client_maj', { p_entreprise: ent, p_data: data }),
     conditions: (ent, v) => rpc('pf_abonnement_conditions', { p_entreprise: ent, p_prix: v.prix ?? null, p_periodicite: v.periodicite || 'mensuel', p_remise: v.remisePct ?? 0, p_debut: v.debut || null, p_conditions: v.conditions || null }),
     tarifs: () => rpc('pf_tarifs_lire'),
+    objets: type => rpc('pf_objets_lire', { p_type: type }),
+    objetEnregistrer: (id, type, ent, data) => rpc('pf_objet_enregistrer', { p_id: id, p_type: type, p_entreprise: ent || null, p_data: data }),
+    objetSupprimer: id => rpc('pf_objet_supprimer', { p_id: id }),
+    annonces: () => rpc('pf_annonces_lire'),
+    annonceEnregistrer: (id, v) => rpc('pf_annonce_enregistrer', { p_id: id, p_titre: v.titre, p_texte: v.texte, p_niveau: v.niveau, p_entreprise: v.entrepriseId || null,
+      p_debut: v.debut || null, p_fin: v.fin || null, p_actif: v.actif !== false }),
     tarifMaj: (pack, v) => rpc('pf_tarif_maj', { p_pack: pack, p_prix_mensuel: v.prixMensuel ?? null, p_prix_annuel: v.prixAnnuel ?? null, p_note: v.note || null }),
   };
   async function definirProfil(cible, role, nom, actif) {
@@ -270,5 +276,8 @@ const Sync = (() => {
   }
   function notifier() { try { surEtat(etatCourant()); } catch { /* affichage */ } }
 
-  return { PROJET, pf, profil, chargerProfil, equipe, definirProfil, utilisation, affecterSites, inviter, connecter, deconnecter, synchroniser, planifier, demarrer, etatCourant, lireLienEmail, sessionDepuisLien, changerMotDePasse, demanderLien };
+  // Annonces de la plateforme et demande au support (tout compte connecté).
+  const mesAnnonces = () => rpc('mes_annonces');
+  const supportCreer = (nature, sujet, message) => rpc('support_creer', { p_nature: nature, p_sujet: sujet, p_message: message });
+  return { PROJET, pf, mesAnnonces, supportCreer, profil, chargerProfil, equipe, definirProfil, utilisation, affecterSites, inviter, connecter, deconnecter, synchroniser, planifier, demarrer, etatCourant, lireLienEmail, sessionDepuisLien, changerMotDePasse, demanderLien };
 })();

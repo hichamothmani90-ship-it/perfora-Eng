@@ -76,6 +76,53 @@
   /** ICE marocain : 15 chiffres (vide accepté). */
   const iceValide = s => !s || /^[0-9]{15}$/.test(String(s).trim());
 
-  const Console = { mensuel, etat, alertes, synthese, prolonger, iceValide, ETAPES_MES };
+  // ---------- CC2 : prospects, support, communication ----------
+  const ETAPES_PROSPECT = ['nouveau', 'contacte', 'demo_prevue', 'demo_faite', 'essai', 'gagne', 'perdu'];
+  const PROSPECT_OUVERT = p => !['gagne', 'perdu'].includes(p.etape || 'nouveau');
+  const TICKET_OUVERT = t => !['resolue', 'fermee'].includes(t.statut || 'ouverte');
+
+  /** Numéro pour wa.me : chiffres seuls, indicatif international ; 06… / 07… / 05… marocains → 212… ; null si inutilisable. */
+  function numeroWhatsApp(tel) {
+    if (!tel) return null;
+    let d = String(tel).replace(/[^0-9+]/g, '');
+    if (d.startsWith('+')) d = d.slice(1);
+    else if (d.startsWith('00')) d = d.slice(2);
+    else if (/^0[5-7][0-9]{8}$/.test(d)) d = '212' + d.slice(1);
+    d = d.replace(/[^0-9]/g, '');
+    return d.length >= 10 && d.length <= 15 ? d : null;
+  }
+  const lienWhatsApp = (tel, texte) => { const n = numeroWhatsApp(tel); return n ? `https://wa.me/${n}${texte ? '?text=' + encodeURIComponent(texte) : ''}` : null; };
+
+  /** Remplit un modèle : {contact} {entreprise} {fin} {montant} {lien}. Une variable sans valeur reste visible et est signalée. */
+  function remplir(texte, vars) {
+    const manquantes = [];
+    const out = String(texte || '').replace(/\{(\w+)\}/g, (m, k) => {
+      const v = vars[k];
+      if (v == null || v === '') { manquantes.push(k); return m; }
+      return String(v);
+    });
+    return { texte: out, manquantes: [...new Set(manquantes)] };
+  }
+
+  /** Prospects à relancer : ouverts dont la prochaine action est due (ou sans prochaine action), les plus en retard d'abord. */
+  function aRelancer(prospects, today) {
+    return prospects.filter(PROSPECT_OUVERT).map(p => ({ p, du: p.prochaineAction?.date || null }))
+      .filter(x => !x.du || x.du.slice(0, 10) <= today)
+      .map(x => ({ ...x, retard: x.du ? jours(x.du, today) : null }))
+      .sort((a, b) => (a.du == null) - (b.du == null) || (b.retard ?? 0) - (a.retard ?? 0));
+  }
+
+  /** Nombre de prospects par étape. */
+  const pipeline = prospects => Object.fromEntries(ETAPES_PROSPECT.map(e => [e, prospects.filter(p => (p.etape || 'nouveau') === e).length]));
+
+  const PRIO = { urgente: 0, haute: 1, normale: 2, basse: 3 };
+  /** Demandes de support ouvertes : en retard d'abord, puis par priorité, puis les plus anciennes. */
+  function supportOuvert(tickets, today) {
+    return tickets.filter(TICKET_OUVERT).map(t => ({ t, enRetard: !!(t.echeance && t.echeance.slice(0, 10) < today), age: t.creeLe ? jours(String(t.creeLe), today) : 0 }))
+      .sort((a, b) => b.enRetard - a.enRetard || PRIO[a.t.priorite || 'normale'] - PRIO[b.t.priorite || 'normale'] || b.age - a.age);
+  }
+
+  const Console = { mensuel, etat, alertes, synthese, prolonger, iceValide, ETAPES_MES, ETAPES_PROSPECT, PROSPECT_OUVERT, TICKET_OUVERT,
+    numeroWhatsApp, lienWhatsApp, remplir, aRelancer, pipeline, supportOuvert };
   if (typeof module === 'object' && module.exports) module.exports = Console; else root.CalculsConsole = Console;
 })(this);

@@ -23,6 +23,11 @@ TYPES = {"localisations", "equipements", "personnes", "demandes", "ots", "progra
 COMMUNS = {"personnes", "articles", "parametres", "fournisseurs"}
 LOTS, ETAPES = {}, {}     # reprise des données (supabase/mise_en_service.sql)
 FICHES_CLIENT = {}        # centre de contrôle (supabase/centre_controle.sql)
+OBJETS, ANNONCES, NUM_TICKET = {}, {}, [0]   # CC2 (supabase/centre_controle_cc2.sql)
+for _i, (_n, _c, _t) in enumerate([("Bienvenue", "client", "Bonjour {contact}, bienvenue sur Perfora ! Votre espace {entreprise} est prêt : {lien}."),
+                                   ("Rappel d'échéance", "client", "Bonjour {contact}, l'abonnement de {entreprise} arrive à échéance le {fin} ({montant})."),
+                                   ("Proposition de démo", "prospect", "Bonjour {contact}, je vous propose une démonstration de Perfora de 20 minutes.")]):
+    OBJETS[f"modele-{_i}"] = {"id": f"modele-{_i}", "type": "modele", "entrepriseId": None, "creeLe": "2026-11-01T08:00:00", "data": {"nom": _n, "cible": _c, "texte": _t}}
 TARIFS = {"essentiel": {}, "pro": {}, "entreprise": {}}
 COUTS = {"achats", "valorisations", "factures_energie"}          # lecture restreinte (supabase/achats.sql, energie.sql)
 VOIT_COUTS = {"responsable", "magasinier", "achats", "pilote"}
@@ -297,6 +302,25 @@ class H(BaseHTTPRequestHandler):
             return self.repondre(401, {"message": "JWT expired"})
         if u.path == "/rest/v1/rpc/push_fiches":
             return self.push(email)
+        if u.path == "/rest/v1/rpc/mes_annonces":
+            p = PROFILS.get(email)
+            ent = p and ENTREPRISES[p["entreprise"]]["id"]
+            now = time.strftime("%Y-%m-%dT%H:%M:%S")
+            return self.repondre(200, [{"id": a["id"], "titre": a["titre"], "texte": a["texte"], "niveau": a["niveau"]} for a in ANNONCES.values()
+                                       if a["actif"] and (a["debut"] or "") <= now and (not a["fin"] or a["fin"] > now) and a["entrepriseId"] in (None, ent)])
+        if u.path == "/rest/v1/rpc/support_creer":
+            b, p = self.corps(), PROFILS.get(email)
+            if not p:
+                return self.repondre(403, {"message": "Compte sans entreprise"})
+            if b.get("p_nature") not in ("question", "anomalie", "evolution", "facturation") or not (b.get("p_sujet") or "").strip() or not (b.get("p_message") or "").strip():
+                return self.repondre(400, {"message": "Sujet et message obligatoires"})
+            NUM_TICKET[0] += 1
+            ref = f"SUP-{NUM_TICKET[0]:04d}"
+            i = "ticket-" + secrets.token_hex(8)
+            OBJETS[i] = {"id": i, "type": "ticket", "entrepriseId": ENTREPRISES[p["entreprise"]]["id"], "creeLe": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                         "data": {"ref": ref, "nature": b["p_nature"], "sujet": b["p_sujet"].strip(), "description": b["p_message"].strip(), "statut": "ouverte", "priorite": "normale",
+                                  "source": "appli", "demandeur": {"nom": p["nom"], "email": email, "role": p["role"]}}}
+            return self.repondre(200, {"ref": ref})
         if u.path == "/rest/v1/rpc/mon_profil":
             return self.mon_profil(email)
         if u.path == "/rest/v1/rpc/definir_profil":
@@ -501,6 +525,62 @@ class H(BaseHTTPRequestHandler):
                 return self.repondre(400, {"message": "Pack inconnu"})
             TARIFS[b["p_pack"]] = {"m": b.get("p_prix_mensuel"), "a": b.get("p_prix_annuel"), "n": b.get("p_note")}
             return self.repondre(200, None)
+        if nom == "pf_objets_lire":
+            t = b.get("p_type")
+            if t not in ("prospect", "ticket", "echange", "modele"):
+                return self.repondre(400, {"message": "Type inconnu"})
+            l = sorted((o for o in OBJETS.values() if o["type"] == t), key=lambda o: o["creeLe"], reverse=True)
+            return self.repondre(200, [{"id": o["id"], "type": o["type"], "entrepriseId": o["entrepriseId"], "creeLe": o["creeLe"], **o["data"]} for o in l])
+        if nom == "pf_objet_enregistrer":
+            t, d, ent, i = b.get("p_type"), dict(b.get("p_data") or {}), b.get("p_entreprise"), b.get("p_id")
+            for k in ("id", "type", "entrepriseId", "creeLe", "majLe"):
+                d.pop(k, None)
+            ex = OBJETS.get(i) if i else None
+            err = None
+            if t not in ("prospect", "ticket", "echange", "modele"):
+                err = "Type inconnu"
+            elif t == "prospect" and not (d.get("nom") or d.get("societe")):
+                err = "Prospect : nom ou société obligatoire"
+            elif t == "prospect" and d.get("etape") == "perdu" and not d.get("motifPerte"):
+                err = "Prospect perdu : motif obligatoire"
+            elif t == "ticket" and (not ent or not d.get("sujet")):
+                err = "Demande de support : client et sujet obligatoires"
+            elif t == "echange" and (d.get("canal") not in ("whatsapp", "email", "telephone", "rencontre", "autre") or not d.get("resume") or not (ent or d.get("prospectId"))):
+                err = "Échange incomplet"
+            elif t == "echange" and ex:
+                err = "Un échange noté ne se modifie pas : ajoutez-en un autre"
+            elif t == "modele" and not (d.get("nom") and d.get("texte")):
+                err = "Modèle : nom et texte obligatoires"
+            if err:
+                return self.repondre(400, {"message": err})
+            if t == "ticket":
+                if ex:
+                    d["ref"] = ex["data"]["ref"]
+                else:
+                    NUM_TICKET[0] += 1
+                    d["ref"] = f"SUP-{NUM_TICKET[0]:04d}"
+            i = i or f"{t}-{secrets.token_hex(8)}"
+            OBJETS[i] = {"id": i, "type": t, "entrepriseId": ent, "creeLe": ex["creeLe"] if ex else time.strftime("%Y-%m-%dT%H:%M:%S"), "data": d}
+            return self.repondre(200, {"id": i, "type": t, "entrepriseId": ent, "creeLe": OBJETS[i]["creeLe"], **d})
+        if nom == "pf_objet_supprimer":
+            o = OBJETS.get(b.get("p_id"))
+            if not o or o["type"] not in ("modele", "prospect"):
+                return self.repondre(400, {"message": "Seuls un modèle ou un prospect se suppriment"})
+            if o["type"] == "prospect":
+                for k in [k for k, x in OBJETS.items() if x["type"] == "echange" and x["data"].get("prospectId") == o["id"]]:
+                    del OBJETS[k]
+            del OBJETS[o["id"]]
+            return self.repondre(200, None)
+        if nom == "pf_annonces_lire":
+            return self.repondre(200, sorted(ANNONCES.values(), key=lambda a: a["creeLe"], reverse=True))
+        if nom == "pf_annonce_enregistrer":
+            if not (b.get("p_titre") or "").strip() or not (b.get("p_texte") or "").strip():
+                return self.repondre(400, {"message": "Titre et texte obligatoires"})
+            i = b.get("p_id") or secrets.token_hex(8)
+            ANNONCES[i] = {"id": i, "titre": b["p_titre"].strip(), "texte": b["p_texte"].strip(), "niveau": b.get("p_niveau") or "info", "entrepriseId": b.get("p_entreprise"),
+                           "debut": b.get("p_debut") or time.strftime("%Y-%m-%dT%H:%M:%S"), "fin": b.get("p_fin"), "actif": b.get("p_actif") is not False,
+                           "creeLe": ANNONCES.get(i, {}).get("creeLe") or time.strftime("%Y-%m-%dT%H:%M:%S")}
+            return self.repondre(200, i)
         if nom == "pf_creer_entreprise":
             code = (b.get("p_code") or "").strip().upper()
             if not code or code in ENTREPRISES:
