@@ -1,5 +1,7 @@
 # GMAO terrain (Perfora) — feuille de route
 
+> **Planning actualisé (7 nov. 2026)** : stabilité, sécurité, inscription et connexion d'abord — [`PLANNING_ACTUALISE.md`](PLANNING_ACTUALISE.md).
+
 État au 6 novembre 2026. Référence métier : *Perfora V3 — Procédure terrain, SaaS et modèle de données*
 (PR MAINT 01 V3, 3 nov. 2026). Règles de conception : [`.claude/skills/gmao-perfora/SKILL.md`](../.claude/skills/gmao-perfora/SKILL.md).
 
