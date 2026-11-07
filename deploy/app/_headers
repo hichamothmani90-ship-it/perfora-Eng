@@ -16,3 +16,6 @@
   Cache-Control: no-cache
 /
   Cache-Control: no-cache
+# Centre de contrôle : toujours la dernière version (page d'administration, pas de mode hors ligne).
+/console/*
+  Cache-Control: no-cache
