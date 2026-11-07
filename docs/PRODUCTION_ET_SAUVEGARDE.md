@@ -21,7 +21,7 @@ Une seule séquence, dans l'ordre, générée depuis les scripts de `supabase/` 
   fonction de test (`drop function …`) : un oubli a été trouvé le 7 nov. (`gmao_test_cc`, sans danger mais visible).
 
 Après la construction (fait par Hicham, compte administrateur) :
-1. créer son compte administrateur dans Authentication (adresse **dédiée**, MFA : étape 6) ;
+1. créer son compte administrateur (adresse **dédiée**) et activer la double authentification : docs/SECURITE.md §1-2 ;
 2. `insert into public.admins_plateforme (user_id) select id from auth.users where email = '<adresse>';`
 3. réglages Auth (adresse du site, modèles d'e-mail en français, SMTP Resend) : comme la recette
    (docs/MISE_EN_LIGNE_PERFORA_MA.md).
@@ -98,6 +98,7 @@ Sur ce PC : Docker Desktop plante au démarrage (sa fonction d'IA ne supporte pa
 wsl -d Ubuntu-22.04 -u root -- dockerd          (laisser ouvert)
 wsl -d Ubuntu-22.04 -u root -- bash -c 'cd "/mnt/c/Users/lenovo ideapad/Desktop/Claude Perfora/gmao-terrain" && bash scripts/sauvegarde/test_local.sh'
 ```
+Rejouer tous les tests SQL sur une base neuve : `bash scripts/sauvegarde/tester_sql.sh` (13 fichiers de tests).
 Comparer le schéma : `comparer_schema.sh` (base reconstruite) et `empreinte_schema.sql` dans le SQL Editor du projet,
 puis `comparer_empreintes.py projet.json locale.json`.
 

@@ -2,6 +2,7 @@
 
 > **Planning actualisé (7 nov. 2026, v32)** : où on en est et chemin vers le pilote (prochaine étape : D4 écran Énergie) — [`PLANNING_ACTUALISE.md`](PLANNING_ACTUALISE.md).
 > **Production et sauvegarde** : construire une base neuve, sauvegarde quotidienne chiffrée, restauration — [`PRODUCTION_ET_SAUVEGARDE.md`](PRODUCTION_ET_SAUVEGARDE.md).
+> **Sécurité** : double authentification de l'administrateur, journal des actions, limites d'envoi, supervision — [`SECURITE.md`](SECURITE.md).
 
 État au 6 novembre 2026. Référence métier : *Perfora V3 — Procédure terrain, SaaS et modèle de données*
 (PR MAINT 01 V3, 3 nov. 2026). Règles de conception : [`.claude/skills/gmao-perfora/SKILL.md`](../.claude/skills/gmao-perfora/SKILL.md).

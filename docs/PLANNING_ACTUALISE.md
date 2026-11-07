@@ -4,7 +4,7 @@ Priorités fixées : **1. stabilité, 2. sécurité, 3. expérience d'inscriptio
 Les semaines (S1 = semaine qui suit la validation) sont indicatives. Les fonctions nouvelles attendent que les phases 1 et 2
 soient faites.
 
-## 0. Où on en est (7 nov. 2026, appli v34 sur app.perfora.ma)
+## 0. Où on en est (7 nov. 2026, appli v35 sur app.perfora.ma)
 
 | Domaine | État |
 |---|---|
@@ -33,12 +33,12 @@ navigateur avec le serveur factice (réseau simulé : `tests/reseau.py`).
 | 3 | D4 Écran Énergie et eau (bilan des cuves reporté) | ✅ v33 | — |
 | 4 | D5 démo énergie, guide, tests hors ligne | ✅ v34 | — |
 | 5 | Scripts SQL numérotés (`supabase/production/`, schéma reconstruit identique à la recette) + sauvegarde chiffrée et restauration testées en local ; reste : dépôt privé + secrets (Hicham) et premier lancement réel | ✅ 7 nov. (mise en place côté Hicham) | — |
-| 6 | **Sécurité** : compte administrateur séparé + MFA, règles de mot de passe, journal des actions administrateur, limites d'envoi, supervision des erreurs et du stockage dans le centre de contrôle | **prochaine étape** | 1 semaine |
-| 7 | **Production** (projet Supabase gratuit) construite par les scripts, tests de sécurité rejoués, app.perfora.ma branchée | 1 à 2 semaines avant le pilote | 1 – 2 jours |
+| 6 | Sécurité : MFA administrateur (vérifiée par le serveur), journal des actions (ajout seulement), limites d'envoi, règles de mot de passe, remontée des erreurs + onglet Technique (docs/SECURITE.md) ; reste côté Hicham : activer la MFA, compte admin séparé, réglage mot de passe, sonde de disponibilité | ✅ v35 | — |
+| 7 | **Production** (projet Supabase gratuit) construite par les scripts, tests de sécurité rejoués, app.perfora.ma branchée | **prochaine étape** (1 à 2 semaines avant le pilote) | 1 – 2 jours |
 | 8 | **Pilote** | CNDP déposée + client pilote prêt (côté Hicham) | 4 – 6 semaines |
 
-Reste environ **1 semaine et demie de travail** de mon côté avant le pilote (sécurité → production).
-**En parallèle (Hicham)** : dépôt GitHub privé des sauvegardes + 4 secrets (docs/PRODUCTION_ET_SAUVEGARDE.md §2), dépôt CNDP (bloquant pour les données réelles), choix du client pilote (pack Entreprise ou
+Reste de mon côté : la **production** (1 – 2 jours, dès que tu crées le projet) puis la revue de sécurité avant le premier client.
+**En parallèle (Hicham)** : dépôt GitHub privé des sauvegardes + 4 secrets (docs/PRODUCTION_ET_SAUVEGARDE.md §2), activer la double authentification dans la console, adresse admin dédiée, réglage mot de passe Supabase, sonde de disponibilité (docs/SECURITE.md), dépôt CNDP (bloquant pour les données réelles), choix du client pilote (pack Entreprise ou
 module énergie accordé), prix des packs, contrat simple, modèle de facture avec le comptable (pour CC3), test T7 iPhone.
 
 Après le pilote : CC3 facturation, CC4 Payzone, classification du parc à l'écran, C bis (inventaire, conditionnement,
@@ -52,7 +52,7 @@ même champ sur deux téléphones, langue arabe selon les retours du pilote.
 | 1.1 | **Projet Supabase de production séparé** du projet actuel (qui devient la recette), avec **scripts SQL numérotés** (migrations) au lieu de scripts rejouables à passer dans un ordre précis | Aujourd'hui démo, tests et futurs clients partagent la même base ; un essai peut toucher un client | moi + toi (souscription) |
 | 1.2 | **Fichiers joints dans Supabase Storage** (et non dans la base) : **photos et PDF** (factures d'énergie et d'eau, rapports de vérification réglementaire, certificats, notices, bons de livraison), taille limitée par fichier et quota par pack ; lecture restreinte pour les fichiers de coûts (factures) ; consultation hors ligne des fichiers déjà ouverts | Les fichiers en base font grossir la synchronisation et la sauvegarde : premier risque de lenteur ; les PDF sont indispensables aux factures (volet D) et aux contrôles réglementaires | moi |
 | 1.3 | **Sauvegarde quotidienne + test de restauration** documenté (offre Supabase Pro) | Sans test de restauration, une sauvegarde n'est qu'un espoir | moi + toi (offre) |
-| 1.4 | **Supervision** : erreurs de l'appli et refus du serveur remontés dans un onglet « Technique » du centre de contrôle ; alerte si le site ne répond plus | Savoir qu'un client est bloqué avant qu'il appelle | moi |
+| 1.4 | **Supervision** : erreurs de l'appli et refus du serveur remontés dans un onglet « Technique » du centre de contrôle ; alerte si le site ne répond plus | Savoir qu'un client est bloqué avant qu'il appelle | ✅ v35 (erreurs et refus → console Technique ; disponibilité : sonde externe, Hicham) |
 | 1.5 | **Tests automatisés de bout en bout** (deux appareils, hors ligne puis retour du réseau, droits par rôle) lancés avant chaque publication | Les tests actuels sont surtout manuels dans le navigateur | moi |
 | 1.6 | **Mises à jour sans surprise** : réglage Cloudflare « Browser Cache TTL → Respect Existing Headers », message « nouvelle version » fiable, numéro de version visible | Le cache de 4 h de Cloudflare a déjà servi une ancienne console | toi (1 clic) + moi |
 | 1.0 | ✅ **Faite le 7 nov. 2026 (v28)** — 12 scénarios, 4 défauts corrigés ; essai sur téléphone réussi après correction de la connexion (v29 – v30) ; reste T7 (iPhone 8 jours) : [`TESTS_HORS_LIGNE.md`](TESTS_HORS_LIGNE.md). **Campagne de tests hors ligne**, sur vrais téléphones (Android et iPhone) et en automatique : voir le détail ci-dessous | Le hors ligne est la promesse de Perfora : il doit être prouvé, pas supposé | moi + toi (téléphones) |
@@ -79,10 +79,10 @@ même champ sur deux téléphones, langue arabe selon les retours du pilote.
 | # | Chantier | Qui |
 |---|---|---|
 | 2.1 | **Compte administrateur séparé** : ton compte plateforme ne doit plus être aussi responsable de l'entreprise « Perfora Démo » | moi + toi |
-| 2.2 | **Double authentification (MFA)** obligatoire pour l'administrateur, proposée aux responsables | moi |
+| 2.2 | **Double authentification (MFA)** obligatoire pour l'administrateur, proposée aux responsables | ✅ v35 (moi) |
 | 2.3 | **Règles de mot de passe** dans Supabase : 10 caractères minimum, refus des mots de passe compromis (offre Pro), durée de session, confirmation d'e-mail | toi (réglages) + moi (guide) |
-| 2.4 | **Journal des actions de l'administrateur** (création d'entreprise, changement d'abonnement, import, annulation de lot) | moi |
-| 2.5 | **Limites d'envoi** : invitations et demandes de support par heure et par entreprise (anti-abus) | moi |
+| 2.4 | **Journal des actions de l'administrateur** (création d'entreprise, changement d'abonnement, import, annulation de lot) | ✅ v35 (moi) |
+| 2.5 | **Limites d'envoi** : invitations et demandes de support par heure et par entreprise (anti-abus) | ✅ v35 (moi) |
 | 2.6 | **Revue de sécurité** avant le premier client : conseiller sécurité Supabase à 0 erreur, tests d'étanchéité rejoués sur la production, petit test d'intrusion | moi |
 | 2.7 | **Ménage** : supprimer les clés Resend inutilisées, retirer le script Cloudflare Web Analytics bloqué par la politique de sécurité (ou l'autoriser), DMARC « quarantine » après quelques semaines d'envois | toi + moi |
 
