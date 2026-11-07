@@ -20,8 +20,8 @@ PORT = next((int(a) for a in sys.argv[1:] if a.isdigit()), 8099)
 CLE = "cle-factice"
 CLE_SERVICE = "cle-service-factice"   # clé secrète du projet (sauvegarde des fichiers joints : scripts/sauvegarde/fichiers.py)
 APPEND_ONLY = {"journal", "mouvements", "photos"}
-TYPES = {"localisations", "equipements", "personnes", "demandes", "ots", "programmes", "articles", "mouvements", "journal", "photos", "besoins", "seuils", "achats", "valorisations", "compteurs", "releves", "factures_energie", "parametres", "fournisseurs"}
-COMMUNS = {"personnes", "articles", "parametres", "fournisseurs"}
+TYPES = {"localisations", "equipements", "personnes", "demandes", "ots", "programmes", "articles", "mouvements", "journal", "photos", "besoins", "seuils", "achats", "valorisations", "compteurs", "releves", "factures_energie", "parametres", "fournisseurs", "equipes"}
+COMMUNS = {"personnes", "articles", "parametres", "fournisseurs", "equipes"}
 LOTS, ETAPES = {}, {}     # reprise des données (supabase/mise_en_service.sql)
 FICHES_CLIENT = {}        # centre de contrôle (supabase/centre_controle.sql)
 # Simulation du réseau pour les tests hors ligne : POST /test/reseau {"mode": "normal" | "panne" | "lent" | "coupures", "delai": s}
@@ -188,16 +188,30 @@ def est_admin_client(email):
     return bool(p and p["actif"] and p.get("admin"))
 
 
+def pid_de(email):
+    """Fiche membre du compte (R3 : relier_membre peut la changer)."""
+    return PROFILS[email].get("personne") or "p-" + email.split("@")[0]
+
+
+def ma_societe(email):
+    x = fiches.get(pid_de(email))
+    return (x and x["type"] == "personnes" and x["entreprise"] == PROFILS[email]["entreprise"] and x["data"].get("societeId")) or None
+
+
 def ot_a_moi(oid, email):
     o = fiches.get(oid or "")
+    soc = ma_societe(email)
     return bool(o and o["type"] == "ots" and o["entreprise"] == PROFILS[email]["entreprise"]
-                and any(i.get("personneId") == "p-" + email.split("@")[0] for i in o["data"].get("intervenants") or []))
+                and (any(i.get("personneId") == pid_de(email) for i in o["data"].get("intervenants") or [])
+                     or (soc and o["data"].get("societeId") == soc)))
 
 
 def prestataire_voit(f, email):
     t, d = f["type"], f["data"]
-    if t in ("equipements", "localisations", "personnes", "articles", "compteurs", "releves", "parametres", "journal"):
+    if t in ("equipements", "localisations", "personnes", "articles", "compteurs", "releves", "parametres", "journal", "equipes"):
         return True
+    if t == "fournisseurs":
+        return f["id"] == ma_societe(email)   # R3 : sa société seulement
     if t == "ots":
         return ot_a_moi(f["id"], email)
     if t == "demandes":
@@ -595,6 +609,31 @@ class H(BaseHTTPRequestHandler):
                 return self.repondre(400, {"message": "L'entreprise doit garder au moins un administrateur"})
             PROFILS[cible]["admin"] = bool(b.get("valeur"))
             return self.repondre(200, None)
+        if u.path == "/rest/v1/rpc/relier_membre":   # R3 (miroir de supabase/membres_r3.sql)
+            if not est_admin_client(email):
+                return self.repondre(403, {"message": "Réservé à l'administrateur de l'entreprise"})
+            b = self.corps()
+            cible, pers = b["cible"].removeprefix("u-"), b.get("personne")
+            ent = PROFILS[email]["entreprise"]
+            if cible not in PROFILS or PROFILS[cible]["entreprise"] != ent:
+                return self.repondre(403, {"message": "Compte hors de votre entreprise"})
+            x = fiches.get(pers or "")
+            if not (x and x["type"] == "personnes" and x["entreprise"] == ent):
+                return self.repondre(400, {"message": "Membre inconnu de l'entreprise"})
+            if any(e != cible and pid_de(e) == pers for e in PROFILS):
+                return self.repondre(400, {"message": "Ce membre a déjà un autre accès"})
+            ancien = pid_de(cible)
+            with verrou:
+                PROFILS[cible]["personne"] = pers
+                PROFILS[cible]["nom"] = (x["data"].get("nom") or "").strip() or PROFILS[cible]["nom"]
+                seq[0] += 1
+                x["data"].update({"role": PROFILS[cible]["role"], "email": cible, "actif": True})
+                x["seq"] = seq[0]
+                if ancien != pers and ancien in fiches:
+                    seq[0] += 1
+                    fiches[ancien]["data"].update({"actif": False, "remplaceePar": pers})
+                    fiches[ancien]["seq"] = seq[0]
+            return self.repondre(200, None)
         if u.path == "/rest/v1/rpc/affecter_sites" and not est_admin_client(email):
             return self.repondre(403, {"message": "Réservé à l'administrateur de l'entreprise"})
         if u.path == "/rest/v1/rpc/utilisation" and not (est_admin_client(email) or role_de(email) == "responsable"):
@@ -661,12 +700,20 @@ class H(BaseHTTPRequestHandler):
         defaut = p["defaut"] if p["defaut"] in mes else (mes[0] if len(mes) == 1 else None)
         acceptes, refus, refuses = 0, [], set()
         terrain = r in ("technicien", "prestataire")
+        gere = r == "responsable" or est_admin_client(email)   # R3 : membres, équipes, sociétés prestataires
         with verrou:
             for f in self.corps().get("lot", []):
                 t, pa = f.get("type"), f.get("patch") or {}
                 cible = pa.get("entite") if t == "journal" else t
                 ex = fiches.get(f["id"])
                 motif, s = None, None
+                exd = ex["data"] if ex else {}
+                mod = module_compteur(t, pa, ex, ent, module_de(cible))
+                if cible == "fournisseurs" and (t == "journal" or pa.get("prestataire", exd.get("prestataire")) is True):
+                    mod = "base"   # R3 : société prestataire = module de base
+                soi = cible == "personnes" and ((pa.get("entiteId") if t == "journal" else f["id"]) or "") == pid_de(email) \
+                    and (t == "journal" or (ex is not None and all(k in ("nom", "telephone", "modifieLe", "modifiePar") for k in pa)))
+                lie = t == "personnes" and any(pid_de(e) == f["id"] and q["entreprise"] == ent for e, q in PROFILS.items())
                 if t == "ots" and terrain:
                     pa = r2_qualif_terrain(pa, ex and ex["data"], not ex)
                 if t in ("mouvements", "releves") and ex and ex["entreprise"] == ent and all(ex["data"].get(k) == v for k, v in pa.items()):
@@ -680,12 +727,20 @@ class H(BaseHTTPRequestHandler):
                     motif = "fiche d'une autre entreprise"
                 elif t == "journal" and pa.get("entiteId") in refuses:
                     motif = "modification liée refusée"
-                elif module_compteur(t, pa, ex, ent, module_de(cible)) not in dr["modules"]:
-                    motif = f"module « {module_compteur(t, pa, ex, ent, module_de(cible))} » non inclus dans l'abonnement"
+                elif mod not in dr["modules"]:
+                    motif = f"module « {mod} » non inclus dans l'abonnement"
+                elif cible in ("personnes", "equipes") and not gere and not soi:
+                    motif = "membres et équipes : réservés au responsable et à l'administrateur"
                 elif peut_ecrire(r, cible) and r == "prestataire" and prestataire_refus(t, f["id"], pa, email):
                     motif = prestataire_refus(t, f["id"], pa, email)
-                elif not peut_ecrire(r, cible):
+                elif cible not in ("personnes", "equipes") and not (cible == "fournisseurs" and gere) and not peut_ecrire(r, cible):
                     motif = f"droits insuffisants ({r})"
+                elif t == "fournisseurs" and not gere and (pa.get("prestataire") is True or exd.get("prestataire") is True):
+                    motif = "société prestataire : réservée au responsable et à l'administrateur"
+                elif lie and ex and (("role" in pa and pa["role"] != exd.get("role")) or ("actif" in pa and pa["actif"] is False and exd.get("actif") is not False)):
+                    motif = "membre avec un accès : rôle et accès se changent par l'administrateur (Membres)"
+                elif t == "ots" and terrain and any(pa.get(k) and pa.get(k) != exd.get(k) for k in ("equipeId", "societeId")):
+                    motif = "intervention confiée à une équipe ou une société : réservé au responsable"
                 # volet B (miroir de supabase/magasin.sql)
                 elif t == "besoins" and terrain and ("qteReservee" in pa or "delai" in pa or (pa.get("statut") or "demande") not in ("demande", "annule")):
                     motif = "réservation et disponibilité : réservées au magasin"
@@ -766,6 +821,10 @@ class H(BaseHTTPRequestHandler):
                     refuses.add(f["id"])
                     continue
                 acceptes += 1
+                if lie and (pa.get("nom") or "").strip():   # R3 : le nom d'un membre avec accès est aussi celui de son compte
+                    for e, q in PROFILS.items():
+                        if pid_de(e) == f["id"]:
+                            q["nom"] = pa["nom"].strip()
                 if ex and t in APPEND_ONLY and t != "mouvements":
                     continue
                 seq[0] += 1
@@ -983,7 +1042,7 @@ class H(BaseHTTPRequestHandler):
         p = PROFILS.get(email)
         if not p:
             return self.repondre(403, {"message": "Compte sans profil"})
-        pid = "p-" + email.split("@")[0]
+        pid = pid_de(email)
         with verrou:
             if pid not in fiches:
                 seq[0] += 1
@@ -1009,11 +1068,11 @@ class H(BaseHTTPRequestHandler):
             if q:
                 return self.repondre(400, {"message": q})
         PROFILS[cible].update({"role": b.get("nouveau_role") or PROFILS[cible]["role"], "nom": b.get("nouveau_nom") or PROFILS[cible]["nom"], "actif": b.get("est_actif", True)})
-        pid = "p-" + cible.split("@")[0]
+        pid = pid_de(cible)
         with verrou:
-            if pid in fiches:
+            if pid in fiches:   # R3 : nom et rôle suivent le compte ; retirer l'accès ne rend pas le membre inactif
                 seq[0] += 1
-                fiches[pid]["data"].update({k: PROFILS[cible][k] for k in ("role", "nom", "actif")})
+                fiches[pid]["data"].update({k: PROFILS[cible][k] for k in ("role", "nom")})
                 fiches[pid]["seq"] = seq[0]
         return self.repondre(200, None)
 
@@ -1075,7 +1134,7 @@ class H(BaseHTTPRequestHandler):
         if u.path == "/rest/v1/profils":
             moi = PROFILS[email]
             vis = [(e, p) for e, p in PROFILS.items() if p["entreprise"] == moi["entreprise"]] if role_de(email) == "responsable" or est_admin_client(email) else [(email, moi)]
-            return self.repondre(200, [{"user_id": "u-" + e, "email": e, "nom": p["nom"], "role": p["role"], "actif": p["actif"], "personne_id": "p-" + e.split("@")[0], "admin_client": bool(p.get("admin"))} for e, p in sorted(vis)])
+            return self.repondre(200, [{"user_id": "u-" + e, "email": e, "nom": p["nom"], "role": p["role"], "actif": p["actif"], "personne_id": pid_de(e), "admin_client": bool(p.get("admin"))} for e, p in sorted(vis)])
         if u.path == "/rest/v1/fiches":
             if not role_de(email):
                 return self.repondre(200, [])

@@ -23,7 +23,8 @@ Seul bruit en ligne : le script de statistiques Cloudflare, bloqué par la polit
 avant le pilote (≈ 4 semaines). **R1 fait (v36)** : navigation, accueils et menus par rôle, Mon compte / Entreprise,
 droit administrateur de l'entreprise, prestataire limité à ses interventions, journal restreint. **R2 fait (v37)** : fiche
 intervention en étapes, qualification proposée / validée, arrêts planifiés / non planifiés, saisie rapide, Signaler en
-trois questions. Prochain : **R3** (membres, équipes, administrateur du client ; maquettes d'abord).
+trois questions. **R3 fait (v38)** : une seule liste de membres (avec ou sans accès), équipes, sociétés prestataires, habilitations,
+accès donnés par l'administrateur depuis la fiche du membre. Prochain : **R5** (magasin ↔ achats relié ; maquettes d'abord).
 
 ## 0 bis. Plan actualisé jusqu'au pilote
 

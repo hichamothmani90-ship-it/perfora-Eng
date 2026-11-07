@@ -9,11 +9,12 @@ const Store = (() => {
   // v6 (volet D) : stores « compteurs », « releves », « factures_energie », « parametres » (réglages de l'entreprise).
   // v7 (mise en service) : store « fournisseurs ».
   // v8 (fichiers joints) : store « blobs » = contenu des photos et PDF, lu à la demande (jamais chargé en mémoire).
+  // v9 (lot R3) : store « equipes ».
   // Les stores existants sont conservés tels quels.
-  const DB_VER = 8;
+  const DB_VER = 9;
   const TYPES = ['localisations', 'equipements', 'personnes', 'demandes', 'ots',
     'programmes', 'articles', 'mouvements', 'journal', 'meta', 'photos', 'sortie', 'besoins', 'seuils', 'achats', 'valorisations',
-    'compteurs', 'releves', 'factures_energie', 'parametres', 'fournisseurs'];
+    'compteurs', 'releves', 'factures_energie', 'parametres', 'fournisseurs', 'equipes'];
   /** Données métier (exportées, synchronisées). meta et sortie restent propres à l'appareil. */
   const METIER = TYPES.filter(t => t !== 'meta' && t !== 'sortie');
   const APPEND_ONLY = ['journal', 'mouvements', 'photos'];

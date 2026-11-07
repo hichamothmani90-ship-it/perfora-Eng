@@ -711,7 +711,25 @@
     return out;
   }
 
-  const Calculs = { demoEnergie, bornesMois, moisDecale, tableauEnergie, controleReleve, echeanceCompteur, UNITES, UNITES_RESSOURCE, ANOMALIES_CONFIRMABLES, analyserReleves, consommationPeriode, rapprochementFacture, residuSousComptage, totauxParUnite, relevesDus, bilanCombustible, totalFactures,
+  // ---------- lot R3 : membres, équipes, sociétés, habilitations ----------
+  /** Nom comparable : sans accents, sans casse, espaces réduits (détection des doublons). */
+  const nomComparable = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+  /** Membres actifs portant le même nom (hors le membre lui-même). */
+  const doublonsNom = (nom, membres, sauf) => !nomComparable(nom) ? [] :
+    membres.filter(m => m.id !== sauf && m.actif !== false && nomComparable(m.nom) === nomComparable(nom));
+  /** Habilitation échue : échéance (AAAA-MM-JJ) passée au jour donné. */
+  const habilitationEchue = (h, jour) => !!(h && h.echeance && String(h.echeance).slice(0, 10) < String(jour).slice(0, 10));
+  const habilitationsEchues = (m, jour) => ((m && m.habilitations) || []).filter(h => habilitationEchue(h, jour));
+  /** Équipes actives dont le membre fait partie (une seule source : l'équipe). */
+  const equipesDe = (personneId, equipes) => !personneId ? [] :
+    equipes.filter(e => e.actif !== false && ((e.membreIds || []).includes(personneId) || e.chefId === personneId));
+  /** Intervention confiée à une personne : intervenant actif, ou confiée à sa société (prestataire). */
+  const otConfiee = (o, { personneId, societeId } = {}) =>
+    ((o.intervenants || []).some(i => !i.fin && i.personneId === personneId) && !!personneId) || (!!societeId && o.societeId === societeId);
+  /** Intervention confiée à l'une des équipes données. */
+  const otDeMesEquipes = (o, equipeIds) => !!o.equipeId && (equipeIds || []).includes(o.equipeId);
+
+  const Calculs = { nomComparable, doublonsNom, habilitationEchue, habilitationsEchues, equipesDe, otConfiee, otDeMesEquipes, demoEnergie, bornesMois, moisDecale, tableauEnergie, controleReleve, echeanceCompteur, UNITES, UNITES_RESSOURCE, ANOMALIES_CONFIRMABLES, analyserReleves, consommationPeriode, rapprochementFacture, residuSousComptage, totauxParUnite, relevesDus, bilanCombustible, totalFactures,
     montantCommande, isolementsEnAttente, consommationHebdo, seuilIndicatif, seuilActif, besoinsNonCouverts, receptionLigne, etatAchat, qteEnCommande, qteIsolee, situationArticle, aReapprovisionner, prixMAD, valorisation, coutConsomme, besoinsAServir, attentesALever, piecesDetenues, stockPhysique, qteReservee, stockDisponible, etatBesoin, rapprochementBesoin, retraitsAVerifier, qteRemise, addDays, daysBetween, minutesBetween, dureeUnion, mediane, NATURE_DU_BESOIN, ETAT_RANK, otOuvert, demandeOuverte, indexOtsParDemande, etatEquipement, verifierCloture, qualification, typeArret, typeArretPropose, aQualifier, ETAT_SIGNALE, echeanceSuivante, indicateurs };
   if (typeof module === 'object' && module.exports) module.exports = Calculs; else root.Calculs = Calculs;
 })(this);

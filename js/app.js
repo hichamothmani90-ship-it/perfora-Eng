@@ -5,7 +5,7 @@
 (() => {
   const { data } = Store;
   /** Version affichée dans Réglages : à incrémenter avec VERSION dans sw.js. */
-  const APP_VERSION = 'v37';
+  const APP_VERSION = 'v38';
   if (window.Erreurs) Erreurs.version = APP_VERSION;
   const $ = s => document.querySelector(s);
   // Multi-site : les listes de fiches de site ne montrent que le site actif (« tous » possible).
@@ -75,7 +75,7 @@
     regle: { fixe: 'Échéance fixe', apres_realisation: 'Après réalisation' },
     typeSuite: { reserve: 'Réserve', suite: 'Action de suite', provisoire: 'Solution provisoire' },
     mvt: { entree: 'Réception', sortie: 'Sortie', remise: 'Remise', retour: 'Retour', rebut: 'Rebut', ajustement: 'Ajustement inventaire' },
-    entite: { demandes: 'Demande', ots: 'Intervention', equipements: 'Équipement', localisations: 'Lieu', personnes: 'Personne', programmes: 'Programme', articles: 'Article', mouvements: 'Mouvement', besoins: 'Besoin de pièce' },
+    entite: { demandes: 'Demande', ots: 'Intervention', equipements: 'Équipement', localisations: 'Lieu', personnes: 'Membre', equipes: 'Équipe', fournisseurs: 'Société', programmes: 'Programme', articles: 'Article', mouvements: 'Mouvement', besoins: 'Besoin de pièce' },
     etatBesoin: { demande: 'Demandée', reserve: 'Réservée', partiellement_remis: 'Remise en partie', remis: 'Remise', indisponible: 'Indisponible', annule: 'Annulée' },
   };
   const opts = d => Object.entries(d);
@@ -159,7 +159,7 @@
     const quand = o.echeance ? `échéance ${fmt(o.echeance)}` : o.creneau ? `prévu ${fmt(o.creneau)}` : `créée ${fmt(o.creeLe)}`;
     return `<a class="card" href="#/ot/${o.id}"><div class="row"><span class="t grow">${esc(e?.designation || '—')}</span>${badgeOT(o)}</div>
       <div class="s">${esc(o.ref)} · ${txtQualif(qualification(o))}${qualification(o).validee ? '' : ' <span class="muted">(proposée)</span>'} · ${quand}</div>
-      ${who ? `<div class="s">👤 ${esc(who)}</div>` : ''}</a>`;
+      ${who || o.equipeId || o.societeId ? `<div class="s">👤 ${esc([who, o.equipeId && 'équipe ' + (data.equipes.get(o.equipeId)?.nom || ''), o.societeId && (data.fournisseurs.get(o.societeId)?.nom || 'société')].filter(Boolean).join(' · '))}</div>` : ''}</a>`;
   }
   function eqCard(e) {
     const et = etatEquipement(e.id);
@@ -240,7 +240,7 @@
   /** Journal d'audit complet : responsable, direction, administrateur (le serveur ne renvoie aux autres que leurs lignes). */
   const voitJournal = () => !role() || ['responsable', 'pilote'].includes(role()) || estAdminClient();
   const DROITS = {
-    responsable: ['ot-valider-qualif', 'ot-qualifier', 'eq-new', 'eq-edit', 'loc-new', 'prog-new', 'prog-edit', 'pers-new', 'pers-edit', 'ot-rouvrir', 'sync-tout', 'equipe', 'param-cloture', 'cpt-new', 'cpt-edit', 'releve-qualifier', 'seuil-valider', 'seuil-refuser', 'achat-valider', 'achat-completer', 'achat-refuser'],
+    responsable: ['ot-valider-qualif', 'ot-qualifier', 'eq-new', 'eq-edit', 'loc-new', 'prog-new', 'prog-edit', 'ot-rouvrir', 'sync-tout', 'equipe', 'param-cloture', 'cpt-new', 'cpt-edit', 'releve-qualifier', 'seuil-valider', 'seuil-refuser', 'achat-valider', 'achat-completer', 'achat-refuser'],
     terrain: ['ot-new', 'dem-intervenir', 'dem-planifier', 'prog-ot', 'dem-pec', 'dem-classer', 'ot-demarrer', 'ot-planifier', 'ot-annuler', 'ot-suspendre', 'ot-reprendre', 'ot-terminer', 'ot-cloturer',
       'ot-ajout-int', 'ot-retirer', 'ot-ajout-piece', 'ot-annuler-piece', 'ot-ajout-suite', 'ot-lever',
       'bes-new', 'bes-urgent', 'bes-utilise', 'bes-rendre', 'bes-annuler'],
@@ -559,9 +559,14 @@
   V.ots = r => {
     const f = r.q.get('f') || (role() === 'prestataire' ? 'mine' : 'ouverts');
     let items = list('ots');
-    const moi = Store.currentUser()?.id;
+    const moi = Store.currentUser()?.id, M = App.membres;
+    const mesEq = M ? M.mesEquipes().map(e => e.id) : [];
     const F = {
-      mine: o => otOuvert(o) && actifs(o).some(i => i.personneId === moi),
+      mine: o => otOuvert(o) && Calculs.otConfiee(o, { personneId: moi, societeId: role() === 'prestataire' ? M?.maSociete() : null }),
+      mon_equipe: o => otOuvert(o) && Calculs.otDeMesEquipes(o, mesEq),
+      membre: o => (o.intervenants || []).some(i => i.personneId === r.q.get('m')),
+      equipe: o => otOuvert(o) && o.equipeId === r.q.get('e'),
+      societe: o => otOuvert(o) && o.societeId === r.q.get('s'),
       ouverts: otOuvert, en_cours: o => ['en_cours', 'travail_termine'].includes(o.statut), suspendue: o => o.statut === 'suspendue',
       a_faire: o => ['a_preparer', 'a_planifier', 'planifiee', 'prete'].includes(o.statut), cloturee: o => o.statut === 'cloturee', tous: () => true,
       a_qualifier: Calculs.aQualifier,
@@ -569,7 +574,9 @@
     items = items.filter(F[f] || F.ouverts);
     items.sort((a, b) => f === 'cloturee' ? (b.clotureLe || '').localeCompare(a.clotureLe || '')
       : (PRIO_ORDER.indexOf(a.priorite) - PRIO_ORDER.indexOf(b.priorite)) || (b.creeLe || "").localeCompare(a.creeLe || ""));
-    return `<h1>${f === 'mine' ? (role() === 'prestataire' ? 'Mes interventions' : 'Mes travaux') : 'Travaux'}</h1>${seg([['#/ots?f=mine', 'Les miens', 'mine'], ['#/ots', 'Ouverts', 'ouverts'], ['#/ots?f=a_faire', 'À faire', 'a_faire'], ['#/ots?f=en_cours', 'En cours', 'en_cours'], ['#/ots?f=suspendue', 'En attente', 'suspendue'], ['#/ots?f=cloturee', 'Clôturés', 'cloturee'], ...(estResp() ? [['#/ots?f=a_qualifier', 'À qualifier', 'a_qualifier']] : []), ['#/ots?f=tous', 'Tous', 'tous']], f)}
+    const titre = f === 'mine' ? (role() === 'prestataire' ? 'Mes interventions' : 'Mes travaux') : f === 'membre' ? 'Travaux de ' + (data.personnes.get(r.q.get('m'))?.nom || '…')
+      : f === 'equipe' ? 'Travaux · ' + (data.equipes.get(r.q.get('e'))?.nom || 'équipe') : f === 'societe' ? 'Travaux · ' + (data.fournisseurs.get(r.q.get('s'))?.nom || 'société') : 'Travaux';
+    return `<h1>${esc(titre)}</h1>${seg([['#/ots?f=mine', 'Les miens', 'mine'], ...(mesEq.length ? [['#/ots?f=mon_equipe', 'Mon équipe', 'mon_equipe']] : []), ['#/ots', 'Ouverts', 'ouverts'], ['#/ots?f=a_faire', 'À faire', 'a_faire'], ['#/ots?f=en_cours', 'En cours', 'en_cours'], ['#/ots?f=suspendue', 'En attente', 'suspendue'], ['#/ots?f=cloturee', 'Clôturés', 'cloturee'], ...(estResp() ? [['#/ots?f=a_qualifier', 'À qualifier', 'a_qualifier']] : []), ['#/ots?f=tous', 'Tous', 'tous']], f)}
       ${search('#lst', 'Rechercher')}<div id="lst">${items.length ? items.map(otCard).join('') : empty('Aucune intervention.')}</div>
       <div class="actions"><button class="btn" data-act="ot-new">Nouvelle intervention sans demande</button>${peutRapide() ? '<a class="btn ghost" href="#/rapide">Saisie rapide</a>' : ''}</div>`;
   };
@@ -624,12 +631,21 @@
   const dt = (b, champ, v, label, rr = true) => `<label class="f">${label}</label><input type="datetime-local" value="${esc(v)}" data-bind="${b}${champ}" ${rr ? 'data-rerender' : ''}>`;
 
   /** Préparer : le responsable qualifie, planifie, affecte, prévoit l'arrêt et les pièces ; les autres voient un résumé. */
+  /** R3 : une intervention peut être confiée à une équipe ou à une société prestataire avant d'avoir un intervenant. */
+  function confierA(o, b) {
+    const eqs = list('equipes').filter(e => e.actif !== false), socs = list('fournisseurs').filter(s => s.prestataire && s.actif !== false);
+    if (!eqs.length && !socs.length) return '';
+    const sel = (champ, l, v) => `<select data-bind="${b}${champ}"><option value="">—</option>${l.map(x => `<option value="${esc(x.id)}" ${x.id === v ? 'selected' : ''}>${esc(x.nom)}</option>`).join('')}</select>`;
+    return `${eqs.length ? `<label class="f">Confiée à l’équipe <span class="opt">(facultatif)</span></label>${sel('equipeId', eqs, o.equipeId)}` : ''}
+      ${socs.length ? `<label class="f">Confiée à la société prestataire <span class="opt">(facultatif)</span></label>${sel('societeId', socs, o.societeId)}` : ''}`;
+  }
   function etapePreparer(o, b, prog, pieces = true) {
     const q = qualification(o);
     if (!estResp()) return `<dl class="kv">
         <dt>Qualification</dt><dd>${txtQualif(q)}</dd>
         <dt>Prévu</dt><dd>${o.creneau ? fmtY(o.creneau) : o.echeance ? 'échéance ' + fmtY(o.echeance) : '<span class="muted">non planifiée</span>'}</dd>
         <dt>Intervenants</dt><dd>${esc(intervenantsTxt(o))}</dd>
+        ${o.equipeId || o.societeId ? `<dt>Confiée à</dt><dd>${esc([o.equipeId && 'équipe ' + (data.equipes.get(o.equipeId)?.nom || ''), o.societeId && (data.fournisseurs.get(o.societeId)?.nom || '')].filter(Boolean).join(' · '))}</dd>` : ''}
         <dt>Arrêt</dt><dd>${texteArret(o)}</dd>
         ${o.consignes ? `<dt>Consignes</dt><dd style="white-space:pre-wrap">${esc(o.consignes)}</dd>` : ''}</dl>
       ${prog?.instruction ? `<p class="small" style="white-space:pre-wrap">${esc(prog.instruction)}</p>` : ''}
@@ -637,6 +653,7 @@
     return `<label class="f" style="margin-top:0">Nature</label>${chipGroup('nature', NATURES, q.nature, { bind: b + 'nature' })}
       <label class="f">Priorité</label>${chipGroup('priorite', PRIORITES, q.priorite, { bind: b + 'priorite' })}
       <label class="f">Créneau prévu <span class="opt">(facultatif)</span></label><input type="datetime-local" value="${esc(o.creneau)}" data-bind="${b}creneau">
+      ${confierA(o, b)}
       <label class="f">Intervenants</label>${blocIntervenants(o, true)}
       <label class="f">Arrêt de production prévu ?</label>${chipGroup('avecArret', OUI_NON, o.avecArret, { bind: b + 'avecArret' })}
       ${o.avecArret === 'oui' ? `<div style="margin-top:8px">${chipGroup('arretType', ARRET_TYPE, typeArret(o), { bind: b + 'arretType' })}</div>
@@ -931,6 +948,7 @@
         : `<label class="f" style="margin-top:0">Qui utilise cet appareil ?</label>
         <select data-bind="meta|device|personneId"><option value="">— Choisir —</option>${list('personnes').filter(x => x.actif !== false).map(x => `<option value="${x.id}" ${dev.personneId === x.id ? 'selected' : ''}>${esc(x.nom)} (${esc(L.role[x.role])})</option>`).join('')}</select>`}</div>
       ${p ? `<div class="card"><ul class="lines">
+          ${Store.currentUser() ? `<li><span class="grow">Mon nom et mon téléphone<br><span class="small muted">${esc(Store.currentUser().telephone || 'téléphone non renseigné')}</span></span><button class="btn sm" data-act="membre-edit" data-id="${esc(Store.currentUser().id)}">Modifier</button></li>` : ''}
           <li><span class="grow">Changer mon mot de passe</span><button class="btn sm" data-act="mdp-changer">Changer</button></li>
           <li><span class="grow">Se déconnecter de tous les appareils<br><span class="small muted">Téléphone perdu ou prêté : ferme toutes vos sessions.</span></span><button class="btn sm ghost" data-act="deco-partout">Tout fermer</button></li>
           <li><span class="grow">Se déconnecter de cet appareil</span><button class="btn sm ghost" data-act="sync-deconnecter">Se déconnecter</button></li></ul></div>` : ''}
@@ -948,11 +966,10 @@
     const connecte = !!Sync.profil();
     return `<h1>Entreprise</h1>
       ${blocEntreprise()}
-      ${connecte ? `<h2>Membres et droits</h2><div class="card" id="equipe"><p class="muted small" style="margin:0">Chargement de l’équipe…</p></div>` : ''}
+      <h2>Membres</h2><div class="card"><p class="small muted" style="margin-top:0">Une seule liste : les membres avec ou sans accès à l’appli, leurs équipes, leur société et leurs habilitations.</p><div class="actions" style="margin-bottom:0"><a class="btn primary" href="#/membres">Membres</a><a class="btn" href="#/equipes">Équipes</a><a class="btn" href="#/societes">Sociétés</a></div></div>
       <h2>Règles de l’entreprise</h2><div class="card"><div class="row"><span class="grow"><b>Clôture des interventions validée par le responsable</b><br><span class="small muted">${parametres()?.clotureParResponsable ? 'Activé : les techniciens terminent, le responsable valide la clôture.' : 'Désactivé : les techniciens clôturent eux-mêmes leurs interventions.'}</span></span>${badge(parametres()?.clotureParResponsable ? 'Activé' : 'Désactivé', parametres()?.clotureParResponsable ? 'green' : '')}</div>
         <div class="actions" style="margin-bottom:0"><button class="btn sm" data-act="param-cloture">${parametres()?.clotureParResponsable ? 'Désactiver' : 'Activer'}</button></div></div>
       <h2>Lieux</h2><div class="card"><ul class="lines">${list('localisations').map(l => `<li><span class="grow">${esc(locPath(l.id))} <span class="muted small">· ${esc(l.code)}</span></span></li>`).join('') || '<li class="muted">Aucun lieu.</li>'}</ul><button class="btn sm" data-act="loc-new">+ Lieu</button></div>
-      <h2>Personnes sans compte</h2><div class="card"><p class="small muted" style="margin-top:0">Intervenants qui n’utilisent pas l’appli (affectation, signature). Les comptes sont dans « Membres et droits ».</p><ul class="lines">${list('personnes').map(x => `<li><span class="grow">${esc(x.nom)} <span class="muted small">· ${esc(L.role[x.role])}${x.societe ? ' · ' + esc(x.societe) : ''}</span></span><button class="btn sm ghost" data-act="pers-edit" data-id="${x.id}">Modifier</button></li>`).join('') || '<li class="muted">Aucune personne.</li>'}</ul><button class="btn sm" data-act="pers-new">+ Personne</button></div>
       <h2>Données</h2><div class="card"><p class="small muted" style="margin-top:0">${connecte ? 'Le serveur sauvegarde chaque nuit. Export pour vos archives ou un tableur.' : `Dernière sauvegarde : <b>${(x => x.depuis ? fmtY(x.depuis) + ` (${x.modifs} modification(s) depuis)` : 'jamais')(etatSauvegarde())}</b>. Exportez sur le téléphone, importez sur le PC (ou l’inverse) : les fiches sont fusionnées.`}</p>
         <div class="actions"><button class="btn" data-act="export">Exporter (JSON)</button>${connecte ? '' : '<button class="btn" data-act="import">Importer</button>'}<button class="btn" data-act="csv">Interventions (CSV Excel)</button></div>
         <input type="file" id="importFile" accept=".json,application/json" class="hidden"></div>`;
@@ -996,73 +1013,6 @@
   // ---------- comportements après affichage ----------
   const AFTER = {};
   AFTER.connexion = apresConnexion;
-  AFTER.entreprise = async () => {
-    const box = $('#equipe');
-    if (!box) return;
-    try {
-      const [liste, u] = await Promise.all([Sync.equipe(), Sync.utilisation()]);
-      const moi = Sync.profil()?.userId;
-      const sitesDe = id => (u.affectations || []).filter(a => a.userId === id).map(a => (u.sites.find(s => s.id === a.siteId) || {}).nom).filter(Boolean);
-      const places = (n, max) => max == null ? `${n}` : `${n} / ${max}`;
-      const plein = (n, max) => max != null && n >= max;
-      box.innerHTML = `<div class="tiles" style="margin-bottom:10px">
-          <div class="tile ${plein(u.actifs, u.maxTotal) ? 'amber' : 'blue'}"><b>${places(u.actifs, u.maxTotal)}</b><span>Utilisateurs actifs</span></div>
-          ${u.sites.map(s => `<div class="tile ${plein(s.actifs, u.maxSite) ? 'amber' : ''}"><b>${places(s.actifs, u.maxSite)}</b><span>${esc(s.nom)}</span></div>`).join('')}</div>
-        <div class="actions" style="margin-top:0"><button class="btn primary" type="button" id="inviter" ${plein(u.actifs, u.maxTotal) ? 'disabled title="Plus de place dans le pack"' : ''}>+ Inviter un membre</button></div>
-        ${plein(u.actifs, u.maxTotal) ? '<p class="warn small">Toutes les places du pack sont prises : désactivez un compte ou changez de pack.</p>' : ''}
-        <ul class="lines">${liste.map(p => `<li style="flex-wrap:wrap"><span class="grow"><b>${esc(p.nom || p.email)}</b>${p.actif ? '' : ' ' + badge('désactivé', 'red')}<br><span class="small muted">${esc(p.email)}</span><br><span class="small">📍 ${esc(sitesDe(p.user_id).join(', ') || 'aucun site')}</span></span>
-          <select data-profil="${p.user_id}" ${p.user_id === moi ? 'disabled title="Votre propre rôle"' : ''} style="width:auto;min-height:38px">${['responsable', 'technicien', 'prestataire', 'magasinier', 'achats', 'exploitation', 'pilote'].map(r => `<option value="${r}" ${p.role === r ? 'selected' : ''}>${L.role[r]}</option>`).join('')}</select>
-          <button class="btn sm ${p.admin_client ? '' : 'ghost'}" data-admin="${p.user_id}" data-valeur="${p.admin_client ? '0' : '1'}" title="Administrateur de l’entreprise : membres, sites, règles">${p.admin_client ? '★ Admin' : '☆ Admin'}</button>${p.user_id === moi ? '' : `<button class="btn sm ghost" data-sites="${p.user_id}">Sites</button><button class="btn sm ghost" data-equipe="${p.user_id}" data-nom="${esc(p.nom || '')}" data-role="${p.role}" data-actif="${p.actif}">Modifier</button>`}</li>`).join('')}</ul>
-        <p class="small muted">Les limites du pack sont vérifiées par le serveur à chaque invitation, activation ou affectation de site. Désactiver un compte libère sa place.</p>`;
-      const optsSites = Object.fromEntries(u.sites.map(s => [s.id, `${s.nom} (${places(s.actifs, u.maxSite)})`]));
-      $('#inviter')?.addEventListener('click', async () => {
-        const v = await askForm({ title: 'Inviter un membre', ok: 'Envoyer l’invitation', values: { role: 'technicien', sites: siteActif() && siteActif() !== 'tous' ? [siteActif()] : [] }, fields: [
-          { name: 'email', label: 'E-mail', type: 'email', required: true },
-          { name: 'nom', label: 'Nom affiché', type: 'text' },
-          { name: 'role', label: 'Rôle', type: 'chips', options: L.role, required: true },
-          { name: 'sites', label: 'Sites', type: 'chipsMulti', options: optsSites },
-          { type: 'info', text: 'La personne reçoit un e-mail, choisit son mot de passe et arrive directement dans l’appli, sur ses sites.' }] });
-        if (!v) return;
-        if (!v.sites.length) { toast('Choisissez au moins un site'); return; }
-        try {
-          toast('Envoi de l’invitation…');
-          const rep = await Sync.inviter({ ...v, redirectTo: adressePublique() });
-          await alertBox('Invitation', [rep.emailEnvoye ? `E-mail envoyé à ${v.email}.` : `${v.email} avait déjà un compte : il est maintenant rattaché à l’équipe (connexion avec son mot de passe, ou « mot de passe oublié »).`]);
-        } catch (e) { await alertBox('Invitation refusée', [e.message]); }
-        AFTER.entreprise();
-      });
-      box.querySelectorAll('[data-admin]').forEach(b => b.onclick = async () => {
-        const donner = b.dataset.valeur === '1', p = liste.find(x => x.user_id === b.dataset.admin);
-        if (!(await askConfirm(donner ? 'Donner le droit administrateur' : 'Retirer le droit administrateur',
-          `${p.nom || p.email} ${donner ? 'pourra' : 'ne pourra plus'} inviter des membres, changer les rôles et les sites, modifier les règles de l’entreprise.`, donner ? 'Donner' : 'Retirer'))) return;
-        try { await Sync.definirAdminClient(p.user_id, donner); toast(donner ? 'Droit administrateur donné' : 'Droit administrateur retiré'); if (p.user_id === Sync.profil()?.userId) await Sync.chargerProfil(); }
-        catch (e) { await alertBox('Modification refusée', [e.message]); }
-        AFTER.entreprise();
-      });
-      box.querySelectorAll('[data-sites]').forEach(b => b.onclick = async () => {
-        const actuels = (u.affectations || []).filter(a => a.userId === b.dataset.sites).map(a => a.siteId);
-        const v = await askForm({ title: 'Sites du membre', values: { sites: actuels }, fields: [{ name: 'sites', label: 'Sites autorisés', type: 'chipsMulti', options: optsSites }] });
-        if (!v) return;
-        try { await Sync.affecterSites(b.dataset.sites, v.sites); toast('Sites mis à jour'); } catch (e) { await alertBox('Affectation refusée', [e.message]); }
-        AFTER.entreprise();
-      });
-      box.querySelectorAll('[data-profil]').forEach(sel => sel.onchange = async () => {
-        const p = liste.find(x => x.user_id === sel.dataset.profil);
-        try { await Sync.definirProfil(p.user_id, sel.value, p.nom, p.actif); toast('Rôle mis à jour'); Sync.planifier(200); } catch (e) { toast('Échec : ' + e.message); }
-        AFTER.entreprise();
-      });
-      box.querySelectorAll('[data-equipe]').forEach(b => b.onclick = async () => {
-        const v = await askForm({ title: 'Membre de l’équipe', values: { nom: b.dataset.nom, actif: b.dataset.actif === 'true' }, fields: [
-          { name: 'nom', label: 'Nom affiché', type: 'text', required: true },
-          { name: 'actif', label: 'Compte actif (décocher pour retirer l’accès)', type: 'checkbox' }] });
-        if (!v) return;
-        try { await Sync.definirProfil(b.dataset.equipe, b.dataset.role, v.nom, v.actif); toast('Membre mis à jour'); Sync.planifier(200); } catch (e) { await alertBox('Modification refusée', [e.message]); }
-        AFTER.entreprise();
-      });
-    } catch (e) { box.innerHTML = `<p class="warn" style="margin:0">Équipe indisponible : ${esc(e.message)}</p>`; }
-  };
-  const PACKS = { essentiel: 'Essentiel', pro: 'Pro', entreprise: 'Entreprise' };
-  const STATUTS_ABO = { essai: 'Essai', actif: 'Actif', suspendu: 'Suspendu', resilie: 'Résilié' };
   AFTER.plateforme = async () => {
     const box = $('#pf-liste');
     if (!box) return;
@@ -1076,7 +1026,7 @@
         { name: 'statut', label: 'Statut', type: 'chips', options: { essai: 'Essai', actif: 'Actif' }, required: true },
         { name: 'siteNom', label: 'Premier site', type: 'text', required: true, placeholder: 'ex. Usine de Tanger' },
         { name: 'siteCode', label: 'Code du site', type: 'text', required: true },
-        { name: 'email', label: 'E-mail du responsable à inviter', type: 'email' },
+        { name: 'email', label: 'E-mail de l’administrateur du client (invité comme responsable)', type: 'email' },
         { name: 'demo', label: 'Entreprise de démonstration (réinitialisable)', type: 'checkbox' }] });
       if (!v) return;
       try {
@@ -1109,7 +1059,7 @@
             <button class="btn sm" data-pf="abo" data-id="${e.id}">Abonnement</button>
             <button class="btn sm" data-pf="site" data-id="${e.id}">+ Site</button>
             <a class="btn sm primary" href="#/miseenservice/${e.id}">Mise en service</a>
-            <button class="btn sm" data-pf="inviter" data-id="${e.id}">Inviter un responsable</button>
+            <button class="btn sm" data-pf="inviter" data-id="${e.id}">Inviter l’administrateur</button>
             ${e.demo ? `<button class="btn sm danger" data-pf="reinit" data-id="${e.id}">Réinitialiser la démo</button>` : ''}</div></div>`;
       }).join('') || empty('Aucune entreprise.');
       box.querySelectorAll('[data-pf]').forEach(b => b.onclick = async () => {
@@ -1131,13 +1081,15 @@
             if (!v) return;
             await Sync.pf.ajouterSite(e.id, v.code, v.nom); toast('Site ajouté');
           } else if (b.dataset.pf === 'inviter') {
-            const v = await askForm({ title: `Inviter un responsable — ${e.nom}`, ok: 'Envoyer l’invitation', fields: [
+            const v = await askForm({ title: `Inviter l’administrateur — ${e.nom}`, ok: 'Envoyer l’invitation', values: { role: 'responsable' }, fields: [
+              { type: 'info', text: 'Le premier compte d’une entreprise en devient l’administrateur : il invite ensuite lui-même les autres membres.' },
               { name: 'email', label: 'E-mail', type: 'email', required: true }, { name: 'nom', label: 'Nom affiché', type: 'text' },
+              { name: 'role', label: 'Rôle métier', type: 'chips', options: L.role, required: true },
               { name: 'sites', label: 'Sites', type: 'chipsMulti', options: Object.fromEntries((e.sites || []).filter(s => s.actif).map(s => [s.id, s.nom])) }] });
             if (!v) return;
             if (!v.sites.length) { toast('Choisissez au moins un site'); return; }
-            const r = await Sync.inviter({ ...v, role: 'responsable', entrepriseId: e.id, redirectTo: adressePublique() });
-            await alertBox('Invitation', [r.emailEnvoye ? `E-mail envoyé à ${v.email}.` : `${v.email} est rattaché comme responsable.`]);
+            const r = await Sync.inviter({ ...v, entrepriseId: e.id, redirectTo: adressePublique() });
+            await alertBox('Invitation', [r.emailEnvoye ? `E-mail envoyé à ${v.email}.` : `${v.email} est rattaché à ${e.nom}.`]);
           } else if (b.dataset.pf === 'reinit') {
             if (!(await askConfirm('Réinitialiser la démo', `Toutes les données de « ${e.nom} » seront remplacées par le jeu de démonstration. Les appareils connectés à cette démo se resynchroniseront d’eux-mêmes.`, 'Réinitialiser'))) return;
             const r = await Sync.pf.reinitialiserDemo(e.id); toast(`Démo réinitialisée (${r.fiches} fiches)`);
@@ -1570,6 +1522,8 @@
       { name: 'role', label: 'Rôle', type: 'chips', options: L.roleOT, default: 'intervenant', required: true }] });
     if (!v || (!v.personneId && !v.nom)) return;
     let pid = v.personneId;
+    const echues = pid && App.membres ? App.membres.echues(pid) : [];
+    if (echues.length && !(await askConfirm('Habilitation échue', `${persNom(pid)} : ${echues.map(h => h.libelle + ' échue le ' + fmtY(h.echeance)).join(', ')}. Affecter quand même ?`, 'Affecter quand même'))) return;
     if (!pid) { const p = { id: Store.uid(), nom: v.nom, role: v.role === 'prestataire' ? 'prestataire' : 'technicien', actif: true }; await Store.save('personnes', p); pid = p.id; }
     await edit('ots', o.id, { intervenants: [...(o.intervenants || []), { id: Store.uid(), personneId: pid, role: v.role, depuis: Store.now(), fin: null, par: Store.currentUserName() }] }, { action: 'affectation' });
   };
@@ -1756,19 +1710,6 @@
     await Store.save('localisations', { id: Store.uid(), ...v });
     render();
   };
-  const persFields = [
-    { name: 'nom', label: 'Nom', type: 'text', required: true },
-    { name: 'role', label: 'Rôle', type: 'chips', options: L.role, default: 'technicien', required: true },
-    { name: 'societe', label: 'Société (prestataire)', type: 'text' }];
-  A['pers-new'] = async () => { const v = await askForm({ title: 'Nouvelle personne', fields: persFields }); if (v) { await Store.save('personnes', { id: Store.uid(), ...v, actif: true }); render(); } };
-  A['pers-edit'] = async el => {
-    const p = data.personnes.get(el.dataset.id);
-    const v = await askForm({ title: 'Modifier', values: { ...p, inactif: p.actif === false }, fields: [...persFields, { name: 'inactif', label: 'Inactive (historique conservé)', type: 'checkbox' }] });
-    if (!v) return;
-    const { inactif, ...rest } = v;
-    await edit('personnes', p.id, { ...rest, actif: !inactif });
-  };
-
   const progFields = () => [
     { name: 'equipementId', label: 'Équipement', type: 'select', required: true, empty: '— Choisir —', options: list('equipements').filter(e => e.actif !== false).map(e => [e.id, `${e.designation} (${e.code})`]) },
     { name: 'libelle', label: 'Libellé', type: 'text', required: true, placeholder: 'ex. Vidange compresseur' },
@@ -2027,6 +1968,15 @@
     const P = (nom, role) => ({ id: id(), nom, role, actif: true });
     const resp = P('Responsable maintenance', 'responsable'), ta = P('Technicien A (mécanique)', 'technicien'), tb = P('Technicien B (automatisme)', 'technicien'), mag = P('Magasinier', 'magasinier');
     for (const p of [resp, ta, tb, mag]) await S('personnes', p);
+    // R3 : une équipe, une société prestataire et son technicien.
+    const froid = { id: id(), nom: 'Froid Service', prestataire: true, contact: 'Ali T.', telephone: '0522 00 00 00', contratRef: 'CT-2026-04', contratFin: addDays(Store.now(), 120).slice(0, 10), actif: true };
+    await S('fournisseurs', froid);
+    const pf = { ...P('Ali T. (Froid Service)', 'prestataire'), societeId: froid.id, telephone: '0661 00 00 00' };
+    await S('personnes', pf);
+    ta.habilitations = [{ id: id(), libelle: 'B1V', echeance: addDays(Store.now(), -20).slice(0, 10) }, { id: id(), libelle: 'Travail en hauteur', echeance: addDays(Store.now(), 300).slice(0, 10) }];
+    await S('personnes', ta);
+    await S('equipes', { id: id(), nom: 'Mécanique', chefId: ta.id, membreIds: [ta.id], actif: true });
+    await S('equipes', { id: id(), nom: 'Automatisme', chefId: tb.id, membreIds: [tb.id], actif: true });
     // Appareil sans compte : on signe comme le technicien A de la démo. Avec un compte, la signature reste celle du compte.
     if (!Sync.profil()) await Store.persistMeta({ ...Store.device(), personneId: ta.id });
     const A1 = { id: id(), ref: 'J-VER-80', designation: 'Joint de vérin Ø80', unite: 'u', stockMin: 2, actif: true };
@@ -2091,7 +2041,7 @@
     const [name, id] = path.split('/');
     return { name, id: id ? decodeURIComponent(id) : null, q: new URLSearchParams(qs || '') };
   }
-  const TAB_OF = { demande: 'demandes', ot: 'ots', eq: 'parc', article: 'magasin', reappro: 'magasin', achat: 'plus', achats: 'plus', valeur: 'plus', signaler: '', qr: 'parc', plateforme: 'plus', miseenservice: 'plus', compteurs: 'plus', compteur: 'plus', releve: 'plus', energie: 'plus', facture: 'plus', 'facture-saisie': 'plus' };
+  const TAB_OF = { membres: 'plus', membre: 'plus', equipes: 'plus', equipe: 'plus', societes: 'plus', societe: 'plus', demande: 'demandes', ot: 'ots', eq: 'parc', article: 'magasin', reappro: 'magasin', achat: 'plus', achats: 'plus', valeur: 'plus', signaler: '', qr: 'parc', plateforme: 'plus', miseenservice: 'plus', compteurs: 'plus', compteur: 'plus', releve: 'plus', energie: 'plus', facture: 'plus', 'facture-saisie': 'plus' };
   const MOBILE_PLUS = ['preventif', 'magasin', 'article', 'reappro', 'achat', 'achats', 'valeur', 'indicateurs', 'journal', 'reglages', 'plus', 'plateforme', 'miseenservice', 'compteurs', 'compteur', 'releve', 'energie', 'facture', 'facture-saisie'];
   function render() {
     cacheEtat = null;

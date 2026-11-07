@@ -1,7 +1,7 @@
 /* Hors ligne : l'application est mise en cache et s'ouvre sans réseau.
    Changer VERSION à chaque livraison pour forcer la mise à jour. */
-const VERSION = 'gmao-terrain-v37';
-const FILES = ['./', './index.html', './css/app.css', './js/store.js', './js/sync.js', './js/erreurs.js', './js/calculs.js', './js/qr.js', './js/app.js', './js/vues/magasin.js', './js/vues/reappro.js', './js/vues/achats.js', './js/vues/mise_en_service.js', './js/vues/compteurs.js', './js/vues/energie.js', './js/vues/navigation.js', './manifest.webmanifest', './icon.svg'];
+const VERSION = 'gmao-terrain-v38';
+const FILES = ['./', './index.html', './css/app.css', './js/store.js', './js/sync.js', './js/erreurs.js', './js/calculs.js', './js/qr.js', './js/app.js', './js/vues/magasin.js', './js/vues/reappro.js', './js/vues/achats.js', './js/vues/mise_en_service.js', './js/vues/compteurs.js', './js/vues/energie.js', './js/vues/membres.js', './js/vues/navigation.js', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES.map(f => new Request(f, { cache: 'reload' })))).then(() => self.skipWaiting()));

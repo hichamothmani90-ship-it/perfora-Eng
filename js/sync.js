@@ -246,6 +246,8 @@ const Sync = (() => {
   const equipe = () => api('/rest/v1/profils?select=user_id,email,nom,role,actif,personne_id,admin_client&order=email.asc');
   const definirAdminClient = (cible, valeur) => api('/rest/v1/rpc/definir_admin_client', { method: 'POST', body: JSON.stringify({ cible, valeur: !!valeur }) });
   const utilisation = () => api('/rest/v1/rpc/utilisation', { method: 'POST', body: '{}' });
+  /** R3 : relier un compte (juste invité) à une fiche membre existante. */
+  const relierMembre = (cible, personne) => api('/rest/v1/rpc/relier_membre', { method: 'POST', body: JSON.stringify({ cible, personne }) });
   const affecterSites = (cible, liste) => api('/rest/v1/rpc/affecter_sites', { method: 'POST', body: JSON.stringify({ cible, liste }) });
   /** Invitation via la fonction serveur « inviter » (seule détentrice de la clé secrète). */
   async function inviter({ email, role, nom, sites, redirectTo, entrepriseId }) {
@@ -373,5 +375,5 @@ const Sync = (() => {
   // Annonces de la plateforme et demande au support (tout compte connecté).
   const mesAnnonces = () => rpc('mes_annonces');
   const supportCreer = (nature, sujet, message) => rpc('support_creer', { p_nature: nature, p_sujet: sujet, p_message: message });
-  return { PROJET, pf, mfa, signalerErreurs, definirAdminClient, deconnecterPartout, mesAnnonces, supportCreer, lireFichier, profil, chargerProfil, equipe, definirProfil, utilisation, affecterSites, inviter, connecter, deconnecter, synchroniser, planifier, demarrer, etatCourant, lireLienEmail, sessionDepuisLien, changerMotDePasse, demanderLien };
+  return { PROJET, pf, mfa, signalerErreurs, definirAdminClient, deconnecterPartout, mesAnnonces, supportCreer, lireFichier, profil, chargerProfil, equipe, definirProfil, utilisation, affecterSites, relierMembre, inviter, connecter, deconnecter, synchroniser, planifier, demarrer, etatCourant, lireLienEmail, sessionDepuisLien, changerMotDePasse, demanderLien };
 })();

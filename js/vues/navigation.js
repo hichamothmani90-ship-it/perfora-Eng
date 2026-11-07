@@ -60,7 +60,9 @@
       ['#/indicateurs', '▥', 'Indicateurs', 'Pannes, préventif, délais', ['responsable']],
       ['#/journal', '☰', 'Journal d’audit', 'Toutes les modifications', ['responsable', 'pilote', ADMIN], () => voitJournal()]]],
     ['Entreprise', [
-      ['#/entreprise', '⚙', 'Entreprise', 'Membres, sites, règles, abonnement, données', [ADMIN]],
+      ['#/membres', '👥', 'Membres et équipes', 'Membres, accès, équipes, sociétés, habilitations', ['responsable', ADMIN]],
+      ['#/membres', '👥', 'Annuaire', 'Membres et équipes, téléphones', ['technicien', 'magasinier', 'achats', 'exploitation', 'pilote'], () => !estAdminClient()],
+      ['#/entreprise', '⚙', 'Entreprise', 'Sites, règles, abonnement, données', [ADMIN]],
       ['#/plateforme', '◆', 'Console plateforme', 'Clients, abonnements, démo', ['*'], () => Sync.profil()?.adminPlateforme || Sync.profil()?.adminMfa]]],
     ['Mon compte', [
       ['#/compte', '◯', 'Mon compte', 'Mot de passe, appareil, support', ['*']]]],
@@ -74,7 +76,8 @@
 
   // ---------- accueil technicien et prestataire : « Ma journée » / « Mes interventions » ----------
   const moi = () => Store.currentUser();
-  const mesOts = () => list('ots').filter(o => otOuvert(o) && actifs(o).some(i => i.personneId === moi()?.id));
+  // R3 : un prestataire voit aussi les interventions confiées à sa société.
+  const mesOts = () => list('ots').filter(o => otOuvert(o) && Calculs.otConfiee(o, { personneId: moi()?.id, societeId: role() === 'prestataire' ? moi()?.societeId : null }));
   const jour = o => (o.creneau || o.echeance || '').slice(0, 10);
   V.accueilTerrain = () => {
     const presta = role() === 'prestataire';
