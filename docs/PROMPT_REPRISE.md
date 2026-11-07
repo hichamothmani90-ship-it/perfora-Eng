@@ -43,7 +43,7 @@ multi-entreprise) et concepteur d'interfaces terrain mobile-first. Langue : fran
      (site, dépôt perfora-site) en ligne ; DNS chez Cloudflare (docs/MISE_EN_LIGNE_PERFORA_MA.md). E-mails pro en place (contact@ → Gmail ; envois Supabase par Resend depuis no-reply@perfora.ma). Ensuite volet D (énergie et eau). Ou mise
      en production (docs/RECETTE_VOLET_A.md §4). Démo VITRINE à réinitialiser une fois (nouvelles données magasin).
    - Supabase « gmao-terrain » (réf. oihaqzkqhvyjybijsonc, Frankfurt). Scripts dans l'ordre :
-     schema.sql → roles.sql → multitenant.sql → quotas.sql → plateforme.sql → durcissement.sql → magasin.sql → achats.sql → energie.sql → mise_en_service.sql → centre_controle.sql → demo.sql ; tests : tests_etancheite, tests_quotas, tests_plateforme, tests_magasin, tests_demo, tests_achats, tests_energie, tests_mise_en_service, tests_centre_controle ;
+     schema.sql → roles.sql → multitenant.sql → quotas.sql → plateforme.sql → durcissement.sql → magasin.sql → achats.sql → energie.sql → mise_en_service.sql → centre_controle.sql → centre_controle_cc2.sql → demo.sql ; tests : tests_etancheite, tests_quotas, tests_plateforme, tests_magasin, tests_demo, tests_achats, tests_energie, tests_mise_en_service, tests_centre_controle, tests_centre_controle_cc2 ;
      Edge Function supabase/functions/inviter. Entreprises : DEMO « Perfora Démo » (Site Tanger, pack Pro ;
      othmanihicham99@gmail.com responsable + administrateur plateforme ; hothmani36@outlook.fr magasinier)
      et VITRINE « Vitrine Perfora » (démo réinitialisable, **pack Entreprise** depuis le 6 nov. 2026 pour montrer les achats,

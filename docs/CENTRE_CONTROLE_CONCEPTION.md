@@ -3,7 +3,11 @@
 Statut : **validé le 6 nov. 2026** (5 choix acceptés). **CC1 fait (v26, 7 nov. 2026)** : `app.perfora.ma/console/`
 (`console/index.html`, `console.js`, `calculs_console.js` testé par `tests/console.test.js`), `supabase/centre_controle.sql`
 (fiches clients dans `pf_objets`, prix convenu / périodicité / remise / conditions sur `abonnements`, `pf_tarifs`) et
-`tests_centre_controle.sql` (9 tests conformes). Suite : CC2 (prospects, support, communication). Prolonge la console plateforme actuelle (clients,
+`tests_centre_controle.sql` (9 tests conformes). **CC2 fait (v27, 7 nov. 2026)** : prospects (étapes, prochaine action, relances, conversion en client), support (demandes
+créées dans la console ou par les clients via « Contacter le support » dans Réglages, numérotation SUP-0001), communication
+(5 modèles par défaut, message WhatsApp ou e-mail préparé puis envoyé par l'administrateur et noté au clic, journal des
+échanges, annonces affichées en bandeau dans l'appli) — `supabase/centre_controle_cc2.sql`, 17 tests conformes
+(`tests_centre_controle_cc2.sql`). Suite : CC3 (facturation), après validation du modèle de facture par le comptable. Prolonge la console plateforme actuelle (clients,
 abonnements, démo, mise en service) et le cadrage du lancement (`CADRAGE_LANCEMENT.md` : E paiement, I parrainage,
 H installation, N parcours).
 
