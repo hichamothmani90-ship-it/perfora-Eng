@@ -5,7 +5,7 @@
 (() => {
   const { data } = Store;
   /** Version affichée dans Réglages : à incrémenter avec VERSION dans sw.js. */
-  const APP_VERSION = 'v27';
+  const APP_VERSION = 'v28';
   const $ = s => document.querySelector(s);
   // Multi-site : les listes de fiches de site ne montrent que le site actif (« tous » possible).
   // Les fiches sans site (anciennes ou pas encore synchronisées) restent visibles.
@@ -1710,11 +1710,13 @@
     let t, c;
     if (!s.connecte) [t, c] = ['☁ Reconnexion', 'err'];
     else if (s.enCours) [t, c] = ['☁ Synchro…', ''];
+    else if (s.erreur && /injoignable|trop lent|réseau/i.test(s.erreur)) [t, c] = [`☁ Hors réseau${s.attente ? ' · ' + s.attente + ' en attente' : ''}`, 'wait'];
     else if (s.erreur) [t, c] = [`☁ Erreur${s.attente ? ' · ' + s.attente : ''}`, 'err'];
     else if (s.attente) [t, c] = [`☁ ${s.attente} à envoyer`, 'wait'];
     else [t, c] = ['☁ À jour', 'ok'];
     b.textContent = t; b.className = 'sync ' + c + (s.configure ? '' : ' hidden');
-    b.title = s.erreur || (s.dernier ? 'Dernière synchro : ' + fmtY(s.dernier) : '');
+    b.title = s.erreur && /injoignable|trop lent|réseau/i.test(s.erreur) ? 'Pas de réseau : vos saisies sont enregistrées sur l’appareil et partiront d’elles-mêmes.'
+      : s.erreur || (s.dernier ? 'Dernière synchro : ' + fmtY(s.dernier) : '');
     if (R?.name === 'reglages' && $('#bloc-sync') && !enSaisie()) $('#bloc-sync').outerHTML = blocSynchro().replace(/^[\s\S]*?(<div class="card" id="bloc-sync">)/, '$1');
   }
   const enSaisie = () => !!document.querySelector('dialog[open]') || !!document.activeElement?.matches?.('#view input, #view textarea, #view select');
@@ -1737,7 +1739,9 @@
     if (await leverAttentesPieces() && !lien) render();
     Sync.demarrer({ etat: voyantSynchro, reception: quandRecu, refus: liste => {
       if (!liste.length) return;
-      alertBox('Modification refusée par le serveur', [...liste.slice(0, 5).map(r => `• ${L.entite[r.type] || r.type} ${refDe(r.type, r.id)} : ${r.motif}`), 'La version du serveur a été rétablie sur cet appareil.']);
+      const textes = r => Object.entries(r.patch || {}).filter(([k, v]) => typeof v === 'string' && v.length > 3 && ['travaux', 'cause', 'constat', 'description', 'reponse', 'note', 'motif', 'detail'].includes(k))
+        .map(([k, v]) => `   Votre saisie non enregistrée (${k}) : « ${v.slice(0, 300)} »`);
+      alertBox('Modification refusée par le serveur', [...liste.slice(0, 5).flatMap(r => [`• ${L.entite[r.type] || r.type} ${refDe(r.type, r.id)} : ${r.motif}`, ...textes(r)]), 'La version du serveur a été rétablie sur cet appareil. Recopiez au besoin votre texte ailleurs (par exemple dans une nouvelle demande).']);
       if (!enSaisie()) render();
     } });
     if (lien) await traiterLienEmail();

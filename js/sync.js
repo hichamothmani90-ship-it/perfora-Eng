@@ -9,11 +9,16 @@ const Sync = (() => {
   let surEtat = () => {}, surReception = () => {}, surRefus = () => {};
 
   const DELAI_MAX = 20000; // réseau faible : on abandonne et on réessaiera plus tard
+  // Envoi par lots limités en nombre ET en taille (photos) : sur un réseau lent, un lot trop lourd dépasserait le délai
+  // à chaque essai et bloquerait toute la file. Délai accordé : 20 s + 1 s par 25 Ko (≈ 200 kbit/s minimum).
+  const LOT_OCTETS = 350000, OCTETS_PAR_SECONDE = 25000;
+  const RESEAU = /injoignable|trop lent|réseau/i;
   /** Projet Supabase du site : adresse et clé publique, publiques par conception (accès protégé par RLS). */
   const PROJET = { url: 'https://oihaqzkqhvyjybijsonc.supabase.co', cle: 'sb_publishable_Qpm_99-lOQOOJ5R__oyIcA_4nd7t3un' };
   const cfg = () => data.meta.get('cloud');
   async function requete(url, opts) {
-    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), DELAI_MAX);
+    const taille = typeof opts?.body === 'string' ? opts.body.length : 0;
+    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), DELAI_MAX + Math.ceil(taille / OCTETS_PAR_SECONDE) * 1000);
     try { return await fetch(url, { ...opts, signal: ctl.signal }); }
     catch (e) { throw new Error(e.name === 'AbortError' ? 'Réseau trop lent (délai dépassé)' : 'Serveur injoignable (réseau)'); }
     finally { clearTimeout(t); }
@@ -25,12 +30,16 @@ const Sync = (() => {
     const r = await requete(`${url}/auth/v1/token?grant_type=${grant}`, {
       method: 'POST', headers: { apikey: cle, 'Content-Type': 'application/json' }, body: JSON.stringify(corps),
     });
-    const j = await r.json().catch(() => ({}));
+    const j = await r.json().catch(() => null);
+    // Portail Wi-Fi, proxy ou passerelle en panne : réponse qui ne vient pas de Supabase → traité comme une panne réseau.
+    if (!j || r.status >= 500 || (r.ok && !j.access_token)) throw new Error('Serveur injoignable (réseau : réponse inattendue)');
     if (!r.ok) {
       const m = j.error_description || j.msg || j.message || '';
       const fr = /invalid login/i.test(m) ? 'E-mail ou mot de passe incorrect' : /not confirmed/i.test(m) ? 'E-mail pas encore confirmé (voir Supabase → Authentication)'
         : /api key/i.test(m) ? 'Clé publique incorrecte' : m || `Connexion refusée (${r.status})`;
-      throw new Error(fr);
+      const err = new Error(fr);
+      err.definitif = r.status === 400 || r.status === 401 || r.status === 403;   // Supabase refuse la session (expirée, révoquée)
+      throw err;
     }
     return j;
   }
@@ -99,7 +108,9 @@ const Sync = (() => {
     if (c.access && c.expire - Date.now() > 60000) return c.access;
     try { await majCfg(session(await auth(c.url, c.cle, 'refresh_token', { refresh_token: c.refresh }))); }
     catch (e) {
-      if (/injoignable|trop lent/.test(e.message)) throw e;   // panne réseau : on garde la session
+      // Seul un refus explicite de Supabase met fin à la session ; toute autre erreur (réseau, portail Wi-Fi, serveur
+      // momentanément indisponible) la conserve : les saisies attendent et repartiront seules.
+      if (!e.definitif) throw RESEAU.test(e.message) ? e : new Error('Serveur injoignable (réseau) : ' + e.message);
       await majCfg({ access: null, refresh: null }); throw new Error('Session expirée : reconnectez-vous');
     }
     return cfg().access;
@@ -123,11 +134,18 @@ const Sync = (() => {
   async function envoyer() {
     let n = 0;
     for (;;) {
-      const lot = Store.fileEnvoi().slice(0, LOT_ENVOI);
+      const file = Store.fileEnvoi(), lot = [];
+      let octets = 0;
+      for (const s of file) {
+        const t = JSON.stringify(s.patch).length;
+        if (lot.length && (lot.length >= LOT_ENVOI || octets + t > LOT_OCTETS)) break;
+        lot.push(s); octets += t;
+      }
       if (!lot.length) return n;
       const rep = await api('/rest/v1/rpc/push_fiches', { method: 'POST', body: JSON.stringify({ lot: lot.map(s => ({ id: s.rid, type: s.type, patch: s.patch })) }) });
+      const refus = (Array.isArray(rep?.refuses) ? rep.refuses : [])
+        .map(r => ({ ...r, patch: lot.filter(s => s.rid === r.id).reduce((p, s) => ({ ...p, ...s.patch }), {}) }));
       await Store.retirerEnvoyes(lot.map(s => s.id));
-      const refus = Array.isArray(rep?.refuses) ? rep.refuses : [];
       if (refus.length) await traiterRefus(refus);
       n += lot.length;
       notifier();
@@ -143,7 +161,7 @@ const Sync = (() => {
       if (rows?.length) await Store.appliquerDistant(rows, { remplacer: true });
     }
     const le = Store.now();
-    await majCfg({ refus: [...refus.map(r => ({ ...r, le })), ...(cfg().refus || [])].slice(0, 20) });
+    await majCfg({ refus: [...refus.map(({ patch, ...r }) => ({ ...r, le })), ...(cfg().refus || [])].slice(0, 20) });
     surRefus(refus.filter(r => r.type !== 'journal'));
   }
 

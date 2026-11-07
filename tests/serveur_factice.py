@@ -23,6 +23,12 @@ TYPES = {"localisations", "equipements", "personnes", "demandes", "ots", "progra
 COMMUNS = {"personnes", "articles", "parametres", "fournisseurs"}
 LOTS, ETAPES = {}, {}     # reprise des données (supabase/mise_en_service.sql)
 FICHES_CLIENT = {}        # centre de contrôle (supabase/centre_controle.sql)
+# Simulation du réseau pour les tests hors ligne : POST /test/reseau {"mode": "normal" | "panne" | "lent" | "coupures", "delai": s}
+#   panne    : la connexion est coupée sans réponse (le téléphone voit « serveur injoignable »)
+#   lent     : réponse après `delai` secondes (au-delà de 20 s l'appli abandonne, mais le serveur a bien traité : réponse perdue)
+#   coupures : une requête sur deux est coupée
+#   portail  : une page HTML répond à la place de l'API (Wi-Fi d'hôtel non connecté)
+RESEAU = {"mode": "normal", "delai": 25, "n": 0, "octets_max": 0, "requetes": 0}
 OBJETS, ANNONCES, NUM_TICKET = {}, {}, [0]   # CC2 (supabase/centre_controle_cc2.sql)
 for _i, (_n, _c, _t) in enumerate([("Bienvenue", "client", "Bonjour {contact}, bienvenue sur Perfora ! Votre espace {entreprise} est prêt : {lien}."),
                                    ("Rappel d'échéance", "client", "Bonjour {contact}, l'abonnement de {entreprise} arrive à échéance le {fin} ({montant})."),
@@ -46,12 +52,13 @@ SITES = {  # id -> site
     "s-cas": {"id": "s-cas", "entreprise": "DEMO", "code": "CAS", "nom": "Site Casablanca"},
     "s-rab": {"id": "s-rab", "entreprise": "AUTRE", "code": "RAB", "nom": "Site Rabat"},
 }
-COMPTES = {"expl@gmao.test": "test-gmao", "test@gmao.test": "test-gmao", "tech2@gmao.test": "test-gmao", "autre@gmao.test": "test-gmao", "mag@gmao.test": "test-gmao", "achat@gmao.test": "test-gmao"}
+COMPTES = {"tech3@gmao.test": "test-gmao", "expl@gmao.test": "test-gmao", "test@gmao.test": "test-gmao", "tech2@gmao.test": "test-gmao", "autre@gmao.test": "test-gmao", "mag@gmao.test": "test-gmao", "achat@gmao.test": "test-gmao"}
 PROFILS = {
     "test@gmao.test": {"role": "responsable", "nom": "Responsable test", "actif": True, "entreprise": "DEMO", "sites": ["s-tng", "s-cas"], "defaut": "s-tng"},
     "tech2@gmao.test": {"role": "technicien", "nom": "Technicien test", "actif": True, "entreprise": "DEMO", "sites": ["s-cas"], "defaut": "s-cas"},
     "autre@gmao.test": {"role": "responsable", "nom": "Responsable Autre", "actif": True, "entreprise": "AUTRE", "sites": ["s-rab"], "defaut": "s-rab"},
     "mag@gmao.test": {"role": "magasinier", "nom": "Magasinier test", "actif": True, "entreprise": "DEMO", "sites": ["s-cas"], "defaut": "s-cas"},
+    "tech3@gmao.test": {"role": "technicien", "nom": "Technicien Tanger", "actif": True, "entreprise": "DEMO", "sites": ["s-tng"], "defaut": "s-tng"},
     "expl@gmao.test": {"role": "exploitation", "nom": "Opérateur test", "actif": True, "entreprise": "DEMO", "sites": ["s-cas"], "defaut": "s-cas"},
     "achat@gmao.test": {"role": "achats", "nom": "Acheteur test", "actif": True, "entreprise": "DEMO", "sites": ["s-cas", "s-tng"], "defaut": "s-tng"},
 }
@@ -254,12 +261,41 @@ class H(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(b)
 
+    def reseau_coupe(self):
+        """True si la requête doit être « perdue » (simulation de panne) ; applique aussi la lenteur."""
+        if urlparse(self.path).path.startswith("/test/reseau"):
+            return False
+        RESEAU["requetes"] += 1
+        m = RESEAU["mode"]
+        if m == "panne" or (m == "coupures" and (RESEAU.__setitem__("n", RESEAU["n"] + 1) or RESEAU["n"] % 2)):
+            self.close_connection = True
+            try:
+                self.connection.shutdown(2)
+            except Exception:
+                pass
+            return True
+        if m == "lent":
+            time.sleep(RESEAU["delai"])
+        if m == "portail":   # portail Wi-Fi d'hôtel : une page HTML à la place de l'API
+            corps = b"<html><body>Connectez-vous au Wi-Fi</body></html>"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Content-Length", str(len(corps)))
+            self.end_headers()
+            self.wfile.write(corps)
+            return True
+        return False
+
     def do_OPTIONS(self):
+        if self.reseau_coupe():
+            return
         self.send_response(204)
         self.cors()
         self.end_headers()
 
     def corps(self):
+        RESEAU["octets_max"] = max(RESEAU["octets_max"], int(self.headers.get("Content-Length") or 0))
         n = int(self.headers.get("Content-Length") or 0)
         return json.loads(self.rfile.read(n) or b"{}")
 
@@ -272,6 +308,8 @@ class H(BaseHTTPRequestHandler):
 
     # ---------- POST ----------
     def do_POST(self):
+        if self.reseau_coupe():
+            return
         u = urlparse(self.path)
         if u.path == "/auth/v1/token":
             if self.headers.get("apikey") != CLE:
@@ -290,6 +328,12 @@ class H(BaseHTTPRequestHandler):
                 return self.repondre(401, {"message": "Invalid API key"})
             ENVOIS.append({"email": self.corps().get("email"), "redirect_to": parse_qs(u.query).get("redirect_to", [""])[0]})
             return self.repondre(200, {})
+        if u.path == "/test/reseau":
+            b = self.corps()
+            RESEAU.update({k: b[k] for k in ("mode", "delai") if k in b})
+            if b.get("raz"):
+                RESEAU.update({"octets_max": 0, "requetes": 0})
+            return self.repondre(200, RESEAU)
         if u.path == "/test/abonnement":
             b = self.corps()
             if "statut" in b:
@@ -716,6 +760,8 @@ class H(BaseHTTPRequestHandler):
 
     # ---------- PUT / GET ----------
     def do_PUT(self):
+        if self.reseau_coupe():
+            return
         if urlparse(self.path).path == "/auth/v1/user":
             email = self.utilisateur()
             if not email:
@@ -728,6 +774,8 @@ class H(BaseHTTPRequestHandler):
         self.repondre(404, {"message": "inconnu"})
 
     def do_GET(self):
+        if self.reseau_coupe():
+            return
         u = urlparse(self.path)
         if u.path == "/etat":
             with verrou:
