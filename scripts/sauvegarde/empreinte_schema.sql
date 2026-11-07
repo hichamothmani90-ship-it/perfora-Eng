@@ -6,9 +6,9 @@ select '##' || json_build_object(
       select p.oid::regprocedure::text as k, md5(btrim(regexp_replace(regexp_replace(pg_get_functiondef(p.oid), '--[^
 ]*', '', 'g'), '\s+', ' ', 'g'))) as v
       from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public') x),
-  'appelables_sans_compte', (select coalesce(json_agg(p.oid::regprocedure::text order by 1), '[]') from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  'appelables_sans_compte', (select coalesce(json_agg(p.oid::regprocedure::text order by p.oid::regprocedure::text), '[]') from pg_proc p join pg_namespace n on n.oid = p.pronamespace
       where n.nspname = 'public' and has_function_privilege('anon', p.oid, 'execute')),
-  'appelables_connecte', (select md5(string_agg(p.oid::regprocedure::text, ',' order by 1)) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  'appelables_connecte', (select md5(string_agg(p.oid::regprocedure::text, ',' order by p.oid::regprocedure::text)) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
       where n.nspname = 'public' and has_function_privilege('authenticated', p.oid, 'execute')),
   'regles', (select json_object_agg(k, v order by k) from (
       select schemaname || '.' || tablename || ':' || policyname as k, md5(coalesce(cmd, '') || array_to_string(roles, ',') || coalesce(qual, '') || '|' || coalesce(with_check, '')) as v
