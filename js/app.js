@@ -1807,6 +1807,9 @@
     // 4. Préventif : un en retard, un à venir
     await S('programmes', { id: id(), equipementId: comp.id, libelle: 'Vidange et filtre compresseur', modele: 'entretien', periodiciteJours: 90, prochaineEcheance: J(-2), regle: 'fixe', instruction: '1. Consigner selon procédure site\n2. Vidanger, remplacer filtre à air\n3. Essai à vide puis en charge', actif: true });
     await S('programmes', { id: id(), equipementId: presse.id, libelle: 'Contrôle niveau et fuites hydrauliques', modele: 'inspection', periodiciteJours: 30, prochaineEcheance: J(5), regle: 'apres_realisation', instruction: 'Niveau bâche, état flexibles, traces de fuite.', actif: true });
+    // 5. Énergie et eau (volet D) : mêmes données que les démos du serveur (Calculs.demoEnergie).
+    const ids = {};
+    for (const [t, o] of Calculs.demoEnergie(J, k => (ids[k] ||= id()), comp.id)) await S(t, o);
   }
 
   // ---------- routeur ----------

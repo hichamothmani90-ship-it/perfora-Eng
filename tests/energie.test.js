@@ -212,3 +212,26 @@ test('D4 : tableau Énergie — totaux sur les principaux seulement, résidu des
   assert.equal(x.sousComptages.length, 1);
   assert.deepEqual([x.sousComptages[0].compteur.id, x.sousComptages[0].principal.quantite, x.sousComptages[0].statut, x.sousComptages[0].residu], ['p', 1000, 'a_expliquer', 300]);
 });
+
+test('D5 : démo énergie — résidu à expliquer, remplacement sans fausse baisse, lecture erronée à examiner, factures, vidange en alerte', () => {
+  const T = '2026-11-07';
+  const J = (n, hm) => C.addDays(T, n) + (hm ? 'T' + hm : '');
+  const d = C.demoEnergie(J, k => 'x-' + k, 'comp');
+  const de = t => d.filter(([ty]) => ty === t).map(([, o]) => o);
+  const cpts = de('compteurs'), rel = de('releves'), now = T + 'T09:00';
+  assert.equal(new Set(rel.map(r => r.id)).size, rel.length, 'identifiants uniques');
+  const t = C.tableauEnergie(cpts, rel, J(-63), J(-7), { maintenant: now });
+  assert.equal(t.totaux.find(x => x.unite === 'kWh').quantite, 48900, 'total = arrivée générale seule');
+  assert.equal(t.sousComptages[0].statut, 'a_expliquer');
+  assert.ok(t.sousComptages[0].residuPct > 5 && t.sousComptages[0].residuPct < 9);
+  const lg = C.analyserReleves(cpts.find(c => c.code === 'ELEC-LG'), rel, { maintenant: now });
+  assert.ok(!lg.lignes.some(l => l.statut === 'suspect'), 'remplacement déclaré : aucune fausse baisse d’index');
+  const eau = C.analyserReleves(cpts.find(c => c.code === 'EAU-GEN'), rel, { maintenant: now });
+  assert.deepEqual(eau.lignes.filter(l => l.statut === 'suspect').map(l => [l.releve.valeur, l.anomalies]), [[4718, ['variation']]]);
+  const st = de('factures_energie').map(f => C.rapprochementFacture(f, cpts, rel, { maintenant: now }));
+  assert.deepEqual(st.map(x => x.statut), ['concordant', 'ecart', 'concordant']);
+  assert.equal(st[1].ecartPct, 6.3);
+  const pg = de('programmes')[0];
+  const ech = C.echeanceCompteur(pg, cpts.find(c => c.id === pg.compteurId), rel, T, { maintenant: now });
+  assert.deepEqual([ech.statut, ech.reste], ['alerte', 48]);
+});

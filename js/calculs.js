@@ -630,7 +630,55 @@
     return { lignes, totaux, sousComptages, suspects: lignes.reduce((t, l) => t + (l.conso.suspects || 0), 0) };
   }
 
-  const Calculs = { bornesMois, moisDecale, tableauEnergie, controleReleve, echeanceCompteur, UNITES, UNITES_RESSOURCE, ANOMALIES_CONFIRMABLES, analyserReleves, consommationPeriode, rapprochementFacture, residuSousComptage, totauxParUnite, relevesDus, bilanCombustible, totalFactures,
+  /** Données énergie et eau de la démo — une seule définition : démo de l'appli (energie.js) et démos du serveur
+   *  (supabase/demo_energie.sql, généré par scripts/generer_demo_energie.py). J(n, 'HH:MM') = date relative à aujourd'hui,
+   *  K(suffixe) = identifiant, comp = id du compresseur. Un relevé tous les 7 jours sur 9 semaines.
+   *  Scénario : arrivée générale + 3 sous-compteurs (résidu ≈ 7 % « à expliquer »), compteur de la ligne remplacé il y a
+   *  30 jours, eau avec une lecture erronée (4 718 au lieu de 3 718 : à examiner), heures du compresseur (vidange
+   *  2 000 h en alerte), factures ONEE concordante puis en écart (+6 %), facture d'eau. */
+  function demoEnergie(J, K, comp) {
+    const out = [], qui = ['Technicien A (mécanique)', 'Technicien B (automatisme)'];
+    const C = (k, o) => { out.push(['compteurs', { id: K(k), coefficient: 1, frequenceJours: 7, mode: 'cumulatif', actif: true, ...o }]); return K(k); };
+    const gen = C('cg', { code: 'ELEC-GEN', libelle: 'Électricité — arrivée générale', usage: 'ressource', ressource: 'electricite', unite: 'kWh' });
+    const cco = C('cc', { code: 'ELEC-COMP', libelle: 'Électricité — compresseur', usage: 'ressource', ressource: 'electricite', unite: 'kWh', parentId: gen, equipementId: comp });
+    const cat = C('ca', { code: 'ELEC-AT', libelle: 'Électricité — atelier presses', usage: 'ressource', ressource: 'electricite', unite: 'kWh', parentId: gen });
+    const clg = C('cl', { code: 'ELEC-LG', libelle: 'Électricité — ligne conditionnement', usage: 'ressource', ressource: 'electricite', unite: 'kWh', parentId: gen });
+    const eau = C('ce', { code: 'EAU-GEN', libelle: 'Eau de ville', usage: 'ressource', ressource: 'eau', unite: 'm³' });
+    const hrs = C('ch', { code: 'HRS-COMP01', libelle: 'Heures de marche compresseur', usage: 'equipement', unite: 'h', equipementId: comp });
+    let n = 0;
+    const R = (cpt, j, hm, o) => { const le = J(j, hm); n++; out.push(['releves', { id: K('r' + n), compteurId: cpt, le, creeLe: le, creePar: qui[n % 2], ...o }]); };
+    const serie = (cpt, unite, depart, incs, hm, special = {}) => {
+      let v = depart;
+      for (let i = 0; i <= incs.length; i++) {
+        if (special[i]) special[i](v); else R(cpt, -63 + 7 * i, hm, { valeur: v, unite });
+        if (i < incs.length) v += incs[i];
+      }
+    };
+    serie(gen, 'kWh', 120000, [6100, 5900, 6300, 6050, 6200, 5800, 6400, 6150, 6000], '08:00');
+    serie(cco, 'kWh', 45000, [2350, 2280, 2420, 2300, 2390, 2250, 2460, 2370, 2310], '08:04');
+    serie(cat, 'kWh', 80000, [2100, 2050, 2180, 2120, 2150, 2000, 2230, 2140, 2090], '08:07');
+    // Ligne : compteur remplacé il y a 30 jours (ancien index final connu, nouveau compteur à 0).
+    const lg = [1220, 1160, 1260, 1200, 1230, 1150, 1270, 1210, 1180];
+    let v = 30500;
+    for (let i = 0; i <= 4; i++) { R(clg, -63 + 7 * i, '08:10', { valeur: v, unite: 'kWh' }); if (i < 4) v += lg[i]; }
+    n++;
+    out.push(['releves', { id: K('r' + n), compteurId: clg, nature: 'rupture', typeRupture: 'remplacement', le: J(-30, '10:00'), creeLe: J(-30, '10:00'), creePar: 'Responsable maintenance',
+      indexFinal: v + 900, indexInitial: 0, motif: 'Compteur défectueux remplacé par l’électricien' }]);
+    v = 330;
+    for (let i = 5; i <= 9; i++) { R(clg, -63 + 7 * i, '08:10', { valeur: v, unite: 'kWh' }); if (i < 9) v += lg[i]; }
+    // Eau : le relevé d'il y a 14 jours a été mal lu (4 718 au lieu de 3 718) : à examiner, exclu des calculs.
+    serie(eau, 'm³', 3400, [44, 47, 43, 46, 45, 48, 45, 44, 46], '08:15', { 7: () => R(eau, -14, '08:15', { valeur: 4718, unite: 'm³' }) });
+    serie(hrs, 'h', 11800, [112, 108, 115, 110, 105, 118, 111, 109, 114], '08:20');
+    out.push(['programmes', { id: K('pg3'), equipementId: comp, compteurId: hrs, libelle: 'Vidange compresseur selon les heures', modele: 'entretien', intervalleCompteur: 2000, margeCompteur: 200,
+      dernierIndex: 10850, derniereRealisation: J(-120, '10:00'), regle: 'apres_realisation', instruction: 'Vidange, filtre à huile et séparateur, toutes les 2 000 h de marche.', actif: true }]);
+    const F = (k, o) => out.push(['factures_energie', { id: K(k), devise: 'MAD', creePar: 'Responsable maintenance', ...o }]);
+    F('f1', { ressource: 'electricite', fournisseur: 'ONEE', reference: 'FAC-ONEE-0001', du: J(-63), au: J(-35), quantite: 24540, unite: 'kWh', montantHT: 28957.2, compteurIds: [gen], creeLe: J(-33, '11:00') });
+    F('f2', { ressource: 'electricite', fournisseur: 'ONEE', reference: 'FAC-ONEE-0002', du: J(-35), au: J(-7), quantite: 26100, unite: 'kWh', montantHT: 30798, compteurIds: [gen], creeLe: J(-5, '11:00') });
+    F('f3', { ressource: 'eau', fournisseur: 'Régie de distribution', reference: 'FAC-EAU-0001', du: J(-63), au: J(-7), quantite: 362, unite: 'm³', montantHT: 3439, compteurIds: [eau], creeLe: J(-5, '11:30') });
+    return out;
+  }
+
+  const Calculs = { demoEnergie, bornesMois, moisDecale, tableauEnergie, controleReleve, echeanceCompteur, UNITES, UNITES_RESSOURCE, ANOMALIES_CONFIRMABLES, analyserReleves, consommationPeriode, rapprochementFacture, residuSousComptage, totauxParUnite, relevesDus, bilanCombustible, totalFactures,
     montantCommande, isolementsEnAttente, consommationHebdo, seuilIndicatif, seuilActif, besoinsNonCouverts, receptionLigne, etatAchat, qteEnCommande, qteIsolee, situationArticle, aReapprovisionner, prixMAD, valorisation, coutConsomme, besoinsAServir, attentesALever, piecesDetenues, stockPhysique, qteReservee, stockDisponible, etatBesoin, rapprochementBesoin, retraitsAVerifier, qteRemise, addDays, daysBetween, minutesBetween, dureeUnion, mediane, NATURE_DU_BESOIN, ETAT_RANK, otOuvert, demandeOuverte, indexOtsParDemande, etatEquipement, verifierCloture, echeanceSuivante, indicateurs };
   if (typeof module === 'object' && module.exports) module.exports = Calculs; else root.Calculs = Calculs;
 })(this);
