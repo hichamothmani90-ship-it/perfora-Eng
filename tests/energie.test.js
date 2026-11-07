@@ -220,7 +220,11 @@ test('D5 : démo énergie — résidu à expliquer, remplacement sans fausse bai
   const de = t => d.filter(([ty]) => ty === t).map(([, o]) => o);
   const cpts = de('compteurs'), rel = de('releves'), now = T + 'T09:00';
   assert.equal(new Set(rel.map(r => r.id)).size, rel.length, 'identifiants uniques');
-  const t = C.tableauEnergie(cpts, rel, J(-63), J(-7), { maintenant: now });
+  for (const h of ['00:00', '06:30']) {
+    const tot = [...cpts].flatMap(c => C.analyserReleves(c, rel, { maintenant: T + 'T' + h }).lignes).filter(l => l.statut === 'suspect');
+    assert.equal(tot.length, 1, `chargée à ${h} : seul le relevé d’eau mal lu est à examiner`);
+  }
+  const t = C.tableauEnergie(cpts, rel, J(-64), J(-8), { maintenant: now });
   assert.equal(t.totaux.find(x => x.unite === 'kWh').quantite, 48900, 'total = arrivée générale seule');
   assert.equal(t.sousComptages[0].statut, 'a_expliquer');
   assert.ok(t.sousComptages[0].residuPct > 5 && t.sousComptages[0].residuPct < 9);
